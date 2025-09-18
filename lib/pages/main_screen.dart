@@ -22,16 +22,16 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   late final List<Widget> _widgetOptions; 
 
   final List<IconData> _icons = [
-    Icons.home_outlined,
-    Icons.search_outlined,
-    Icons.add_outlined,
-    Icons.person_outline,
+    Icons.home_outlined,           // Home
+    Icons.add_outlined,            // Create Workout
+    Icons.history_outlined,        // Workout History
+    Icons.bar_chart_outlined,      // Statistics
   ];
   final List<IconData> _activeIcons = [
-    Icons.home,
-    Icons.search,
-    Icons.add,
-    Icons.person,
+    Icons.home,                    // Home
+    Icons.add,                     // Create Workout
+    Icons.history,                 // Workout History
+    Icons.bar_chart,               // Statistics
   ];
 
   @override
@@ -143,7 +143,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF9542EC).withOpacity(0.2),
+                            color: const Color.fromARGB(255, 224, 0, 0).withOpacity(0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 1),
                           ),
@@ -181,8 +181,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                                       ? Colors.white
                                       : Colors.grey[500],
                                   size: _selectedIndex == index 
-                                      ? (index == 2 ? 32 : 26)  // Plus-ikonen blir 32px när aktiv
-                                      : (index == 2 ? 28 : 24), // Plus-ikonen blir 28px när inaktiv
+                                      ? (index == 1 ? 32 : 26)  // Plus-ikonen blir 32px när aktiv
+                                      : (index == 1 ? 28 : 24), // Plus-ikonen blir 28px när inaktiv
                                 ),
                               ),
                             );
