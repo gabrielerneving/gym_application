@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
-import 'search_screen.dart';
+import 'create_workout.dart';
 import 'create_review_screen.dart';
 import 'profile_screen.dart';
 
@@ -53,7 +53,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         _onItemTapped(3); // Anropa din befintliga metod för att byta flik till index 3 (Profile)
       },
     ),
-      const SearchScreen(),
+      const CreateWorkoutScreen(),
       CreateReviewScreen(
         onReviewPosted: (indexToGoTo) {
           setState(() {

@@ -1,13 +1,16 @@
+import 'exercise_model.dart'; // Importera din Exercise-modell
+
 class WorkoutProgram {
   String title;
-  int exerciseCount;
-  String description;
+  List<Exercise> exercises; // Byt ut exerciseCount mot en lista
   String id;
+
+  // Enkel getter för att få antalet övningar
+  int get exerciseCount => exercises.length;
 
   WorkoutProgram({
     required this.title,
-    required this.exerciseCount,
-    required this.description,
+    required this.exercises,
     required this.id,
   });
 }
