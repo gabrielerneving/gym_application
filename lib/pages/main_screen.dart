@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
 import 'create_workout.dart';
-import 'create_review_screen.dart';
-import 'profile_screen.dart';
+import 'workout_history.dart';
+import 'statistics_screen.dart';
 
 
 class MainScreen extends StatefulWidget {
@@ -54,14 +54,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       },
     ),
       const CreateWorkoutScreen(),
-      CreateReviewScreen(
-        onReviewPosted: (indexToGoTo) {
-          setState(() {
-            _selectedIndex = indexToGoTo;
-          });
-        },
-      ),
-      const ProfileScreen(),
+      const WorkoutHistoryScreen(),
+      const StatisticsScreen(),
     ];
   }
 

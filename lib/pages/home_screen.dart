@@ -14,9 +14,7 @@ class HomeScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 8.0),
-            child: Text(
+             Text(
               'My workouts',
               style: TextStyle(
                 color: Colors.white,
@@ -24,17 +22,15 @@ class HomeScreen extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0),
-            child: Text(
+
+             Text(
               '2 workouts saved',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
               ),
             ),
-          ),
+          
           Expanded(
             child: ListView(
               children: [
