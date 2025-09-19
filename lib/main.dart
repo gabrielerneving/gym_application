@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'pages/main_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'widgets/auth_gate.dart';
+
 
 void main() async { // Gör main till en async-funktion
   // Se till att Flutter är redo innan vi kör Firebase-kod
@@ -39,7 +41,7 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('en'), 
       ],
-      home: const MainScreen(),
+      home: const AuthGate(),
     );
   }
 }

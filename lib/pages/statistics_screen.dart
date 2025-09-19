@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/popular_workouts_card.dart';
 import '../widgets/stat_card.dart';
+import '../services/auth_service.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -37,6 +38,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
         backgroundColor: Colors.black,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Log out', // Bra för tillgänglighet
+            onPressed: () async {
+              // Anropa signOut-metoden från din AuthService
+              await AuthService().signOut();
+              // AuthGate kommer nu automatiskt att skicka dig till inloggningsskärmen.
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
