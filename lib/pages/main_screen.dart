@@ -53,7 +53,13 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         _onItemTapped(3); // Anropa din befintliga metod för att byta flik till index 3 (Profile)
       },
     ),
-      const CreateWorkoutScreen(),
+      CreateWorkoutScreen(
+        onWorkoutSaved: (indexToGoTo) {
+          setState(() {
+            _selectedIndex = indexToGoTo;
+          });
+        },
+      ),
       const WorkoutHistoryScreen(),
       const StatisticsScreen(),
     ];

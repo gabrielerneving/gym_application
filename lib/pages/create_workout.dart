@@ -1,9 +1,13 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../models/exercise_model.dart'; // Importera dina modeller
-import '../widgets/exercise_list_item.dart'; // Importera din widget för listan
-
+import 'package:uuid/uuid.dart'; 
+import '../models/exercise_model.dart';
+import '../models/workout_model.dart';
+import '../services/database_service.dart';
+import '../widgets/exercise_list_item.dart';
 class CreateWorkoutScreen extends StatefulWidget {
-  const CreateWorkoutScreen({Key? key}) : super(key: key);
+  final Function(int)? onWorkoutSaved;
+  const CreateWorkoutScreen({Key? key, this.onWorkoutSaved}) : super(key: key);
 
   @override
   _CreateWorkoutScreenState createState() => _CreateWorkoutScreenState();
@@ -12,7 +16,8 @@ class CreateWorkoutScreen extends StatefulWidget {
 class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   final _workoutNameController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  bool _isKeyboardVisible = false;
+  bool _isLoading = false;
+
   
   final List<Exercise> _exercises = [
     // Exempeldata, denna lista kommer du att kunna ändra
@@ -26,7 +31,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
     super.initState();
     _focusNode.addListener(() {
       setState(() {
-        _isKeyboardVisible = _focusNode.hasFocus;
+        // Listener för focus-ändringar
       });
     });
   }
@@ -36,6 +41,75 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+
+  // Metod som anropas när "Save" trycks
+  Future<void> _saveWorkout() async {
+    // 1. Validera att fälten inte är tomma
+    if (_workoutNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a name for the workout.')),
+      );
+      return;
+    }
+    if (_exercises.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one exercise.')),
+      );
+      return;
+    }
+
+    setState(() { _isLoading = true; });
+
+    try {
+      // 2. Hämta den inloggade användarens unika ID
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        // Detta bör inte hända om AuthGate fungerar, men det är en bra säkerhetskoll
+        throw Exception("No user logged in!");
+      }
+      final uid = user.uid;
+      
+      // 3. Skapa ett WorkoutProgram-objekt från datan på skärmen
+      var uuid = const Uuid();
+      final newProgram = WorkoutProgram(
+        id: uuid.v4(), // Skapa ett unikt ID för programmet
+        title: _workoutNameController.text.trim(),
+        exercises: _exercises,
+      );
+
+      // 4. Anropa vår DatabaseService för att spara programmet
+      await DatabaseService(uid: uid).saveWorkoutProgram(newProgram);
+
+      // 5. Ge feedback och navigera tillbaka
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Workout saved successfully!')),
+        );
+        // Gå till Home tab (index 0) istället för att bara poppa
+        if (widget.onWorkoutSaved != null) {
+          widget.onWorkoutSaved!(0); // 0 = Home tab
+        } else {
+          Navigator.of(context).pop();
+        } 
+      }
+
+    } catch (e, s) { // Fånga även "stack trace"
+    // DENNA DEL ÄR NY OCH VIKTIG
+    print('🚨 AN ERROR OCCURRED AFTER SAVING!');
+    print('Error object: $e');
+    print('Stack trace: $s');
+    
+    if(mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error during post-save operation: $e')),
+      );
+    }
+  } finally {
+     if(mounted) {
+       setState(() { _isLoading = false; });
+     }
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -64,18 +138,10 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    // Spara-logik här
-                  },
+                  onPressed: _isLoading ? null : _saveWorkout,
                   style: ElevatedButton.styleFrom(backgroundColor: Color(0xFFDC2626)),
-                  child: Text(
-                    'Save',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: _isLoading ? const CircularProgressIndicator() : const Text('Save', style: TextStyle(color: Colors.white)),
+                  
                 ),
               ],
             ),
@@ -86,7 +152,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
               style: TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 labelText: 'Name',
-                labelStyle: TextStyle(color: Colors.grey),
+                labelStyle: TextStyle(color: const Color.fromARGB(255, 255, 255, 255)),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), // default rundade hörn
                 ),

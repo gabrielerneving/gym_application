@@ -51,7 +51,7 @@ class WorkoutWidget extends StatelessWidget {
               const Icon(Icons.fitness_center, color: Colors.grey, size: 18),
               const SizedBox(width: 4),
               Text(
-                '$exerciseCount övningar',
+                '$exerciseCount exercises',
                 style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ],
