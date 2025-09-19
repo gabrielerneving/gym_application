@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 import 'pages/main_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
-Future<void> main() async { 
+void main() async { // Gör main till en async-funktion
+  // Se till att Flutter är redo innan vi kör Firebase-kod
+  WidgetsFlutterBinding.ensureInitialized(); 
+  
+  // Initiera Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const MyApp());
 }
 
