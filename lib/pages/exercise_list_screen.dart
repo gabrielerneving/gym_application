@@ -36,6 +36,13 @@ class ExerciseListScreen extends StatelessWidget {
               return Card(
                 color: Colors.grey.shade900,
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                 shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12), // rundade hörn
+            side: const BorderSide(
+              color: Color(0xFF4D4D4D), // färgen på ramen
+              width: 1,          // tjockleken på ramen
+            ),
+          ),
                 child: ListTile(
                   title: Text(exercise.name, style: const TextStyle(color: Colors.white)),
                   onTap: () {

@@ -14,7 +14,6 @@ class ChooseCategoryScreen extends StatelessWidget {
     'Chest',
     'Back',
     'Abs',
-    'Cardio'
   ];
 
   @override
@@ -39,29 +38,36 @@ class ChooseCategoryScreen extends StatelessWidget {
         itemCount: categories.length,
         itemBuilder: (context, index) {
           final category = categories[index];
-          return Card(
-            color: Colors.grey.shade900,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ListTile(
-              title: Text(category, style: const TextStyle(color: Colors.white)),
-              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-               onTap: () async {
-                // Navigera till listan med övningar och VÄNTA på ett resultat.
-                final selectedExercise = await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ExerciseListScreen(category: category),
-                  ),
-                );
-
-                // Om vi fick tillbaka en övning från ExerciseListScreen...
-                if (selectedExercise != null) {
-                  // ...då stänger vi ÄVEN DENNA SKÄRM (ChooseCategoryScreen)
-                  // och skickar resultatet vidare ett steg till.
-                  Navigator.of(context).pop(selectedExercise);
-                }
-              },
+         return Card(
+          color: Colors.grey.shade900,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12), // rundade hörn
+            side: const BorderSide(
+              color: Color(0xFF4D4D4D), // färgen på ramen
+              width: 1,          // tjockleken på ramen
             ),
-          );
+          ),
+          child: ListTile(
+            title: Text(
+              category,
+              style: const TextStyle(color: Colors.white),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+            onTap: () async {
+              final selectedExercise = await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ExerciseListScreen(category: category),
+                ),
+              );
+
+              if (selectedExercise != null) {
+                Navigator.of(context).pop(selectedExercise);
+              }
+            },
+          ),
+        );
+
         },
       ),
     );

@@ -51,38 +51,50 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
     backgroundColor: Colors.grey.shade900, // Mörk bakgrundsfärg som i din design
     builder: (BuildContext bc) {
       return SafeArea(
-        child: Wrap(
-          children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.edit, color: Colors.white),
-              title: const Text('Ändra', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.of(context).pop(); // Stäng menyn först
-                _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.white),
-              title: const Text('Ta bort', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.of(context).pop(); // Stäng menyn
-                setState(() {
-                  _exercises.removeAt(index); // Ta bort övningen från listan
-                });
-              },
-            ),
-            ListTile(
-            leading: const Icon(Icons.reorder, color: Colors.white),
-            title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.of(context).pop(); // Stäng menyn
-              // Växla till omordningsläge
-              setState(() {
-                _isReordering = true;
-              });
-            },
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Wrap(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.all(5.0),
+                child: ListTile(
+                  leading: const Icon(Icons.edit, color: Colors.white),
+                  title: const Text('Ändra', style: TextStyle(color: Colors.white)),
+                  onTap: () {
+                    Navigator.of(context).pop(); // Stäng menyn först
+                    _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(5.0),
+                child: ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.white),
+                  title: const Text('Ta bort', style: TextStyle(color: Colors.white)),
+                  onTap: () {
+                    Navigator.of(context).pop(); // Stäng menyn
+                    setState(() {
+                      _exercises.removeAt(index); // Ta bort övningen från listan
+                    });
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(5.0),
+                child: ListTile(
+                leading: const Icon(Icons.reorder, color: Colors.white),
+                title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.of(context).pop(); // Stäng menyn
+                  // Växla till omordningsläge
+                  setState(() {
+                    _isReordering = true;
+                  });
+                },
+                          ),
+              ),
+            ],
           ),
-          ],
         ),
       );
     },
