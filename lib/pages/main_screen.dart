@@ -160,31 +160,34 @@ Widget build(BuildContext context) {
               ),
             ),
           ),
-      ],
-    ),
-      bottomNavigationBar: Container(
-        height: 65,
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+
+        // LAGER 3: Flytande navbar
+        Positioned(
+          bottom: 20,
+          left: 16,
+          right: 16,
+          child: Container(
+            height: 65,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F1F1F),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: const Color(0xFFDC2626).withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2)
+                ),
+              ],
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 0.5,
+              ),
             ),
-            BoxShadow(
-              color: const Color(0xFFDC2626).withOpacity(0.05),
-              blurRadius: 6,
-              offset: const Offset(0, 1)
-            ),
-          ],
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
-            width: 0.5,
-          ),
-        ),
         child: Stack(
           children: [
             AnimatedPositioned(
@@ -265,6 +268,9 @@ Widget build(BuildContext context) {
             ),
           ],
         ),
+          ),
+        ),
+        ],
       ),
     );
   }

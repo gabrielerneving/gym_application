@@ -50,6 +50,7 @@ class WorkoutSession {
   final int durationInMinutes;
   // ÄNDRAD: Använder vår nya, mer detaljerade modell
   final List<CompletedExercise> completedExercises;
+  
 
   WorkoutSession({
     required this.id,
