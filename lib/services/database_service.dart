@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/workout_model.dart'; // Importera din modell
+import '../models/master_exercise_model.dart'; // Importera din MasterExercise-modell
 
 class DatabaseService {
   // Hämta en instans av Firestore
@@ -50,4 +51,21 @@ Stream<List<WorkoutProgram>> getWorkoutPrograms() {
     }).toList();
   });
 }
+
+// Metod för att spara en ny "master"-övning
+Future<void> saveMasterExercise(MasterExercise exercise) async {
+  final collectionRef = _db.collection('users').doc(uid).collection('master_exercises');
+  await collectionRef.doc(exercise.id).set(exercise.toMap());
 }
+
+// Metod för att hämta en STREAM av "master"-övningar för en specifik kategori
+Stream<List<MasterExercise>> getMasterExercisesByCategory(String category) {
+  final collectionRef = _db.collection('users').doc(uid).collection('master_exercises');
+  
+  // Använd .where() för att filtrera resultatet
+  return collectionRef.where('category', isEqualTo: category).snapshots().map((snapshot) {
+    return snapshot.docs.map((doc) => MasterExercise.fromFirestore(doc.data())).toList();
+  });
+}
+}
+

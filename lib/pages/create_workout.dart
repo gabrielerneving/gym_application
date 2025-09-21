@@ -5,6 +5,11 @@ import '../models/exercise_model.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/exercise_list_item.dart';
+import 'choose_category_screen.dart'; // Importera den nya skärmen
+import '../models/master_exercise_model.dart'; // Importera MasterExercise-modellen
+
+
+
 class CreateWorkoutScreen extends StatefulWidget {
   final Function(int)? onWorkoutSaved;
   const CreateWorkoutScreen({Key? key, this.onWorkoutSaved}) : super(key: key);
@@ -19,12 +24,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   bool _isLoading = false;
 
   
-  final List<Exercise> _exercises = [
-    // Exempeldata, denna lista kommer du att kunna ändra
-    Exercise(name: 'Incline press', sets: 2, id: 'ex1'),
-    Exercise(name: 'Incline press', sets: 2, id: 'ex2'),
-    Exercise(name: 'Incline press', sets: 2, id: 'ex3'),
-  ];
+  final List<Exercise> _exercises = [];
 
   @override
   void initState() {
@@ -41,6 +41,39 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+
+  // Inuti _CreateWorkoutScreenState
+
+// NY METOD FÖR ATT HANTERA DET NYA FLÖDET
+Future<void> _navigateAndAddExercise() async {
+  // Navigera till Skärm A (ChooseCategoryScreen) och VÄNTA på ett resultat.
+  // Resultatet kommer att vara ett MasterExercise-objekt om användaren väljer en,
+  // annars blir det null om de bara backar ut.
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const ChooseCategoryScreen()),
+  );
+
+    print('👉 RESULT RECEIVED: $result');
+
+
+  // Kontrollera om vi faktiskt fick tillbaka ett resultat (dvs. inte null)
+  if (result != null && result is MasterExercise) {
+    // VIKTIGT: Vi fick tillbaka ett MasterExercise, men vår lista i denna
+    // skärm är en lista av "vanliga" Exercise-objekt (som också har "sets").
+    // Vi måste konvertera den ena till den andra. Vi sätter "sets" till 1 som standard.
+    final newExercise = Exercise(
+      id: result.id, // Använd samma ID för att undvika problem med Dismissible-key
+      name: result.name,
+      sets: 1, // Sätt ett standardvärde för sets
+    );
+
+    // Lägg till den nya övningen i listan och rita om UI:t
+    setState(() {
+      _exercises.add(newExercise);
+    });
+  }
+}
 
   // Metod som anropas när "Save" trycks
   Future<void> _saveWorkout() async {
@@ -193,7 +226,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
               child: Center(
                 child: ElevatedButton(
                   onPressed: () {
-                    // Logik för att lägga till en ny övning
+                    _navigateAndAddExercise();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Color(0xFFDC2626),
