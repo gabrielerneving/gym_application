@@ -168,32 +168,24 @@ Widget build(BuildContext context) {
                     child: Container(
                       height: 60,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFFDC2626),
-                            const Color(0xFFEF4444),
-                            const Color(0xFFDC2626),
-                          ],
-                          stops: [0.0, 0.5 + (_animationController.value * 0.3), 1.0],
-                        ),
+                        // Enklare svart design med subtle röd accent
+                        color: Colors.black.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFDC2626).withOpacity(0.4),
-                            blurRadius: 15 + (_animationController.value * 5),
-                            offset: const Offset(0, 4),
-                            spreadRadius: 1,
+                            color: const Color(0xFFDC2626).withOpacity(0.2 + (_animationController.value * 0.1)),
+                            blurRadius: 10 + (_animationController.value * 3),
+                            offset: const Offset(0, 2),
+                            spreadRadius: 0.5,
                           ),
                           BoxShadow(
                             color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
+                            blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
                         ],
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
+                          color: const Color(0xFFDC2626).withOpacity(0.3 + (_animationController.value * 0.2)),
                           width: 1,
                         ),
                       ),
@@ -210,16 +202,16 @@ Widget build(BuildContext context) {
                             padding: const EdgeInsets.symmetric(horizontal: 24.0),
                             child: Row(
                               children: [
-                                // Pulsande ikon
+                                // Enklare pulsande ikon
                                 AnimatedBuilder(
                                   animation: _animationController,
                                   builder: (context, child) {
                                     return Transform.scale(
-                                      scale: 1.0 + (_animationController.value * 0.15),
+                                      scale: 1.0 + (_animationController.value * 0.1),
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
+                                          color: const Color(0xFFDC2626).withOpacity(0.2 + (_animationController.value * 0.1)),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
@@ -264,16 +256,16 @@ Widget build(BuildContext context) {
                                     ],
                                   ),
                                 ),
-                                // Animerad pil
+                                // Enklare animerad pil
                                 AnimatedBuilder(
                                   animation: _animationController,
                                   builder: (context, child) {
                                     return Transform.translate(
-                                      offset: Offset(_animationController.value * 3, 0),
+                                      offset: Offset(_animationController.value * 2, 0),
                                       child: Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.15),
+                                          color: const Color(0xFFDC2626).withOpacity(0.3),
                                           borderRadius: BorderRadius.circular(20),
                                         ),
                                         child: const Icon(
@@ -305,7 +297,7 @@ Widget build(BuildContext context) {
           child: Container(
             height: 65,
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: const Color.fromARGB(255, 15, 15, 15),
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
