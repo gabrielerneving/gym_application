@@ -3,10 +3,74 @@ import 'package:flutter/material.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/workout_widget.dart'; // Din befintliga widget
+import 'create_workout.dart';
 
 class HomeScreen extends StatelessWidget {
   final VoidCallback? onSwitchToProfileTab;
   const HomeScreen({Key? key, this.onSwitchToProfileTab}) : super(key: key);
+
+Future<bool> _showDeleteConfirmationDialog(BuildContext context, String programTitle) async {
+  // visa en dialog och vänta på användarens svar
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Delete Workout'),
+        content: Text('Are you sure you want to delete "$programTitle"? This action cannot be undone.'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false), // Returnera false
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true), // Returnera true
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      );
+    },
+  );
+  // Om användaren avfärdar dialogen (klickar utanför), returnera false
+  return result ?? false;
+}
+
+void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseService dbService) {
+  showModalBottomSheet(
+    context: context,
+    builder: (bc) {
+      return SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit'),
+              onTap: () {
+                Navigator.of(context).pop(); // Stäng menyn
+                // Navigera till CreateWorkoutScreen och skicka med programmet
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => CreateWorkoutScreen(workoutToEdit: program),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.of(context).pop(); // Stäng menyn
+                final shouldDelete = await _showDeleteConfirmationDialog(context, program.title);
+                if (shouldDelete) {
+                  await dbService.deleteWorkoutProgram(program.id);
+                }
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -88,8 +152,8 @@ class HomeScreen extends StatelessWidget {
                         title: program.title,
                         description: '$description...',
                         exerciseCount: program.exercises.length,
-                        onDelete: () {
-                          // Här kommer vi lägga till logik för att ta bort ett pass
+                        onMenuPressed: () {
+                          _showWorkoutOptions(context, program, dbService);
                         },
                         onStartWorkout: () {
                           // Här kommer vi lägga till logik för att starta ett pass

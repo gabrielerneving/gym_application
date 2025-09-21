@@ -10,9 +10,16 @@ import '../models/master_exercise_model.dart'; // Importera MasterExercise-model
 
 
 
+
 class CreateWorkoutScreen extends StatefulWidget {
   final Function(int)? onWorkoutSaved;
-  const CreateWorkoutScreen({Key? key, this.onWorkoutSaved}) : super(key: key);
+   final WorkoutProgram? workoutToEdit;
+  const CreateWorkoutScreen({
+    Key? key,
+    this.onWorkoutSaved,
+    // NYTT: Lägg till den i konstruktorn
+    this.workoutToEdit,
+  }) : super(key: key);
 
   @override
   _CreateWorkoutScreenState createState() => _CreateWorkoutScreenState();
@@ -26,15 +33,22 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 
 
   
-  final List<Exercise> _exercises = [];
+  List<Exercise> _exercises = [];
 
-  @override
   void initState() {
     super.initState();
+    
+    // NYTT: Kontrollera om vi är i "edit mode"
+    if (widget.workoutToEdit != null) {
+      // Fyll i controllern med det befintliga namnet
+      _workoutNameController.text = widget.workoutToEdit!.title;
+      // Fyll i listan med de befintliga övningarna
+      // VIKTIGT: Vi skapar en ny lista för att undvika att ändra i originalobjektet av misstag
+      _exercises = List.from(widget.workoutToEdit!.exercises);
+    }
+    
     _focusNode.addListener(() {
-      setState(() {
-        // Listener för focus-ändringar
-      });
+      setState(() {});
     });
   }
 
@@ -196,16 +210,23 @@ Future<void> _navigateAndAddExercise() async {
       }
       final uid = user.uid;
       
-      // 3. Skapa ett WorkoutProgram-objekt från datan på skärmen
-      var uuid = const Uuid();
-      final newProgram = WorkoutProgram(
-        id: uuid.v4(), // Skapa ett unikt ID för programmet
+      if (widget.workoutToEdit != null) {
+      // UPDATE-LÄGE
+      final updatedProgram = WorkoutProgram(
+        id: widget.workoutToEdit!.id, // Använd det befintliga ID:t!
         title: _workoutNameController.text.trim(),
         exercises: _exercises,
       );
-
-      // 4. Anropa vår DatabaseService för att spara programmet
+      await DatabaseService(uid: uid).updateWorkoutProgram(updatedProgram);
+    } else {
+      // CREATE-LÄGE (din befintliga kod)
+      final newProgram = WorkoutProgram(
+        id: const Uuid().v4(),
+        title: _workoutNameController.text.trim(),
+        exercises: _exercises,
+      );
       await DatabaseService(uid: uid).saveWorkoutProgram(newProgram);
+    }
 
       // 5. Ge feedback och navigera tillbaka
       if (mounted) {
@@ -262,8 +283,9 @@ Widget build(BuildContext context) {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Create',
+                Text(
+                  // NYTT: Byt text baserat på läge
+                  widget.workoutToEdit == null ? 'Create' : 'Edit Workout',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 36,

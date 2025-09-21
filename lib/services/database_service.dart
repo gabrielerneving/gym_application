@@ -67,5 +67,41 @@ Stream<List<MasterExercise>> getMasterExercisesByCategory(String category) {
     return snapshot.docs.map((doc) => MasterExercise.fromFirestore(doc.data())).toList();
   });
 }
+
+Future<void> deleteWorkoutProgram(String programId) async {
+  try {
+    // Skapa en referens till det specifika dokumentet
+    final docRef = _db.collection('users').doc(uid).collection('workout_programs').doc(programId);
+    
+    // Anropa .delete() för att ta bort det
+    await docRef.delete();
+  } catch (e) {
+    print('Error deleting workout program: $e');
+    // Kasta felet vidare om du vill hantera det i UI:t
+    rethrow;
+  }
+}
+
+// Metod för att uppdatera ett befintligt träningsprogram
+Future<void> updateWorkoutProgram(WorkoutProgram program) async {
+  try {
+    // Skapa en referens till det specifika dokumentet
+    final docRef = _db.collection('users').doc(uid).collection('workout_programs').doc(program.id);
+    
+    // Använd .update() för att ändra fälten i dokumentet.
+    // Vi måste konvertera vårt program-objekt till en Map igen.
+    await docRef.update({
+      'title': program.title,
+      'exercises': program.exercises.map((exercise) => {
+        'id': exercise.id,
+        'name': exercise.name,
+        'sets': exercise.sets,
+      }).toList(),
+    });
+  } catch (e) {
+    print('Error updating workout program: $e');
+    rethrow;
+  }
+}
 }
 

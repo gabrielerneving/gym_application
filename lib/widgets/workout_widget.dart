@@ -4,7 +4,7 @@ class WorkoutWidget extends StatelessWidget {
   final String title;
   final String description;
   final int exerciseCount;
-  final VoidCallback? onDelete;
+  final VoidCallback onMenuPressed;
   final VoidCallback? onStartWorkout;
 
   const WorkoutWidget({
@@ -12,7 +12,7 @@ class WorkoutWidget extends StatelessWidget {
     required this.title,
     required this.description,
     required this.exerciseCount,
-    this.onDelete,
+    required this.onMenuPressed,
     this.onStartWorkout,
   }) : super(key: key);
 
@@ -42,7 +42,7 @@ class WorkoutWidget extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.delete, color: Colors.grey),
-                onPressed: onDelete,
+                onPressed: onMenuPressed, // Anropa callbacken när den trycks
               ),
             ],
           ),
