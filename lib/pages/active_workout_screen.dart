@@ -143,18 +143,23 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                       },
                     ),
                   ),
-                  SizedBox(
+                 SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
-                        // ÄNDRING 8: Anropa notifiern för att avsluta passet
                         await ref.read(workoutProvider.notifier).finishWorkout();
                         if (context.mounted) {
                           Navigator.of(context).pop();
                         }
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      child: const Text('Finish Workout', style: TextStyle(fontSize: 18)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        minimumSize: const Size.fromHeight(60), // Gör knappen högre
+                      ),
+                      child: const Text(
+                        'Finish Workout',
+                        style: TextStyle(fontSize: 18, color: Colors.white),
+                      ),
                     ),
                   )
                 ],
