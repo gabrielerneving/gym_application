@@ -56,7 +56,7 @@ class WorkoutHistoryWidget extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${session.exerciseCount} exercises',
+                      '${session.completedExercises.length} exercises',
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                     ),
                   ],
@@ -65,11 +65,16 @@ class WorkoutHistoryWidget extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             ...session.completedExercises.map((exercise) {
+              // Skapa en textsträng för varje set
+              final setsDetails = exercise.sets.map((set) {
+                return '  - ${set.weight} kg x ${set.reps} reps';
+              }).join('\n'); // Lägg till en ny rad mellan varje set
+
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 1.0),
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Text(
-                  '${exercise.sets}x ${exercise.name}',
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.5),
+                  '${exercise.name}\n$setsDetails', // Visa övningens namn följt av set-detaljerna
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.5),
                 ),
               );
             }).toList(),

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:gym_app/pages/active_workout_screen.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/workout_widget.dart'; // Din befintliga widget
@@ -156,8 +157,13 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           _showWorkoutOptions(context, program, dbService);
                         },
                         onStartWorkout: () {
-                          // Här kommer vi lägga till logik för att starta ett pass
-                        },
+                        // Navigera till den nya skärmen och skicka med det valda programmet
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => ActiveWorkoutScreen(program: program),
+                          ),
+                        );
+                      },
                       );
                     },
                   ),

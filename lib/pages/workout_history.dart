@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/exercise_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/workout_session_model.dart';
-import '../widgets/workout_history_widget.dart';
+import '../services/database_service.dart';
+import '../widgets/workout_history_widget.dart'; // Eller vad din card-widget heter
 
 class WorkoutHistoryScreen extends StatefulWidget {
   const WorkoutHistoryScreen({Key? key}) : super(key: key);
@@ -11,50 +12,25 @@ class WorkoutHistoryScreen extends StatefulWidget {
 }
 
 class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
-  // Exempeldata som matchar din design
-  final List<WorkoutSession> _workoutHistory = [
-    WorkoutSession(
-      id: 'ws1',
-      programTitle: 'Upper 1',
-      date: DateTime(2025, 9, 25), // Antar ett datum
-      durationInMinutes: 65,
-      completedExercises: [
-        Exercise(name: 'Bicep curls', sets: 2, id: 'ex1'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex2'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex3'),
-        Exercise(name: 'Bicep curls', sets: 2, id: 'ex4'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex5'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex6'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex7'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex8'),
-      ],
-    ),
-    WorkoutSession(
-      id: 'ws2',
-      programTitle: 'Upper 2',
-      date: DateTime(2025, 9, 22), // Antar ett datum
-      durationInMinutes: 65,
-      completedExercises: [
-        Exercise(name: 'Bicep curls', sets: 2, id: 'ex1'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex2'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex3'),
-        Exercise(name: 'Bicep curls', sets: 2, id: 'ex4'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex5'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex6'),
-        Exercise(name: 'Reverse curls', sets: 1, id: 'ex7'),
-        Exercise(name: 'Tricep extensions', sets: 2, id: 'ex8'),
-      ],
-    ),
-  ];
+  // Ta bort den hårdkodade listan helt och hållet
+  // final List<WorkoutSession> _workoutHistory = [ ... ];
 
-  int _selectedIndex = 2; // Index 2 är den aktiva "profil"-ikonen
+  int _selectedIndex = 2; // Index för din bottom nav bar
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid == null) {
+      return const Scaffold(body: Center(child: Text("Not logged in.")));
+    }
+
+    final dbService = DatabaseService(uid: uid);
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        toolbarHeight: 80, // Ger lite mer utrymme
+        toolbarHeight: 80,
         title: const Text(
           'Workout history',
           style: TextStyle(
@@ -66,11 +42,36 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
         backgroundColor: Colors.black,
         elevation: 0,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        itemCount: _workoutHistory.length,
-        itemBuilder: (context, index) {
-          return WorkoutHistoryWidget(session: _workoutHistory[index]);
+      // Byt ut ListView.builder mot en StreamBuilder
+      body: StreamBuilder<List<WorkoutSession>>(
+        stream: dbService.getWorkoutSessions(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(
+              child: Text(
+                "Your workout history is empty.\nComplete a workout to see it here!",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            );
+          }
+
+          final workoutHistory = snapshot.data!;
+
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            itemCount: workoutHistory.length,
+            itemBuilder: (context, index) {
+              // Använd din befintliga widget med den dynamiska datan
+              return WorkoutHistoryWidget(session: workoutHistory[index]);
+            },
+          );
         },
       ),
       bottomNavigationBar: _buildCustomBottomNav(),

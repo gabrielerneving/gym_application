@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/workout_model.dart'; // Importera din modell
 import '../models/master_exercise_model.dart'; // Importera din MasterExercise-modell
+import '../models/exercise_model.dart'; // Importera din Exercise-modell
+import '../models/workout_session_model.dart'; // Importera din WorkoutSession-modell
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DatabaseService {
   // Hämta en instans av Firestore
@@ -102,6 +105,33 @@ Future<void> updateWorkoutProgram(WorkoutProgram program) async {
     print('Error updating workout program: $e');
     rethrow;
   }
+}
+
+// Metod för att spara en slutförd träningssession
+Future<void> saveWorkoutSession(WorkoutSession session) async {
+  try {
+    // Skapa en referens till en ny collection för historik
+    final collectionRef = _db.collection('users').doc(uid).collection('workout_sessions');
+    
+    // Spara sessionen med sitt unika ID
+    await collectionRef.doc(session.id).set(session.toMap());
+  } catch (e) {
+    print('Error saving workout session: $e');
+    rethrow;
+  }
+}
+
+// Metod för att hämta en STREAM av slutförda träningssessioner
+Stream<List<WorkoutSession>> getWorkoutSessions() {
+  final collectionRef = _db.collection('users').doc(uid).collection('workout_sessions')
+      .orderBy('date', descending: true); // Sortera så att den senaste kommer först
+
+  return collectionRef.snapshots().map((snapshot) {
+    return snapshot.docs.map((doc) {
+      // Vi behöver en fromFirestore-metod i WorkoutSession-modellen
+      return WorkoutSession.fromFirestore(doc.data());
+    }).toList();
+  });
 }
 }
 
