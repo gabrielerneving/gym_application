@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import '../models/exercise_model.dart'; // Se till att sökvägen till din modell är korrekt
 
+
 class ExerciseListItem extends StatelessWidget {
   // Denna widget tar emot ett Exercise-objekt för att veta vad den ska visa.
   final Exercise exercise;
+  final VoidCallback onMenuPressed;
+
 
   const ExerciseListItem({
     Key? key,
     required this.exercise,
+    required this.onMenuPressed,
   }) : super(key: key);
 
   @override
@@ -41,7 +45,7 @@ class ExerciseListItem extends StatelessWidget {
           onPressed: () {
             // Här kan du lägga till logik för vad som händer när man trycker,
             // t.ex. visa en meny för att redigera eller ta bort.
-            print('Menu button for ${exercise.name} pressed');
+          onMenuPressed();
           },
         ),
       ),

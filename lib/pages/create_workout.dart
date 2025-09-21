@@ -42,7 +42,87 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
     super.dispose();
   }
 
-  // Inuti _CreateWorkoutScreenState
+  // METOD 1: Visar själva menyn
+void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.grey.shade900, // Mörk bakgrundsfärg som i din design
+    builder: (BuildContext bc) {
+      return SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.white),
+              title: const Text('Ändra', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(context).pop(); // Stäng menyn först
+                _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.white),
+              title: const Text('Ta bort', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(context).pop(); // Stäng menyn
+                setState(() {
+                  _exercises.removeAt(index); // Ta bort övningen från listan
+                });
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.reorder, color: Colors.white),
+              title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                // "Ändra ordning" är mer komplext och görs bäst med ReorderableListView.
+                // Vi lämnar denna tom för nu.
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Reordering coming soon!')));
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// METOD 2: Visar en dialog för att ändra antal sets
+Future<void> _showEditSetsDialog(Exercise exercise) async {
+  final setsController = TextEditingController(text: exercise.sets.toString());
+
+  return showDialog<void>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text('Edit sets for ${exercise.name}'),
+        content: TextField(
+          controller: setsController,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Number of Sets'),
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          ElevatedButton(
+            child: const Text('Save'),
+            onPressed: () {
+              setState(() {
+                // Uppdatera antalet sets på den befintliga övningen
+                exercise.sets = int.tryParse(setsController.text) ?? exercise.sets;
+              });
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
 // NY METOD FÖR ATT HANTERA DET NYA FLÖDET
 Future<void> _navigateAndAddExercise() async {
@@ -118,6 +198,12 @@ Future<void> _navigateAndAddExercise() async {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Workout saved successfully!')),
         );
+
+      _workoutNameController.clear();
+      setState(() {
+        _exercises.clear();
+      });
+
         // Gå till Home tab (index 0) istället för att bara poppa
         if (widget.onWorkoutSaved != null) {
           widget.onWorkoutSaved!(0); // 0 = Home tab
@@ -215,8 +301,16 @@ Future<void> _navigateAndAddExercise() async {
               child: ListView.builder(
                 itemCount: _exercises.length,
                 itemBuilder: (context, index) {
-                  // Ersätt den gamla Card-logiken med din nya widget!
-                  return ExerciseListItem(exercise: _exercises[index]);
+                  final exercise = _exercises[index];
+                  // TIDIGARE hade du kanske en Dismissible här, den kan du ta bort nu
+                  // om du vill hantera radering via menyn istället.
+                  return ExerciseListItem(
+                    exercise: exercise,
+                    // ÄNDRAT: Skicka med en funktion som anropar vår nya metod
+                    onMenuPressed: () {
+                      _showExerciseOptions(context, exercise, index);
+                    },
+                  );
                 },
               ),
             ),
