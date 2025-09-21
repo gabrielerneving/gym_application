@@ -6,12 +6,16 @@ class ExerciseListItem extends StatelessWidget {
   // Denna widget tar emot ett Exercise-objekt för att veta vad den ska visa.
   final Exercise exercise;
   final VoidCallback onMenuPressed;
+  final bool isReordering; // Ny parameter
+
 
 
   const ExerciseListItem({
     Key? key,
     required this.exercise,
     required this.onMenuPressed,
+    this.isReordering = false, // Standardvärde är false
+
   }) : super(key: key);
 
   @override
@@ -37,17 +41,12 @@ class ExerciseListItem extends StatelessWidget {
             color: Colors.grey.shade400,
           ),
         ),
-        trailing: IconButton(
-          icon: const Icon(
-            Icons.more_vert, // De tre prickarna
-            color: Colors.white,
-          ),
-          onPressed: () {
-            // Här kan du lägga till logik för vad som händer när man trycker,
-            // t.ex. visa en meny för att redigera eller ta bort.
-          onMenuPressed();
-          },
-        ),
+        trailing: isReordering
+            ? const Icon(Icons.drag_handle, color: Colors.white)
+            : IconButton(
+                icon: const Icon(Icons.more_vert, color: Colors.white),
+                onPressed: onMenuPressed,
+              ),
       ),
     );
   }

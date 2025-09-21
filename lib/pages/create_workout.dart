@@ -22,6 +22,8 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   final _workoutNameController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isLoading = false;
+  bool _isReordering = false; // Håller koll på om vi kan ändra ordning
+
 
   
   final List<Exercise> _exercises = [];
@@ -70,16 +72,16 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.reorder, color: Colors.white),
-              title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                // "Ändra ordning" är mer komplext och görs bäst med ReorderableListView.
-                // Vi lämnar denna tom för nu.
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Reordering coming soon!')));
-              },
-            ),
+            leading: const Icon(Icons.reorder, color: Colors.white),
+            title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
+            onTap: () {
+              Navigator.of(context).pop(); // Stäng menyn
+              // Växla till omordningsläge
+              setState(() {
+                _isReordering = true;
+              });
+            },
+          ),
           ],
         ),
       );
@@ -143,7 +145,7 @@ Future<void> _navigateAndAddExercise() async {
     // skärm är en lista av "vanliga" Exercise-objekt (som också har "sets").
     // Vi måste konvertera den ena till den andra. Vi sätter "sets" till 1 som standard.
     final newExercise = Exercise(
-      id: result.id, // Använd samma ID för att undvika problem med Dismissible-key
+      id: const Uuid().v4(), // Skapa ett HELT NYTT unikt ID för denna instans!
       name: result.name,
       sets: 1, // Sätt ett standardvärde för sets
     );
@@ -230,25 +232,25 @@ Future<void> _navigateAndAddExercise() async {
   }
 }
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        // Ta bort focus när man klickar utanför textfältet
-        FocusScope.of(context).unfocus();
-      },
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: Colors.black, // Sätter bakgrundsfärgen
-        body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 60),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+@override
+Widget build(BuildContext context) {
+  return GestureDetector(
+    onTap: () {
+      // Ta bort focus när man klickar utanför textfältet
+      FocusScope.of(context).unfocus();
+    },
+    child: Scaffold(
+      resizeToAvoidBottomInset: false,
+      backgroundColor: Colors.black, // Sätter bakgrundsfärgen
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 60),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                const Text(
                   'Create',
                   style: TextStyle(
                     color: Colors.white,
@@ -256,22 +258,36 @@ Future<void> _navigateAndAddExercise() async {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _saveWorkout,
-                  style: ElevatedButton.styleFrom(backgroundColor: Color(0xFFDC2626)),
-                  child: _isLoading ? const CircularProgressIndicator() : const Text('Save', style: TextStyle(color: Colors.white)),
-                  
-                ),
+                // Om vi är i omordningsläge, visa en "Done"-knapp.
+                // Annars, visa den vanliga "Save"-knappen.
+                if (_isReordering)
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isReordering = false; // Gå tillbaka till normalläge
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Done', style: TextStyle(color: Colors.white)),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _saveWorkout,
+                    style: ElevatedButton.styleFrom(backgroundColor: Color(0xFFDC2626)),
+                    child: _isLoading
+                        ? const CircularProgressIndicator()
+                        : const Text('Save', style: TextStyle(color: Colors.white)),
+                  ),
               ],
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _workoutNameController,
               focusNode: _focusNode,
-              style: TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 labelText: 'Name',
-                labelStyle: TextStyle(color: const Color.fromARGB(255, 255, 255, 255)),
+                labelStyle: const TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), // default rundade hörn
                 ),
@@ -281,13 +297,12 @@ Future<void> _navigateAndAddExercise() async {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), // rundade hörn när fältet är aktivt
-                  borderSide: BorderSide(color: Colors.red),
+                  borderSide: const BorderSide(color: Colors.red),
                 ),
               ),
             ),
             const SizedBox(height: 30),
-
-            Center(
+            const Center(
               child: SizedBox(
                 width: 330, // här styr du längden
                 child: Divider(
@@ -296,22 +311,39 @@ Future<void> _navigateAndAddExercise() async {
                 ),
               ),
             ),
-
-             Expanded(
-              child: ListView.builder(
-                itemCount: _exercises.length,
-                itemBuilder: (context, index) {
-                  final exercise = _exercises[index];
-                  // TIDIGARE hade du kanske en Dismissible här, den kan du ta bort nu
-                  // om du vill hantera radering via menyn istället.
-                  return ExerciseListItem(
-                    exercise: exercise,
-                    // ÄNDRAT: Skicka med en funktion som anropar vår nya metod
-                    onMenuPressed: () {
-                      _showExerciseOptions(context, exercise, index);
-                    },
-                  );
+            Expanded(
+              child: ReorderableListView(
+                // Denna funktion är HJÄRTAT i ReorderableListView.
+                // Den anropas när användaren har dragit ett objekt och släppt det på en ny plats.
+                onReorder: (int oldIndex, int newIndex) {
+                  setState(() {
+                    // Justeringen här är viktig: om man flyttar ett objekt neråt i listan,
+                    // förskjuts indexen på ett annat sätt än om man flyttar det uppåt.
+                    if (oldIndex < newIndex) {
+                      newIndex -= 1;
+                    }
+                    // Ta bort objektet från sin gamla plats...
+                    final Exercise item = _exercises.removeAt(oldIndex);
+                    // ...och sätt in det på sin nya plats.
+                    _exercises.insert(newIndex, item);
+                  });
                 },
+                // Bygger varje objekt i listan.
+                children: _exercises.map((exercise) {
+                  return Container(
+                    // VIKTIGT: Varje barn i en ReorderableListView måste ha en unik Key.
+                    key: Key(exercise.id),
+                    child: ExerciseListItem(
+                      exercise: exercise,
+                      isReordering: _isReordering, // Skicka med det aktuella läget
+                      onMenuPressed: () {
+                        // Hitta index för den specifika övningen för att kunna ta bort den
+                        final index = _exercises.indexOf(exercise);
+                        _showExerciseOptions(context, exercise, index);
+                      },
+                    ),
+                  );
+                }).toList(),
               ),
             ),
             const SizedBox(height: 20),
@@ -326,14 +358,14 @@ Future<void> _navigateAndAddExercise() async {
                     backgroundColor: Color(0xFFDC2626),
                     minimumSize: Size(MediaQuery.of(context).size.width * 0.8, 55), // 80% av skärmbredden
                   ),
-                  child: Text(
-                        'Add exercise',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                  child: const Text(
+                    'Add exercise',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -342,6 +374,6 @@ Future<void> _navigateAndAddExercise() async {
         ),
       ),
     ),
-    );
-  }
+  );
+}
 }
