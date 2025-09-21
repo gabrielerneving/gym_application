@@ -1,224 +1,166 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
-import '../models/workout_model.dart';
-import '../models/workout_session_model.dart'; // Importera den uppdaterade modellen
-import '../services/database_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/workout_provider.dart'; // Importera vår nya provider
 
-class ActiveWorkoutScreen extends StatefulWidget {
-  final WorkoutProgram program;
-  const ActiveWorkoutScreen({Key? key, required this.program}) : super(key: key);
+// ÄNDRING 1: Byt från StatefulWidget till ConsumerWidget
+class ActiveWorkoutScreen extends ConsumerWidget {
+  const ActiveWorkoutScreen({Key? key}) : super(key: key);
 
-  @override
-  _ActiveWorkoutScreenState createState() => _ActiveWorkoutScreenState();
-}
+  // Vi behöver inte längre ta emot ett program, eftersom vi läser det från providern.
 
-class _ActiveWorkoutScreenState extends State<ActiveWorkoutScreen> {
-  late Timer _timer;
-  int _elapsedSeconds = 0;
-  int _currentExerciseIndex = 0;
-
-  // En Map för att hålla all inmatad data
-  // Struktur: { exerciseIndex -> { setIndex -> { 'weight': value, 'reps': value } } }
-  late Map<int, Map<int, Map<String, double>>> _workoutData;
-
-  @override
-  void initState() {
-    super.initState();
-    _startTimer();
-    _initializeWorkoutData();
-  }
-
-  // Initierar vår datastruktur med tomma värden
-  void _initializeWorkoutData() {
-    _workoutData = {};
-    for (int i = 0; i < widget.program.exercises.length; i++) {
-      _workoutData[i] = {};
-      for (int j = 0; j < widget.program.exercises[i].sets; j++) {
-        _workoutData[i]![j] = {'weight': 0.0, 'reps': 0};
-      }
-    }
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _elapsedSeconds++;
-      });
-    });
-  }
-
-  // Snygg formatering för timern
-  String _formatDuration(int totalSeconds) {
-    final duration = Duration(seconds: totalSeconds);
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return "$minutes:$seconds";
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel(); // Mycket viktigt för att undvika minnesläckor!
-    super.dispose();
-  }
-
-  void _goToNextExercise() {
-    if (_currentExerciseIndex < widget.program.exercises.length - 1) {
-      setState(() {
-        _currentExerciseIndex++;
-      });
-    }
-  }
-
-  void _goToPreviousExercise() {
-    if (_currentExerciseIndex > 0) {
-      setState(() {
-        _currentExerciseIndex--;
-      });
-    }
-  }
-
-  Future<void> _finishWorkout() async {
-    _timer.cancel();
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-    // 1. Konvertera vår _workoutData Map till en lista av CompletedExercise
-    List<CompletedExercise> completedExercises = [];
-    _workoutData.forEach((exerciseIndex, setData) {
-      List<CompletedSet> completedSets = [];
-      setData.forEach((setIndex, data) {
-        completedSets.add(CompletedSet(
-          weight: data['weight']!,
-          reps: data['reps']!.toInt(),
-        ));
-      });
-      completedExercises.add(CompletedExercise(
-        name: widget.program.exercises[exerciseIndex].name,
-        sets: completedSets,
-      ));
-    });
-
-    // 2. Skapa ett WorkoutSession-objekt
-    final session = WorkoutSession(
-      id: const Uuid().v4(),
-      programTitle: widget.program.title,
-      date: DateTime.now(),
-      durationInMinutes: (_elapsedSeconds / 60).ceil(),
-      completedExercises: completedExercises,
+  // En hjälpmetod för att visa bekräftelsedialogen
+  Future<bool> _showExitConfirmationDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave workout?'),
+        content: const Text('Your progress will be saved. You can resume later from the home screen.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Leave')),
+        ],
+      ),
     );
-
-    // 3. Spara till databasen
-    await DatabaseService(uid: uid).saveWorkoutSession(session);
-
-    // 4. Navigera tillbaka och visa ett meddelande
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Workout finished and saved to history!')),
-      );
-      Navigator.of(context).pop();
-    }
+    return result ?? false;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final currentExercise = widget.program.exercises[_currentExerciseIndex];
+  // ÄNDRING 2: build-metoden tar nu emot en WidgetRef
+  Widget build(BuildContext context, WidgetRef ref) {
+    // ÄNDRING 3: Läs det aktuella statet från providern.
+    // .watch() gör att skärmen automatiskt byggs om när statet ändras.
+    final activeWorkoutState = ref.watch(workoutProvider);
+    final session = activeWorkoutState.session;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.program.title),
-        centerTitle: true,
-        backgroundColor: Colors.black,
-        // Visa timern i AppBar
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4.0),
-          child: Text(
-            "Time: ${_formatDuration(_elapsedSeconds)}",
-            style: const TextStyle(color: Colors.white, fontSize: 18),
+    // Om inget pass är igång (t.ex. om användaren navigerar hit via en länk av misstag),
+    // visa ett felmeddelande.
+    if (session == null || !activeWorkoutState.isRunning) {
+      return const Scaffold(
+        body: Center(child: Text('No active workout found.')),
+      );
+    }
+
+    // Vi behöver en PageController för att hantera bytet mellan övningar
+    final pageController = PageController(initialPage: 0); // Vi kan göra detta mer avancerat senare
+
+    // Snygg formatering för timern
+    String formatDuration(int totalSeconds) {
+      final duration = Duration(seconds: totalSeconds);
+      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+      return "$minutes:$seconds";
+    }
+
+    // ÄNDRING 4: Använd WillPopScope för att hantera "tillbaka"-knappen
+    return WillPopScope(
+      onWillPop: () async {
+        final shouldLeave = await _showExitConfirmationDialog(context);
+        if (shouldLeave) {
+          // Anropa notifiern för att pausa passet
+          ref.read(workoutProvider.notifier).pauseWorkout();
+        }
+        return shouldLeave; // Returnera true för att tillåta navigering
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(session.programTitle),
+          centerTitle: true,
+          backgroundColor: Colors.black,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(4.0),
+            // ÄNDRING 5: Läs tiden från providern
+            child: Text(
+              "Time: ${formatDuration(activeWorkoutState.elapsedSeconds)}",
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            ),
           ),
         ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Visa aktuell övning
-            Text(
-              currentExercise.name,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-
-            // Lista med inmatningsfält för sets
-            Expanded(
-              child: ListView.builder(
-                itemCount: currentExercise.sets,
-                itemBuilder: (context, setIndex) {
-                  return Card(
-                    color: Colors.grey.shade900,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("Set ${setIndex + 1}", style: const TextStyle(fontSize: 18)),
-                          SizedBox(
-                            width: 80,
-                            child: TextField(
-                              decoration: const InputDecoration(labelText: 'kg'),
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              onChanged: (value) {
-                                _workoutData[_currentExerciseIndex]![setIndex]!['weight'] = double.tryParse(value) ?? 0.0;
-                              },
+        body: PageView.builder(
+          controller: pageController,
+          itemCount: session.completedExercises.length,
+          itemBuilder: (context, exerciseIndex) {
+            final currentExercise = session.completedExercises[exerciseIndex];
+            
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Text(
+                    currentExercise.name,
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: currentExercise.sets.length,
+                      itemBuilder: (context, setIndex) {
+                        final currentSet = currentExercise.sets[setIndex];
+                        return Card(
+                          color: Colors.grey.shade900,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Set ${setIndex + 1}", style: const TextStyle(fontSize: 18)),
+                                SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    initialValue: currentSet.weight > 0 ? currentSet.weight.toString() : '',
+                                    decoration: const InputDecoration(labelText: 'kg'),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    onChanged: (value) {
+                                      // ÄNDRING 6: Anropa notifiern för att uppdatera data
+                                      final weight = double.tryParse(value) ?? 0.0;
+                                      ref.read(workoutProvider.notifier).updateSetData(
+                                        exerciseIndex, setIndex, weight, currentSet.reps
+                                      );
+                                    },
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    initialValue: currentSet.reps > 0 ? currentSet.reps.toString() : '',
+                                    decoration: const InputDecoration(labelText: 'Reps'),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    onChanged: (value) {
+                                       // ÄNDRING 7: Anropa notifiern för att uppdatera data
+                                      final reps = int.tryParse(value) ?? 0;
+                                      ref.read(workoutProvider.notifier).updateSetData(
+                                        exerciseIndex, setIndex, currentSet.weight, reps
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          SizedBox(
-                            width: 80,
-                            child: TextField(
-                              decoration: const InputDecoration(labelText: 'Reps'),
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                               onChanged: (value) {
-                                _workoutData[_currentExerciseIndex]![setIndex]!['reps'] = double.tryParse(value) ?? 0.0;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        // ÄNDRING 8: Anropa notifiern för att avsluta passet
+                        await ref.read(workoutProvider.notifier).finishWorkout();
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      child: const Text('Finish Workout', style: TextStyle(fontSize: 18)),
+                    ),
+                  )
+                ],
               ),
-            ),
-
-            // Navigationsknappar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton(
-                  onPressed: _currentExerciseIndex > 0 ? _goToPreviousExercise : null,
-                  child: const Text('Previous'),
-                ),
-                ElevatedButton(
-                  onPressed: _currentExerciseIndex < widget.program.exercises.length - 1 ? _goToNextExercise : null,
-                  child: const Text('Next'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Avsluta-knapp
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _finishWorkout,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Finish Workout', style: TextStyle(fontSize: 18)),
-              ),
-            )
-          ],
+            );
+          },
         ),
       ),
     );

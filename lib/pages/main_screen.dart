@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'home_screen.dart';
 import 'create_workout.dart';
 import 'workout_history.dart';
 import 'statistics_screen.dart';
+import 'active_workout_screen.dart';
+import '../providers/workout_provider.dart';
 
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerStatefulWidget {
   final int initialTabIndex; 
   const MainScreen({super.key, this.initialTabIndex = 0});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
+class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStateMixin {
   late int _selectedIndex;
   late AnimationController _animationController;
   late AnimationController _iconAnimationController;
@@ -37,6 +40,9 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    Future.delayed(Duration.zero, () {
+      ref.read(workoutProvider.notifier).loadInitialState();
+    });
     _selectedIndex = widget.initialTabIndex;
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -87,18 +93,75 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final double navBarWidth = MediaQuery.of(context).size.width - 32;
-    final double itemWidth = navBarWidth / _icons.length; 
+Widget build(BuildContext context) {
+  // Läs av workoutProvider som förut
+  final activeWorkout = ref.watch(workoutProvider);
 
-    return Scaffold(
-      extendBody: true,
-      backgroundColor: const Color(0xFF1B1C20), 
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _widgetOptions,
-      ),
+  final double navBarWidth = MediaQuery.of(context).size.width - 32;
+  final double itemWidth = navBarWidth / _icons.length;
+
+  return Scaffold(
+    extendBody: true,
+    backgroundColor: const Color(0xFF1B1C20),
+    
+    body: Stack(
+      children: [
+        // LAGER 1: Huvudinnehållet (din IndexedStack)
+        // Detta lager ligger i botten och fyller hela skärmen under AppBar.
+        IndexedStack(
+          index: _selectedIndex,
+          children: _widgetOptions,
+        ),
+
+        // LAGER 2: Din "Workout in progress"-banner
+        // Detta lager ligger OVANPÅ IndexedStack.
+        // Vi använder en Positioned-widget för att placera den högst upp.
+        if (activeWorkout.isRunning)
+          Positioned(
+            top: 0,
+            left: 16,
+            right: 16,
+            child: SafeArea( // SafeArea skyddar bara detta lager
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white24, width: 0.5),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (context) => const ActiveWorkoutScreen(),
+                    ));
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Workout in progress',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        const Text(
+                          'Resume',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
       bottomNavigationBar: Container(
         height: 65,
         margin: const EdgeInsets.all(16),

@@ -81,4 +81,20 @@ class WorkoutSession {
     completedExercises: exercises,
   );
 }
+
+WorkoutSession copyWith({
+  String? id,
+  String? programTitle,
+  DateTime? date,
+  int? durationInMinutes,
+  List<CompletedExercise>? completedExercises,
+}) {
+  return WorkoutSession(
+    id: id ?? this.id,
+    programTitle: programTitle ?? this.programTitle,
+    date: date ?? this.date,
+    durationInMinutes: durationInMinutes ?? this.durationInMinutes,
+    completedExercises: completedExercises ?? this.completedExercises,
+  );
+}
 }

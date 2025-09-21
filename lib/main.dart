@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+// NYTT: Importera Riverpod så att vi kan använda ProviderScope
+import 'package:flutter_riverpod/flutter_riverpod.dart'; 
 import 'pages/main_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
-
 
 void main() async { // Gör main till en async-funktion
   // Se till att Flutter är redo innan vi kör Firebase-kod
@@ -14,7 +15,9 @@ void main() async { // Gör main till en async-funktion
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  runApp(const MyApp());
+  // Linda hela appen i en ProviderScope. Detta gör att alla widgets
+  // kan läsa av våra globala providers. Helt korrekt gjort av dig!
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {

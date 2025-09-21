@@ -1,12 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gym_app/pages/active_workout_screen.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/workout_widget.dart'; // Din befintliga widget
+import '../providers/workout_provider.dart';
 import 'create_workout.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   final VoidCallback? onSwitchToProfileTab;
   const HomeScreen({Key? key, this.onSwitchToProfileTab}) : super(key: key);
 
@@ -74,7 +76,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
 
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // NYTT: Hämta den inloggade användarens unika ID
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -157,13 +159,18 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           _showWorkoutOptions(context, program, dbService);
                         },
                         onStartWorkout: () {
-                        // Navigera till den nya skärmen och skicka med det valda programmet
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => ActiveWorkoutScreen(program: program),
-                          ),
-                        );
-                      },
+                          // 1. STARTA PASSET I PROVIDERN
+                          ref.read(workoutProvider.notifier).startWorkout(program);
+
+                          // 2. NAVIGERA TILL SPELAREN
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              // Notera att vi inte längre skickar med programmet,
+                              // eftersom spelaren kommer att läsa det från providern.
+                              builder: (context) => const ActiveWorkoutScreen(),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),

@@ -133,5 +133,36 @@ Stream<List<WorkoutSession>> getWorkoutSessions() {
     }).toList();
   });
 }
+
+// Spara det pågående passets state
+Future<void> saveActiveWorkoutState(WorkoutSession session) async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  await docRef.set(session.toMap());
+}
+
+// Läs det pågående passet (om det finns)
+Future<WorkoutSession?> loadActiveWorkoutState() async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  final snapshot = await docRef.get();
+  if (snapshot.exists) {
+    return WorkoutSession.fromFirestore(snapshot.data()!);
+  }
+  return null;
+}
+
+ // Metod för att ta bort det temporära "pågående pass"-dokumentet
+  Future<void> deleteActiveWorkoutState() async {
+    try {
+      // Skapa en referens till det specifika dokumentet
+      final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+      
+      // Anropa .delete() för att ta bort det
+      await docRef.delete();
+    } catch (e) {
+      print('Error deleting active workout state: $e');
+      // Vi behöver inte nödvändigtvis kasta felet vidare här,
+      // eftersom det inte är kritiskt för användaren om den här filen blir kvar.
+    }
+  }
 }
 
