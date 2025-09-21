@@ -40,9 +40,6 @@ class ActiveWorkoutScreen extends ConsumerWidget {
       );
     }
 
-    // Vi behöver en PageController för att hantera bytet mellan övningar
-    final pageController = PageController(initialPage: 0); // Vi kan göra detta mer avancerat senare
-
     // Snygg formatering för timern
     String formatDuration(int totalSeconds) {
       final duration = Duration(seconds: totalSeconds);
@@ -75,97 +72,265 @@ class ActiveWorkoutScreen extends ConsumerWidget {
             ),
           ),
         ),
-        body: PageView.builder(
-          controller: pageController,
-          itemCount: session.completedExercises.length,
-          itemBuilder: (context, exerciseIndex) {
-            final currentExercise = session.completedExercises[exerciseIndex];
-            
-            return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  Text(
-                    currentExercise.name,
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: currentExercise.sets.length,
-                      itemBuilder: (context, setIndex) {
-                        final currentSet = currentExercise.sets[setIndex];
-                        return Card(
-                          color: Colors.grey.shade900,
-                          margin: const EdgeInsets.symmetric(vertical: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("Set ${setIndex + 1}", style: const TextStyle(fontSize: 18)),
-                                SizedBox(
-                                  width: 80,
-                                  child: TextFormField(
-                                    initialValue: currentSet.weight > 0 ? currentSet.weight.toString() : '',
-                                    decoration: const InputDecoration(labelText: 'kg'),
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    onChanged: (value) {
-                                      // ÄNDRING 6: Anropa notifiern för att uppdatera data
-                                      final weight = double.tryParse(value) ?? 0.0;
-                                      ref.read(workoutProvider.notifier).updateSetData(
-                                        exerciseIndex, setIndex, weight, currentSet.reps
-                                      );
-                                    },
+        backgroundColor: Colors.black,
+        body: Column(
+          children: [
+            // Lista med alla övningar (tog bort timer header)
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: session.completedExercises.length,
+                itemBuilder: (context, exerciseIndex) {
+                  final exercise = session.completedExercises[exerciseIndex];
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 0, 0, 0),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: const Color(0xFFDC2626).withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Övningsnamn med bokstav
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDC2626),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  String.fromCharCode(65 + exerciseIndex), // A, B, C, etc.
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
                                   ),
                                 ),
-                                SizedBox(
-                                  width: 80,
-                                  child: TextFormField(
-                                    initialValue: currentSet.reps > 0 ? currentSet.reps.toString() : '',
-                                    decoration: const InputDecoration(labelText: 'Reps'),
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    onChanged: (value) {
-                                       // ÄNDRING 7: Anropa notifiern för att uppdatera data
-                                      final reps = int.tryParse(value) ?? 0;
-                                      ref.read(workoutProvider.notifier).updateSetData(
-                                        exerciseIndex, setIndex, currentSet.weight, reps
-                                      );
-                                    },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                exercise.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Sets
+                        ...exercise.sets.asMap().entries.map((entry) {
+                          final setIndex = entry.key;
+                          final set = entry.value;
+                          
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                // Set nummer
+                                Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade700,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${setIndex + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                
+                                // Weight input
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Weight',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      TextFormField(
+                                        initialValue: set.weight > 0 ? set.weight.toString() : '',
+                                        style: const TextStyle(color: Colors.white),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        textAlign: TextAlign.center,
+                                        onChanged: (value) {
+                                          final weight = double.tryParse(value) ?? 0.0;
+                                          ref.read(workoutProvider.notifier).updateSetData(
+                                            exerciseIndex, setIndex, weight, set.reps
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                
+                                // Reps input
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Reps',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      TextFormField(
+                                        initialValue: set.reps > 0 ? set.reps.toString() : '',
+                                        style: const TextStyle(color: Colors.white),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        textAlign: TextAlign.center,
+                                        onChanged: (value) {
+                                          final reps = int.tryParse(value) ?? 0;
+                                          ref.read(workoutProvider.notifier).updateSetData(
+                                            exerciseIndex, setIndex, set.weight, reps
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                
+                                // Notes input
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Notes',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      TextFormField(
+                                        style: const TextStyle(color: Colors.white),
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: BorderSide(color: Colors.grey.shade600),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        ),
+                                        textAlign: TextAlign.left,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            
+            // Finish workout button
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await ref.read(workoutProvider.notifier).finishWorkout();
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    minimumSize: const Size.fromHeight(60),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                 SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await ref.read(workoutProvider.notifier).finishWorkout();
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        minimumSize: const Size.fromHeight(60), // Gör knappen högre
-                      ),
-                      child: const Text(
-                        'Finish Workout',
-                        style: TextStyle(fontSize: 18, color: Colors.white),
-                      ),
+                  child: const Text(
+                    'Finish Workout',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
                     ),
-                  )
-                ],
+                  ),
+                ),
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
