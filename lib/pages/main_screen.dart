@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'home_screen.dart';
@@ -45,9 +46,13 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
     });
     _selectedIndex = widget.initialTabIndex;
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 2000), // Längre duration för mjuk pulsning
       vsync: this,
     );
+    
+    // Starta kontinuerlig pulsning för workout banner
+    _animationController.repeat(reverse: true);
+    
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
@@ -97,67 +102,198 @@ Widget build(BuildContext context) {
   // Läs av workoutProvider som förut
   final activeWorkout = ref.watch(workoutProvider);
 
+  // Sätt status bar stil
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+  );
+
   final double navBarWidth = MediaQuery.of(context).size.width - 32;
   final double itemWidth = navBarWidth / _icons.length;
 
   return Scaffold(
     extendBody: true,
+    extendBodyBehindAppBar: true,
     backgroundColor: const Color(0xFF1B1C20),
     
     body: Stack(
       children: [
-        // LAGER 1: Huvudinnehållet (din IndexedStack)
-        // Detta lager ligger i botten och fyller hela skärmen under AppBar.
-        IndexedStack(
-          index: _selectedIndex,
-          children: _widgetOptions,
+        // LAGER 1: Huvudinnehållet med dynamisk padding för bannern
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 300),
+          padding: EdgeInsets.only(
+            top: activeWorkout.isRunning ? 80 : 0, // 80px space för bannern när den visas
+          ),
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: _widgetOptions,
+          ),
         ),
 
-        // LAGER 2: Din "Workout in progress"-banner
-        // Detta lager ligger OVANPÅ IndexedStack.
-        // Vi använder en Positioned-widget för att placera den högst upp.
+        // LAGER 2: Förbättrad "Workout in progress"-banner
         if (activeWorkout.isRunning)
           Positioned(
             top: 0,
-            left: 16,
-            right: 16,
-            child: SafeArea( // SafeArea skyddar bara detta lager
-              child: Container(
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white24, width: 0.5),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(30),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (context) => const ActiveWorkoutScreen(),
-                    ));
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Workout in progress',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        const Text(
-                          'Resume',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
+            left: 0,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                final statusBarHeight = MediaQuery.of(context).padding.top;
+                return Container(
+                  // Täcker hela övre området inklusive status bar
+                  padding: EdgeInsets.only(
+                    top: statusBarHeight + 8,
+                    left: 12,
+                    right: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    // Gradient som täcker hela övre området
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color.fromARGB(255, 0, 0, 0), // Samma som scaffold bakgrund
+                        const Color.fromARGB(255, 0, 0, 0).withOpacity(0.9),
+                        Colors.transparent,
                       ],
+                      stops: [0.0, 0.7, 1.0],
                     ),
                   ),
-                ),
-              ),
+                  child: Transform.scale(
+                    scale: 1.0 + (_animationController.value * 0.02),
+                    child: Container(
+                      height: 60,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFFDC2626),
+                            const Color(0xFFEF4444),
+                            const Color(0xFFDC2626),
+                          ],
+                          stops: [0.0, 0.5 + (_animationController.value * 0.3), 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFDC2626).withOpacity(0.4),
+                            blurRadius: 15 + (_animationController.value * 5),
+                            offset: const Offset(0, 4),
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(30),
+                          onTap: () {
+                            Navigator.of(context).push(MaterialPageRoute(
+                              builder: (context) => const ActiveWorkoutScreen(),
+                            ));
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Row(
+                              children: [
+                                // Pulsande ikon
+                                AnimatedBuilder(
+                                  animation: _animationController,
+                                  builder: (context, child) {
+                                    return Transform.scale(
+                                      scale: 1.0 + (_animationController.value * 0.15),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.fitness_center,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 12),
+                                // Text med fadeIn-effekt
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Workout Active',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          shadows: [
+                                            Shadow(
+                                              offset: const Offset(0, 1),
+                                              blurRadius: 2,
+                                              color: Colors.black.withOpacity(0.5),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        'Tap to continue',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Animerad pil
+                                AnimatedBuilder(
+                                  animation: _animationController,
+                                  builder: (context, child) {
+                                    return Transform.translate(
+                                      offset: Offset(_animationController.value * 3, 0),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: const Icon(
+                                          Icons.play_arrow,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 

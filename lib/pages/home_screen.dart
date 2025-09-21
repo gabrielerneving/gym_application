@@ -95,7 +95,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 0, 0, 0),
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 60),
+        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), // Ökat top padding för bättre spacing
         // NYTT: StreamBuilder för att hämta och visa data i realtid
         child: StreamBuilder<List<WorkoutProgram>>(
           stream: dbService.getWorkoutPrograms(),

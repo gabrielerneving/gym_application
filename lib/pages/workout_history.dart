@@ -51,6 +51,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
               // Lista med träningshistorik
               Expanded(
                 child: StreamBuilder<List<WorkoutSession>>(

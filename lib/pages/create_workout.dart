@@ -276,7 +276,7 @@ Widget build(BuildContext context) {
       resizeToAvoidBottomInset: false,
       backgroundColor: Colors.black, // Sätter bakgrundsfärgen
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 60),
+        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), // Ökat top padding för bättre spacing
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
