@@ -137,7 +137,14 @@ Stream<List<WorkoutSession>> getWorkoutSessions() {
 // Spara det pågående passets state
 Future<void> saveActiveWorkoutState(WorkoutSession session) async {
   final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  await docRef.set(session.toMap());
+  // merge: true för att inte radera extra fält (t.ex. editedKeys)
+  await docRef.set(session.toMap(), SetOptions(merge: true));
+}
+
+// Spara vilka fält som användaren redigerat under pågående pass
+Future<void> saveActiveEditedKeys(Set<String> editedKeys) async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  await docRef.set({'editedKeys': editedKeys.toList()}, SetOptions(merge: true));
 }
 
 // Läs det pågående passet (om det finns)
@@ -148,6 +155,38 @@ Future<WorkoutSession?> loadActiveWorkoutState() async {
     return WorkoutSession.fromFirestore(snapshot.data()!);
   }
   return null;
+}
+
+// Läs tillbaka editedKeys för det pågående passet
+Future<Set<String>> loadActiveEditedKeys() async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  final snapshot = await docRef.get();
+  if (!snapshot.exists) return <String>{};
+  final data = snapshot.data();
+  if (data == null) return <String>{};
+  final list = data['editedKeys'];
+  if (list is List) {
+    return Set<String>.from(list.map((e) => e.toString()));
+  }
+  return <String>{};
+}
+
+// Spara placeholders (förra passets värden) per fält
+Future<void> saveActivePlaceholders(Map<String, dynamic> placeholders) async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  await docRef.set({'placeholders': placeholders}, SetOptions(merge: true));
+}
+
+Future<Map<String, dynamic>> loadActivePlaceholders() async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  final snapshot = await docRef.get();
+  if (!snapshot.exists) return <String, dynamic>{};
+  final data = snapshot.data();
+  if (data == null) return <String, dynamic>{};
+  final ph = data['placeholders'];
+  if (ph is Map<String, dynamic>) return ph;
+  if (ph is Map) return Map<String, dynamic>.from(ph);
+  return <String, dynamic>{};
 }
 
  // Metod för att ta bort det temporära "pågående pass"-dokumentet

@@ -14,10 +14,9 @@ class ActiveWorkoutScreen extends ConsumerStatefulWidget {
 class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   // En Map för att hålla alla våra controllers
   final Map<String, TextEditingController> _controllers = {};
-  // En Set för att hålla reda på vilka fält som har redigerats
-  final Set<String> _editedFields = {};
-  // Håll reda på nuvarande sessionens ID för att detektera när en ny session startar
-  String? _currentSessionId;
+  // Lokal cache används inte längre som sanning; vi läser från provider-state
+  final Set<String> _editedFields = {}; // kept only for transient UI but source of truth is provider
+  String? _currentSessionId; // to prevent redundant reinitialization
 
   @override
   void initState() {
@@ -35,33 +34,74 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       _initializeControllers();
     });
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Anropas när dependencies ändras (t.ex. när provider state uppdateras)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeControllers();
+    });
+  }
   
   // Metod för att skapa alla controllers när skärmen startar
   void _initializeControllers() {
     final session = ref.read(workoutProvider).session;
     if (session == null) return;
 
-    // Kontrollera om detta är en ny session
-    if (_currentSessionId != session.id) {
-      _currentSessionId = session.id;
-      
-      // Rensa tidigare controllers och editedFields för ny session
-      _controllers.clear();
-      _editedFields.clear();
+    // Only reinitialize when session id changes
+    if (_currentSessionId == session.id && _controllers.isNotEmpty) {
+      // Still update edited fields cache
+      final providerEdited = ref.read(workoutProvider).editedFields;
+      _editedFields
+        ..clear()
+        ..addAll(providerEdited);
+      return;
+    }
+    _currentSessionId = session.id;
 
-      for (int exIndex = 0; exIndex < session.completedExercises.length; exIndex++) {
-        for (int setIndex = 0; setIndex < session.completedExercises[exIndex].sets.length; setIndex++) {
-          // Skapa unika nycklar för varje fält
-          final weightKey = 'w_${exIndex}_$setIndex';
-          final repsKey = 'r_${exIndex}_$setIndex';
-          final notesKey = 'n_${exIndex}_$setIndex';
+    // Synka editedFields med provider
+    final providerEdited = ref.read(workoutProvider).editedFields;
+    _editedFields
+      ..clear()
+      ..addAll(providerEdited);
 
-          _controllers[weightKey] = TextEditingController(text: ''); // Start tomt för placeholders
-          _controllers[repsKey] = TextEditingController(text: ''); // Start tomt för placeholders  
-          _controllers[notesKey] = TextEditingController(text: ''); // Start tomt för placeholders
-        }
+    for (int exIndex = 0; exIndex < session.completedExercises.length; exIndex++) {
+      final exercise = session.completedExercises[exIndex];
+      for (int setIndex = 0; setIndex < exercise.sets.length; setIndex++) {
+        final set = exercise.sets[setIndex];
+        
+        // Skapa unika nycklar för varje fält
+        final weightKey = 'w_${exIndex}_$setIndex';
+        final repsKey = 'r_${exIndex}_$setIndex';
+        final notesKey = 'n_${exIndex}_$setIndex';
+
+        // Skapa/uppdatera controllers baserat på sessionens RIKTIGA data
+        // Logik: Om sessionen har riktig data (även för icke-redigerade) → visa den
+        // Annars → tom controller så placeholder visas som hint
+        final hasRealWeight = set.weight != 0; // 0 betyder inget värde ännu
+        final hasRealReps = set.reps != 0;
+        final hasRealNotes = set.notes != null && set.notes!.isNotEmpty;
+
+        final weightText = hasRealWeight ? set.weight.toString() : '';
+        final repsText = hasRealReps ? set.reps.toString() : '';
+        final notesText = hasRealNotes ? set.notes! : '';
+
+        _controllers[weightKey]?.dispose();
+        _controllers[repsKey]?.dispose();
+        _controllers[notesKey]?.dispose();
+        _controllers[weightKey] = TextEditingController(text: weightText);
+        _controllers[repsKey] = TextEditingController(text: repsText);
+        _controllers[notesKey] = TextEditingController(text: notesText);
       }
     }
+    
+    // Tvinga en rebuild efter att controllers initialiserats
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -75,22 +115,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   // Vi behöver inte längre ta emot ett program, eftersom vi läser det från providern.
 
-  // En hjälpmetod för att visa bekräftelsedialogen
-  Future<bool> _showExitConfirmationDialog(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave workout?'),
-        content: const Text('Your progress will be saved. You can resume later from the home screen.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Leave')),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
-
   @override
   // ÄNDRING 2: build-metoden tar nu bara BuildContext eftersom ref är tillgängligt direkt
   Widget build(BuildContext context) {
@@ -98,6 +122,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     // .watch() gör att skärmen automatiskt byggs om när statet ändras.
     final activeWorkoutState = ref.watch(workoutProvider);
     final session = activeWorkoutState.session;
+
+    // Säkerställ att controllers är initierade när vi har en session
+    if (session != null && _controllers.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeControllers();
+      });
+    }
 
     // Återinitialisera controllers om session ändras (ny workout startar)
     if (session != null) {
@@ -122,15 +153,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       return "$minutes:$seconds";
     }
 
-    // ÄNDRING 4: Använd WillPopScope för att hantera "tillbaka"-knappen
+    // Hantera tillbaka-knappen utan dialog
     return WillPopScope(
       onWillPop: () async {
-        final shouldLeave = await _showExitConfirmationDialog(context);
-        if (shouldLeave) {
-          // Anropa notifiern för att pausa passet
-          ref.read(workoutProvider.notifier).pauseWorkout();
-        }
-        return shouldLeave; // Returnera true för att tillåta navigering
+        // Pausa passet automatiskt när användaren lämnar
+        ref.read(workoutProvider.notifier).pauseWorkout();
+        return true; // Tillåt navigering direkt
       },
       child: Scaffold(
         appBar: AppBar(
@@ -217,10 +245,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                           final repsKey = 'r_${exerciseIndex}_$setIndex';
                           final notesKey = 'n_${exerciseIndex}_$setIndex';
 
-                          // Bestäm textfärgen. Om fältet finns i _editedFields, använd vit. Annars, grå.
-                          final weightColor = _editedFields.contains(weightKey) ? Colors.white : Colors.grey.shade400;
-                          final repsColor = _editedFields.contains(repsKey) ? Colors.white : Colors.grey.shade400;
-                          final notesColor = _editedFields.contains(notesKey) ? Colors.white : Colors.grey.shade400;
+                          // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
+                          final providerState = ref.watch(workoutProvider);
+                          final edited = providerState.editedFields;
+                          final weightColor = edited.contains(weightKey) ? Colors.white : Colors.grey.shade400;
+                          final repsColor = edited.contains(repsKey) ? Colors.white : Colors.grey.shade400;
+                          final notesColor = edited.contains(notesKey) ? Colors.white : Colors.grey.shade400;
                           
                           return SwipeableSetRowNew(
                             set: set,
@@ -230,8 +260,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                             repsKey: repsKey,
                             notesKey: notesKey,
                             controllers: _controllers,
-                            editedFields: _editedFields,
+                            editedFields: ref.watch(workoutProvider).editedFields,
                             onFieldEdited: (fieldKey) {
+                              ref.read(workoutProvider.notifier).markFieldEdited(fieldKey);
                               setState(() {
                                 _editedFields.add(fieldKey);
                               });
@@ -328,7 +359,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 400), // Längre för Material 3 Expressive
       vsync: this,
     );
     _offsetAnimation = Tween<double>(
@@ -336,7 +367,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       end: 0.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.elasticOut,
+      curve: Curves.easeOutCubic, // Material 3 Expressive curve
     ));
   }
 
@@ -349,73 +380,71 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
   void _handlePanUpdate(DragUpdateDetails details) {
     setState(() {
       _swipeOffset += details.delta.dx;
-      _swipeOffset = _swipeOffset.clamp(-30.0, 30.0);
+      _swipeOffset = _swipeOffset.clamp(-60.0, 60.0); // Större range för mjukare känsla
     });
   }
 
   void _handlePanEnd(DragEndDetails details) {
-    // Check if it was a horizontal swipe with sufficient velocity
-    if (details.velocity.pixelsPerSecond.dx.abs() > 500 &&
-        details.velocity.pixelsPerSecond.dx.abs() > details.velocity.pixelsPerSecond.dy.abs()) {
-      
-      // Only fill if there are placeholder values to use
-      bool hasPlaceholders = (widget.set.weight > 0 || widget.set.reps > 0 || 
-                            (widget.set.notes != null && widget.set.notes!.isNotEmpty));
-      
+    // Material 3 Expressive: Lägre hastighetströskel och mjukare detection
+    final horizontalVelocity = details.velocity.pixelsPerSecond.dx.abs();
+    final verticalVelocity = details.velocity.pixelsPerSecond.dy.abs();
+    final isHorizontalSwipe = horizontalVelocity > verticalVelocity;
+    final hasEnoughVelocity = horizontalVelocity > 200; // Lägre tröskel
+    final hasEnoughDistance = _swipeOffset.abs() > 20; // Alternativ: tillräcklig distans
+    
+    if (isHorizontalSwipe && (hasEnoughVelocity || hasEnoughDistance)) {
+      // Läs placeholders från provider (förra passets värden)
+      final ph = ref.read(workoutProvider).placeholders;
+      final wKey = 'w_${widget.exerciseIndex}_${widget.setIndex}';
+      final rKey = 'r_${widget.exerciseIndex}_${widget.setIndex}';
+      final nKey = 'n_${widget.exerciseIndex}_${widget.setIndex}';
+
+      final hasPlaceholders = ((ph[wKey] is num && (ph[wKey] as num) > 0) ||
+          (ph[rKey] is num && (ph[rKey] as num) > 0) ||
+          (ph[nKey] is String && (ph[nKey] as String).isNotEmpty));
+
       if (hasPlaceholders) {
         // Provide haptic feedback
         HapticFeedback.lightImpact();
         
         // Fill in the controllers and mark as edited
-        if (widget.set.weight > 0) {
-          widget.controllers[widget.weightKey]?.text = widget.set.weight.toString();
+        double? w;
+        int? r;
+        String? n;
+        if (ph[wKey] is num && (ph[wKey] as num) > 0) {
+          w = (ph[wKey] as num).toDouble();
+          widget.controllers[widget.weightKey]?.text = w.toString();
           widget.onFieldEdited(widget.weightKey);
         }
-        if (widget.set.reps > 0) {
-          widget.controllers[widget.repsKey]?.text = widget.set.reps.toString();
+        if (ph[rKey] is num && (ph[rKey] as num) > 0) {
+          r = (ph[rKey] as num).toInt();
+          widget.controllers[widget.repsKey]?.text = r.toString();
           widget.onFieldEdited(widget.repsKey);
         }
-        if (widget.set.notes != null && widget.set.notes!.isNotEmpty) {
-          widget.controllers[widget.notesKey]?.text = widget.set.notes!;
+        if (ph[nKey] is String && (ph[nKey] as String).isNotEmpty) {
+          n = ph[nKey] as String;
+          widget.controllers[widget.notesKey]?.text = n;
           widget.onFieldEdited(widget.notesKey);
         }
-        
-        // Update session data
+
+        // Update session data med dessa värden
         ref.read(workoutProvider.notifier).updateSetData(
           widget.exerciseIndex,
           widget.setIndex,
-          weight: widget.set.weight > 0 ? widget.set.weight : null,
-          reps: widget.set.reps > 0 ? widget.set.reps : null,
-          notes: (widget.set.notes != null && widget.set.notes!.isNotEmpty) ? widget.set.notes : null,
+          weight: w,
+          reps: r,
+          notes: n,
         );
-        
-        // Show brief visual feedback
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text('Set ${widget.setIndex + 1} filled with previous values!'),
-                ],
-              ),
-              duration: const Duration(milliseconds: 1200),
-              backgroundColor: const Color(0xFFDC2626),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
       }
     }
     
-    // Reset swipe offset with animation
+    // Material 3 Expressive: Mjuk animation tillbaka med easing curve
     _offsetAnimation = Tween<double>(
       begin: _swipeOffset,
       end: 0.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.elasticOut,
+      curve: Curves.easeOutCubic, // Material 3 Expressive curve
     ));
     
     _animationController.forward(from: 0.0).then((_) {
@@ -429,10 +458,34 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
 
   @override
   Widget build(BuildContext context) {
+    // Debug: kolla vad controller faktiskt innehåller
     return AnimatedBuilder(
       animation: _offsetAnimation,
       builder: (context, child) {
         final offset = _animationController.isAnimating ? _offsetAnimation.value : _swipeOffset;
+        
+        // Material 3 Expressive: Mjuk färgförändring baserat på swipe progress
+        final swipeProgress = (offset.abs() / 60.0).clamp(0.0, 1.0);
+        final hasPlaceholders = (widget.set.weight > 0 || widget.set.reps > 0 || 
+                               (widget.set.notes != null && widget.set.notes!.isNotEmpty));
+        
+        // Färg som ändras baserat på swipe och om placeholders finns
+        Color containerColor = Colors.black;
+        Color borderColor = Colors.grey.shade800;
+        
+        if (hasPlaceholders && swipeProgress > 0.1) {
+          // Material 3 Expressive: Gradvis färgförändring
+          containerColor = Color.lerp(
+            Colors.black,
+            const Color(0xFFDC2626).withOpacity(0.1),
+            swipeProgress * 0.8,
+          )!;
+          borderColor = Color.lerp(
+            Colors.grey.shade800,
+            const Color(0xFFDC2626).withOpacity(0.6),
+            swipeProgress,
+          )!;
+        }
         
         return Transform.translate(
           offset: Offset(offset, 0),
@@ -443,12 +496,20 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: containerColor,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: Colors.grey.shade800,
-                  width: 1,
+                  color: borderColor,
+                  width: 1 + (swipeProgress * 1), // Tjockare border vid swipe
                 ),
+                // Material 3 Expressive: Mjuk shadow vid swipe
+                boxShadow: swipeProgress > 0.1 ? [
+                  BoxShadow(
+                    color: const Color(0xFFDC2626).withOpacity(swipeProgress * 0.3),
+                    blurRadius: 8 * swipeProgress,
+                    spreadRadius: 1 * swipeProgress,
+                  ),
+                ] : null,
               ),
               child: Row(
                 children: [
@@ -488,7 +549,12 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           controller: widget.controllers[widget.weightKey],
                           style: TextStyle(color: widget.weightColor),
                           decoration: InputDecoration(
-                            hintText: widget.set.weight > 0 ? widget.set.weight.toString() : null,
+                            hintText: (() {
+                              final ph = ref.watch(workoutProvider).placeholders;
+                              final v = ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
+                              if (v is num && v > 0) return v.toString();
+                              return null;
+                            })(),
                             hintStyle: const TextStyle(color: Colors.grey),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -507,7 +573,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           onChanged: (value) {
-                            widget.onFieldEdited(widget.weightKey);
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
+                            } else {
+                              widget.onFieldEdited(widget.weightKey);
+                            }
                             final weight = double.tryParse(value) ?? 0.0;
                             ref.read(workoutProvider.notifier).updateSetData(
                               widget.exerciseIndex, widget.setIndex, weight: weight, reps: widget.set.reps
@@ -535,7 +605,12 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           controller: widget.controllers[widget.repsKey],
                           style: TextStyle(color: widget.repsColor),
                           decoration: InputDecoration(
-                            hintText: widget.set.reps > 0 ? widget.set.reps.toString() : null,
+                            hintText: (() {
+                              final ph = ref.watch(workoutProvider).placeholders;
+                              final v = ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
+                              if (v is num && v > 0) return v.toString();
+                              return null;
+                            })(),
                             hintStyle: const TextStyle(color: Colors.grey),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -554,7 +629,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           onChanged: (value) {
-                            widget.onFieldEdited(widget.repsKey);
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
+                            } else {
+                              widget.onFieldEdited(widget.repsKey);
+                            }
                             final reps = int.tryParse(value) ?? 0;
                             ref.read(workoutProvider.notifier).updateSetData(
                               widget.exerciseIndex, widget.setIndex, weight: widget.set.weight, reps: reps
@@ -583,7 +662,12 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           controller: widget.controllers[widget.notesKey],
                           style: TextStyle(color: widget.notesColor),
                           decoration: InputDecoration(
-                            hintText: (widget.set.notes != null && widget.set.notes!.isNotEmpty) ? widget.set.notes : null,
+                            hintText: (() {
+                              final ph = ref.watch(workoutProvider).placeholders;
+                              final v = ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
+                              if (v is String && v.isNotEmpty) return v;
+                              return null;
+                            })(),
                             hintStyle: const TextStyle(color: Colors.grey),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -601,7 +685,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           ),
                           textAlign: TextAlign.left,
                           onChanged: (value) {
-                            widget.onFieldEdited(widget.notesKey);
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
+                            } else {
+                              widget.onFieldEdited(widget.notesKey);
+                            }
                             ref.read(workoutProvider.notifier).updateSetData(
                               widget.exerciseIndex,
                               widget.setIndex,

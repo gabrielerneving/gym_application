@@ -17,13 +17,18 @@ class ActiveWorkoutState {
   final bool isRunning;
   final int elapsedSeconds;
   final WorkoutSession? staleSession; // För att hantera gamla, bortglömda pass
+  final Set<String> editedFields; // Håller koll på vilka fält som är redigerade i pågående pass
+  final Map<String, dynamic> placeholders; // Basvärden från föregående avslutade pass (per fält)
 
   ActiveWorkoutState({
     this.session,
     this.isRunning = false,
     this.elapsedSeconds = 0,
     this.staleSession,
-  });
+    Set<String>? editedFields,
+    Map<String, dynamic>? placeholders,
+  })  : editedFields = editedFields ?? <String>{},
+        placeholders = placeholders ?? <String, dynamic>{};
 
   // En hjälpmetod för att enkelt skapa en ny, uppdaterad kopia av statet.
   ActiveWorkoutState copyWith({
@@ -32,12 +37,16 @@ class ActiveWorkoutState {
     int? elapsedSeconds,
     WorkoutSession? staleSession,
     bool clearStaleSession = false, // Specialflagga för att kunna nollställa
+    Set<String>? editedFields,
+    Map<String, dynamic>? placeholders,
   }) {
     return ActiveWorkoutState(
       session: session ?? this.session,
       isRunning: isRunning ?? this.isRunning,
       elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
       staleSession: clearStaleSession ? null : staleSession ?? this.staleSession,
+      editedFields: editedFields ?? this.editedFields,
+      placeholders: placeholders ?? this.placeholders,
     );
   }
 }
@@ -51,7 +60,8 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
   final DatabaseService dbService;
   Timer? _timer;
 
-  WorkoutStateNotifier(this.dbService) : super(ActiveWorkoutState());
+  WorkoutStateNotifier(this.dbService)
+    : super(ActiveWorkoutState(editedFields: <String>{}, placeholders: <String, dynamic>{}));
 
   // ----- PUBLIKA METODER (anropas från UI) -----
 
@@ -93,8 +103,29 @@ Future<void> startWorkout(WorkoutProgram program) async {
     completedExercises: initialExercises,
   );
 
-  // STEG 3: Uppdatera statet och starta timern (som förut)
-  state = ActiveWorkoutState(session: newSession, isRunning: true, elapsedSeconds: 0);
+  // STEG 3: Bygg placeholders från initialExercises (förra passets värden)
+  final Map<String, dynamic> placeholders = <String, dynamic>{};
+  for (int exIndex = 0; exIndex < initialExercises.length; exIndex++) {
+    final ex = initialExercises[exIndex];
+    for (int setIndex = 0; setIndex < ex.sets.length; setIndex++) {
+      final set = ex.sets[setIndex];
+      placeholders['w_${exIndex}_$setIndex'] = set.weight;
+      placeholders['r_${exIndex}_$setIndex'] = set.reps;
+      if (set.notes != null && set.notes!.isNotEmpty) {
+        placeholders['n_${exIndex}_$setIndex'] = set.notes;
+      }
+    }
+  }
+
+  state = ActiveWorkoutState(
+    session: newSession,
+    isRunning: true,
+    elapsedSeconds: 0,
+    editedFields: <String>{},
+    placeholders: placeholders,
+  );
+  // Persistera även placeholders till Firestore så de överlever app-restart
+  unawaited(dbService.saveActivePlaceholders(placeholders));
   _startTimer();
 }
 
@@ -120,6 +151,33 @@ Future<void> startWorkout(WorkoutProgram program) async {
   _saveStateToFirestore();
 }
 
+  // Markera ett fält som redigerat (anropas från UI när användaren skriver eller swipar)
+  void markFieldEdited(String key) {
+    final updated = Set<String>.from(state.editedFields)..add(key);
+    state = state.copyWith(editedFields: updated);
+    // Persist to backend
+    unawaited(dbService.saveActiveEditedKeys(updated));
+  }
+
+  void markFieldsEdited(Iterable<String> keys) {
+    final updated = Set<String>.from(state.editedFields)..addAll(keys);
+    state = state.copyWith(editedFields: updated);
+    unawaited(dbService.saveActiveEditedKeys(updated));
+  }
+
+  void unmarkFieldEdited(String key) {
+    if (!state.editedFields.contains(key)) return;
+    final updated = Set<String>.from(state.editedFields)..remove(key);
+    state = state.copyWith(editedFields: updated);
+    unawaited(dbService.saveActiveEditedKeys(updated));
+  }
+
+  void clearEditedFields() {
+    if (state.editedFields.isEmpty) return;
+    state = state.copyWith(editedFields: <String>{});
+    unawaited(dbService.saveActiveEditedKeys(<String>{}));
+  }
+
   Future<void> finishWorkout() async {
     if (!state.isRunning || state.session == null) return;
     _timer?.cancel();
@@ -144,13 +202,28 @@ Future<void> startWorkout(WorkoutProgram program) async {
 
   Future<void> loadInitialState() async {
     final session = await dbService.loadActiveWorkoutState();
+    final edited = await dbService.loadActiveEditedKeys();
+    var placeholders = await dbService.loadActivePlaceholders();
+    
     if (session != null) {
+      // Om placeholders är tomma (kan hända vid app-restart), 
+      // hämta placeholders från föregående AVSLUTADE pass av samma typ
+      if (placeholders.isEmpty) {
+        final lastFinishedSession = await dbService.findLastSessionOfProgram(session.programTitle);
+        if (lastFinishedSession != null) {
+          placeholders = _buildPlaceholdersFromSession(lastFinishedSession);
+          // Spara dem för framtida användning
+          unawaited(dbService.saveActivePlaceholders(placeholders));
+        }
+      }
+      
       final now = DateTime.now();
       final timeSinceLastUpdate = now.difference(session.date);
       
       if (timeSinceLastUpdate.inHours >= 8) {
-        state = state.copyWith(staleSession: session);
+        state = state.copyWith(staleSession: session, editedFields: edited, placeholders: placeholders);
       } else {
+        state = state.copyWith(editedFields: edited, placeholders: placeholders);
         _resumeWorkout(session, timeSinceLastUpdate.inSeconds);
       }
     }
@@ -171,6 +244,23 @@ Future<void> startWorkout(WorkoutProgram program) async {
 
   // ----- PRIVATA HJÄLPMETODER -----
 
+  // Hjälpmetod för att bygga placeholders från en session (för återupptag av pågående workout)
+  Map<String, dynamic> _buildPlaceholdersFromSession(WorkoutSession session) {
+    final Map<String, dynamic> placeholders = <String, dynamic>{};
+    for (int exIndex = 0; exIndex < session.completedExercises.length; exIndex++) {
+      final ex = session.completedExercises[exIndex];
+      for (int setIndex = 0; setIndex < ex.sets.length; setIndex++) {
+        final set = ex.sets[setIndex];
+        if (set.weight > 0) placeholders['w_${exIndex}_$setIndex'] = set.weight;
+        if (set.reps > 0) placeholders['r_${exIndex}_$setIndex'] = set.reps;
+        if (set.notes != null && set.notes!.isNotEmpty) {
+          placeholders['n_${exIndex}_$setIndex'] = set.notes;
+        }
+      }
+    }
+    return placeholders;
+  }
+
   void _resumeWorkout(WorkoutSession session, int secondsToAdd) {
       final savedDurationInSeconds = session.durationInMinutes * 60;
       state = ActiveWorkoutState(
@@ -178,6 +268,7 @@ Future<void> startWorkout(WorkoutProgram program) async {
         isRunning: true,
         elapsedSeconds: savedDurationInSeconds + secondsToAdd,
         staleSession: null,
+        editedFields: state.editedFields.isNotEmpty ? state.editedFields : <String>{},
       );
       _startTimer();
   }
@@ -203,6 +294,8 @@ Future<void> startWorkout(WorkoutProgram program) async {
       date: DateTime.now(),
     );
     dbService.saveActiveWorkoutState(sessionToSave);
+    // Persist edited fields as well
+    dbService.saveActiveEditedKeys(state.editedFields);
   }
 }
 
