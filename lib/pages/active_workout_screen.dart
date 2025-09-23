@@ -76,16 +76,16 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         final repsKey = 'r_${exIndex}_$setIndex';
         final notesKey = 'n_${exIndex}_$setIndex';
 
-        // Skapa/uppdatera controllers baserat på sessionens RIKTIGA data
-        // Logik: Om sessionen har riktig data (även för icke-redigerade) → visa den
-        // Annars → tom controller så placeholder visas som hint
-        final hasRealWeight = set.weight != 0; // 0 betyder inget värde ännu
-        final hasRealReps = set.reps != 0;
-        final hasRealNotes = set.notes != null && set.notes!.isNotEmpty;
+        // Skapa/uppdatera controllers baserat på om användaren redigerat fältet
+        // Logik: Bara redigerade fält ska ha text i controller
+        // Icke-redigerade fält ska vara tomma så placeholder (hint) visas
+        final isWeightEdited = providerEdited.contains(weightKey);
+        final isRepsEdited = providerEdited.contains(repsKey);
+        final isNotesEdited = providerEdited.contains(notesKey);
 
-        final weightText = hasRealWeight ? set.weight.toString() : '';
-        final repsText = hasRealReps ? set.reps.toString() : '';
-        final notesText = hasRealNotes ? set.notes! : '';
+        final weightText = isWeightEdited ? set.weight.toString() : '';
+        final repsText = isRepsEdited ? set.reps.toString() : '';
+        final notesText = isNotesEdited ? (set.notes ?? '') : '';
 
         _controllers[weightKey]?.dispose();
         _controllers[repsKey]?.dispose();
