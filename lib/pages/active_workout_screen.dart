@@ -180,9 +180,12 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         ),
                                       ),
                                       TextFormField(
-                                        initialValue: set.weight > 0 ? set.weight.toString() : '',
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
+                                          hintText: set.weight > 0 ? set.weight.toString() : '',
+                                          hintStyle: TextStyle(
+                                            color: Colors.grey.shade400,
+                                          ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(8),
                                             borderSide: BorderSide(color: Colors.grey.shade600),
@@ -224,9 +227,12 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         ),
                                       ),
                                       TextFormField(
-                                        initialValue: set.reps > 0 ? set.reps.toString() : '',
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
+                                          hintText: set.reps > 0 ? set.reps.toString() : '',
+                                          hintStyle: TextStyle(
+                                            color: Colors.grey.shade400,
+                                          ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(8),
                                             borderSide: BorderSide(color: Colors.grey.shade600),
@@ -269,9 +275,12 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         ),
                                       ),
                                       TextFormField(
-                                        initialValue: set.notes, 
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
+                                          hintText: (set.notes != null && set.notes!.isNotEmpty) ? set.notes : '',
+                                          hintStyle: TextStyle(
+                                            color: Colors.grey.shade400,
+                                          ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(8),
                                             borderSide: BorderSide(color: Colors.grey.shade600),
@@ -287,6 +296,14 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                         ),
                                         textAlign: TextAlign.left,
+                                        onTap: () {
+                                          // Clear när användaren börjar skriva
+                                          if (set.notes != null && set.notes!.isNotEmpty) {
+                                            Future.delayed(const Duration(milliseconds: 100), () {
+                                              // Trigger rebuild för att uppdatera färgen
+                                            });
+                                          }
+                                        },
                                          onChanged: (value) {
                                         // Anropa vår uppdaterade metod.
                                         // 'notes: value' är den enda nya datan.
