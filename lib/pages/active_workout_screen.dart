@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/workout_provider.dart'; // Importera vår nya provider
 
@@ -156,159 +157,220 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     // Hantera tillbaka-knappen utan dialog
     return WillPopScope(
       onWillPop: () async {
-        // Pausa passet automatiskt när användaren lämnar
-        ref.read(workoutProvider.notifier).pauseWorkout();
+        // Timer fortsätter att löpa! Ingen pausning.
         return true; // Tillåt navigering direkt
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(session.programTitle),
-          centerTitle: true,
-          backgroundColor: Colors.black,
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(4.0),
-            // ÄNDRING 5: Läs tiden från providern
-            child: Text(
-              "Time: ${formatDuration(activeWorkoutState.elapsedSeconds)}",
-              style: const TextStyle(color: Colors.white, fontSize: 18),
-            ),
-          ),
-        ),
+      child: GestureDetector(
+        onTap: () {
+          // Stäng tangentbordet när användaren klickar utanför textfält
+          FocusScope.of(context).unfocus();
+        },
+        child: Scaffold(
         backgroundColor: Colors.black,
-        body: Column(
-          children: [
-            // Lista med alla övningar (tog bort timer header)
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: session.completedExercises.length,
-                itemBuilder: (context, exerciseIndex) {
-                  final exercise = session.completedExercises[exerciseIndex];
-                  
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 0, 0, 0),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: const Color(0xFFDC2626).withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Övningsnamn med bokstav
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDC2626),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  String.fromCharCode(65 + exerciseIndex), // A, B, C, etc.
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                exercise.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Sets
-                        ...exercise.sets.asMap().entries.map((entry) {
-                          final setIndex = entry.key;
-                          final set = entry.value;
-                          
-                          // Hämta de unika nycklarna för detta set
-                          final weightKey = 'w_${exerciseIndex}_$setIndex';
-                          final repsKey = 'r_${exerciseIndex}_$setIndex';
-                          final notesKey = 'n_${exerciseIndex}_$setIndex';
-
-                          // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
-                          final providerState = ref.watch(workoutProvider);
-                          final edited = providerState.editedFields;
-                          final weightColor = edited.contains(weightKey) ? Colors.white : Colors.grey.shade400;
-                          final repsColor = edited.contains(repsKey) ? Colors.white : Colors.grey.shade400;
-                          final notesColor = edited.contains(notesKey) ? Colors.white : Colors.grey.shade400;
-                          
-                          return SwipeableSetRowNew(
-                            set: set,
-                            setIndex: setIndex,
-                            exerciseIndex: exerciseIndex,
-                            weightKey: weightKey,
-                            repsKey: repsKey,
-                            notesKey: notesKey,
-                            controllers: _controllers,
-                            editedFields: ref.watch(workoutProvider).editedFields,
-                            onFieldEdited: (fieldKey) {
-                              ref.read(workoutProvider.notifier).markFieldEdited(fieldKey);
-                              setState(() {
-                                _editedFields.add(fieldKey);
-                              });
-                            },
-                            weightColor: weightColor,
-                            repsColor: repsColor,
-                            notesColor: notesColor,
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                  );
+        body: CustomScrollView(
+          slivers: [
+            // Clean header med timer
+            SliverAppBar(
+              expandedHeight: 120,
+              floating: false,
+              pinned: true,
+              backgroundColor: Colors.black,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                onPressed: () {
+                  // Timer fortsätter att löpa! Ingen pausning.
+                  Navigator.of(context).pop();
                 },
               ),
-            ),
-            
-            // Finish workout button
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    await ref.read(workoutProvider.notifier).finishWorkout();
-                    if (context.mounted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    minimumSize: const Size.fromHeight(60),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black, Colors.black87],
                     ),
                   ),
-                  child: const Text(
-                    'Finish Workout',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        Text(
+                          session.programTitle,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withOpacity(0.2)),
+                          ),
+                          child: Text(
+                            formatDuration(activeWorkoutState.elapsedSeconds),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
+            
+            // Övningar lista
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, exerciseIndex) {
+                    final exercise = session.completedExercises[exerciseIndex];
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Övningsnamn - clean header
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC2626), // Röd färg
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      String.fromCharCode(65 + exerciseIndex),
+                                      style: const TextStyle(
+                                        color: Color.fromARGB(255, 255, 255, 255),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    exercise.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Sets lista med clean design
+                          Column(
+                            children: exercise.sets.asMap().entries.map((entry) {
+                              final setIndex = entry.key;
+                              final set = entry.value;
+                              
+                              // Hämta de unika nycklarna för detta set
+                              final weightKey = 'w_${exerciseIndex}_$setIndex';
+                              final repsKey = 'r_${exerciseIndex}_$setIndex';
+                              final notesKey = 'n_${exerciseIndex}_$setIndex';
+
+                              // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
+                              final providerState = ref.watch(workoutProvider);
+                              final edited = providerState.editedFields;
+                              final weightColor = edited.contains(weightKey) ? Colors.white : Colors.grey.shade400;
+                              final repsColor = edited.contains(repsKey) ? Colors.white : Colors.grey.shade400;
+                              final notesColor = edited.contains(notesKey) ? Colors.white : Colors.grey.shade400;
+                              
+                              return SwipeableSetRowNew(
+                                set: set,
+                                setIndex: setIndex,
+                                exerciseIndex: exerciseIndex,
+                                weightKey: weightKey,
+                                repsKey: repsKey,
+                                notesKey: notesKey,
+                                controllers: _controllers,
+                                editedFields: ref.watch(workoutProvider).editedFields,
+                                onFieldEdited: (fieldKey) {
+                                  ref.read(workoutProvider.notifier).markFieldEdited(fieldKey);
+                                  setState(() {
+                                    _editedFields.add(fieldKey);
+                                  });
+                                },
+                                weightColor: weightColor,
+                                repsColor: repsColor,
+                                notesColor: notesColor,
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  childCount: session.completedExercises.length,
+                ),
+              ),
+            ),
+            
+            // Clean finish workout button - floating bottom
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.all(20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          await ref.read(workoutProvider.notifier).finishWorkout();
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Finish Workout',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
+        ),
         ),
       ),
     );
@@ -458,32 +520,23 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
 
   @override
   Widget build(BuildContext context) {
-    // Debug: kolla vad controller faktiskt innehåller
     return AnimatedBuilder(
       animation: _offsetAnimation,
       builder: (context, child) {
         final offset = _animationController.isAnimating ? _offsetAnimation.value : _swipeOffset;
         
-        // Material 3 Expressive: Mjuk färgförändring baserat på swipe progress
+        // Clean swipe animation
         final swipeProgress = (offset.abs() / 60.0).clamp(0.0, 1.0);
         final hasPlaceholders = (widget.set.weight > 0 || widget.set.reps > 0 || 
                                (widget.set.notes != null && widget.set.notes!.isNotEmpty));
         
-        // Färg som ändras baserat på swipe och om placeholders finns
-        Color containerColor = Colors.black;
-        Color borderColor = Colors.grey.shade800;
-        
+        // Minimal design färger
+        Color containerColor = Colors.grey.shade900;
         if (hasPlaceholders && swipeProgress > 0.1) {
-          // Material 3 Expressive: Gradvis färgförändring
           containerColor = Color.lerp(
-            Colors.black,
-            const Color(0xFFDC2626).withOpacity(0.1),
-            swipeProgress * 0.8,
-          )!;
-          borderColor = Color.lerp(
-            Colors.grey.shade800,
-            const Color(0xFFDC2626).withOpacity(0.6),
-            swipeProgress,
+            Colors.grey.shade900,
+            Colors.white.withOpacity(0.05),
+            swipeProgress * 0.5,
           )!;
         }
         
@@ -493,154 +546,91 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
             onPanUpdate: _handlePanUpdate,
             onPanEnd: _handlePanEnd,
             child: Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: containerColor,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: borderColor,
-                  width: 1 + (swipeProgress * 1), // Tjockare border vid swipe
+                  color: Colors.grey.shade800.withOpacity(0.6),
+                  width: 0.5,
                 ),
-                // Material 3 Expressive: Mjuk shadow vid swipe
-                boxShadow: swipeProgress > 0.1 ? [
-                  BoxShadow(
-                    color: const Color(0xFFDC2626).withOpacity(swipeProgress * 0.3),
-                    blurRadius: 8 * swipeProgress,
-                    spreadRadius: 1 * swipeProgress,
-                  ),
-                ] : null,
               ),
               child: Row(
                 children: [
-                  // Set nummer
+                  // Set nummer - minimal design
                   Container(
-                    width: 30,
-                    height: 30,
+                    width: 24,
+                    height: 24,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade700,
-                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Center(
                       child: Text(
                         '${widget.setIndex + 1}',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 16),
                   
-                  // Weight input
+                  // Weight input - clean design
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Weight',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                        TextFormField(
-                          controller: widget.controllers[widget.weightKey],
-                          style: TextStyle(color: widget.weightColor),
-                          decoration: InputDecoration(
-                            hintText: (() {
-                              final ph = ref.watch(workoutProvider).placeholders;
-                              final v = ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
-                              if (v is num && v > 0) return v.toString();
-                              return null;
-                            })(),
-                            hintStyle: const TextStyle(color: Colors.grey),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: Color(0xFFDC2626)),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          onChanged: (value) {
-                            if (value.isEmpty) {
-                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
-                            } else {
-                              widget.onFieldEdited(widget.weightKey);
-                            }
-                            final weight = double.tryParse(value) ?? 0.0;
-                            ref.read(workoutProvider.notifier).updateSetData(
-                              widget.exerciseIndex, widget.setIndex, weight: weight, reps: widget.set.reps
-                            );
-                          },
-                        ),
-                      ],
+                    child: _buildInputField(
+                      label: 'kg',
+                      controller: widget.controllers[widget.weightKey],
+                      textColor: widget.weightColor,
+                      hintText: (() {
+                        final ph = ref.watch(workoutProvider).placeholders;
+                        final v = ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
+                        if (v is num && v > 0) return v.toString();
+                        return '';
+                      })(),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        if (value.isEmpty) {
+                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
+                        } else {
+                          widget.onFieldEdited(widget.weightKey);
+                        }
+                        final weight = double.tryParse(value) ?? 0.0;
+                        ref.read(workoutProvider.notifier).updateSetData(
+                          widget.exerciseIndex, widget.setIndex, weight: weight, reps: widget.set.reps
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
                   
                   // Reps input
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Reps',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                        TextFormField(
-                          controller: widget.controllers[widget.repsKey],
-                          style: TextStyle(color: widget.repsColor),
-                          decoration: InputDecoration(
-                            hintText: (() {
-                              final ph = ref.watch(workoutProvider).placeholders;
-                              final v = ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
-                              if (v is num && v > 0) return v.toString();
-                              return null;
-                            })(),
-                            hintStyle: const TextStyle(color: Colors.grey),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: Color(0xFFDC2626)),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          onChanged: (value) {
-                            if (value.isEmpty) {
-                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
-                            } else {
-                              widget.onFieldEdited(widget.repsKey);
-                            }
-                            final reps = int.tryParse(value) ?? 0;
-                            ref.read(workoutProvider.notifier).updateSetData(
-                              widget.exerciseIndex, widget.setIndex, weight: widget.set.weight, reps: reps
-                            );
-                          },
-                        ),
-                      ],
+                    child: _buildInputField(
+                      label: 'reps',
+                      controller: widget.controllers[widget.repsKey],
+                      textColor: widget.repsColor,
+                      hintText: (() {
+                        final ph = ref.watch(workoutProvider).placeholders;
+                        final v = ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
+                        if (v is num && v > 0) return v.toString();
+                        return '';
+                      })(),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        if (value.isEmpty) {
+                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
+                        } else {
+                          widget.onFieldEdited(widget.repsKey);
+                        }
+                        final reps = int.tryParse(value) ?? 0;
+                        ref.read(workoutProvider.notifier).updateSetData(
+                          widget.exerciseIndex, widget.setIndex, weight: widget.set.weight, reps: reps
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -648,56 +638,29 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                   // Notes input
                   Expanded(
                     flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Notes',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                        TextFormField(
-                          controller: widget.controllers[widget.notesKey],
-                          style: TextStyle(color: widget.notesColor),
-                          decoration: InputDecoration(
-                            hintText: (() {
-                              final ph = ref.watch(workoutProvider).placeholders;
-                              final v = ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
-                              if (v is String && v.isNotEmpty) return v;
-                              return null;
-                            })(),
-                            hintStyle: const TextStyle(color: Colors.grey),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey.shade600),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: Color(0xFFDC2626)),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          textAlign: TextAlign.left,
-                          onChanged: (value) {
-                            if (value.isEmpty) {
-                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
-                            } else {
-                              widget.onFieldEdited(widget.notesKey);
-                            }
-                            ref.read(workoutProvider.notifier).updateSetData(
-                              widget.exerciseIndex,
-                              widget.setIndex,
-                              notes: value,
-                            );
-                          },
-                        ),
-                      ],
+                    child: _buildInputField(
+                      label: 'notes',
+                      controller: widget.controllers[widget.notesKey],
+                      textColor: widget.notesColor,
+                      hintText: (() {
+                        final ph = ref.watch(workoutProvider).placeholders;
+                        final v = ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
+                        if (v is String && v.isNotEmpty) return v;
+                        return '';
+                      })(),
+                      keyboardType: TextInputType.text,
+                      onChanged: (value) {
+                        if (value.isEmpty) {
+                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
+                        } else {
+                          widget.onFieldEdited(widget.notesKey);
+                        }
+                        ref.read(workoutProvider.notifier).updateSetData(
+                          widget.exerciseIndex,
+                          widget.setIndex,
+                          notes: value,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -706,6 +669,62 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildInputField({
+    required String label,
+    required TextEditingController? controller,
+    required Color textColor,
+    required String hintText,
+    required TextInputType keyboardType,
+    required Function(String) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hintText.isEmpty ? null : hintText,
+            hintStyle: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+            ),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            filled: true,
+            fillColor: Colors.black.withOpacity(0.3),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.white, width: 1),
+            ),
+          ),
+          keyboardType: keyboardType,
+          textAlign: label == 'notes' ? TextAlign.left : TextAlign.center,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 }
