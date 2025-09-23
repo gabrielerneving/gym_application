@@ -202,7 +202,7 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         onChanged: (value) {
                                           final weight = double.tryParse(value) ?? 0.0;
                                           ref.read(workoutProvider.notifier).updateSetData(
-                                            exerciseIndex, setIndex, weight, set.reps
+                                            exerciseIndex, setIndex, weight: weight, reps: set.reps
                                           );
                                         },
                                       ),
@@ -246,7 +246,7 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         onChanged: (value) {
                                           final reps = int.tryParse(value) ?? 0;
                                           ref.read(workoutProvider.notifier).updateSetData(
-                                            exerciseIndex, setIndex, set.weight, reps
+                                            exerciseIndex, setIndex, weight: set.weight, reps: reps
                                           );
                                         },
                                       ),
@@ -269,6 +269,7 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                         ),
                                       ),
                                       TextFormField(
+                                        initialValue: set.notes, 
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
                                           border: OutlineInputBorder(
@@ -286,6 +287,15 @@ class ActiveWorkoutScreen extends ConsumerWidget {
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                         ),
                                         textAlign: TextAlign.left,
+                                         onChanged: (value) {
+                                        // Anropa vår uppdaterade metod.
+                                        // 'notes: value' är den enda nya datan.
+                                        ref.read(workoutProvider.notifier).updateSetData(
+                                          exerciseIndex,
+                                          setIndex,
+                                          notes: value, // Skicka med den nya anteckningen
+                                        );
+                                      },
                                       ),
                                     ],
                                   ),

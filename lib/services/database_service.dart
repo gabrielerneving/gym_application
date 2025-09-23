@@ -164,5 +164,35 @@ Future<WorkoutSession?> loadActiveWorkoutState() async {
       // eftersom det inte är kritiskt för användaren om den här filen blir kvar.
     }
   }
+
+  // Metod för att hitta den SENASTE sessionen som matchar en program-titel
+Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
+  try {
+    // Skapa en referens till historik-collectionen
+    final collectionRef = _db.collection('users').doc(uid).collection('workout_sessions');
+    
+    // Skapa en query:
+    // 1. Filtrera för att bara hitta pass med rätt titel.
+    // 2. Sortera efter datum i fallande ordning (nyast först).
+    // 3. Begränsa resultatet till bara 1 dokument.
+    final querySnapshot = await collectionRef
+        .where('programTitle', isEqualTo: programTitle)
+        .orderBy('date', descending: true)
+        .limit(1)
+        .get();
+
+    // Om vi inte hittade något, returnera null
+    if (querySnapshot.docs.isEmpty) {
+      return null;
+    }
+
+    // Annars, konvertera det första (och enda) dokumentet till ett objekt och returnera det
+    return WorkoutSession.fromFirestore(querySnapshot.docs.first.data());
+
+  } catch (e) {
+    print("Error finding last session: $e");
+    return null;
+  }
+}
 }
 

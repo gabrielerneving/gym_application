@@ -5,18 +5,29 @@ import 'exercise_model.dart'; // Vi återanvänder Exercise-modellen!
 class CompletedSet {
   final double weight;
   final int reps;
+  final String? notes; // NYTT: Lägg till ett valfritt fält för anteckningar
 
-  CompletedSet({required this.weight, required this.reps});
+  CompletedSet({required this.weight, required this.reps, this.notes});
+
+  // copyWith metod för att skapa uppdaterade kopior
+  CompletedSet copyWith({double? weight, int? reps, String? notes}) {
+    return CompletedSet(
+      weight: weight ?? this.weight,
+      reps: reps ?? this.reps,
+      notes: notes ?? this.notes,
+    );
+  }
 
   // Metod för att konvertera till en Map för Firestore
   Map<String, dynamic> toMap() {
-    return {'weight': weight, 'reps': reps};
+    return {'weight': weight, 'reps': reps, 'notes': notes};
   }
 
   factory CompletedSet.fromMap(Map<String, dynamic> data) {
   return CompletedSet(
     weight: (data['weight'] as num).toDouble(),
     reps: data['reps'],
+    notes: data['notes'], // NYTT: Hämta anteckningar om de finns
   );
 }
 }
@@ -30,6 +41,10 @@ class CompletedExercise {
 
   Map<String, dynamic> toMap() {
     return {'name': name, 'sets': sets.map((s) => s.toMap()).toList()};
+  }
+
+   CompletedExercise copyWith({String? name, List<CompletedSet>? sets}) {
+    return CompletedExercise(name: name ?? this.name, sets: sets ?? this.sets);
   }
 
   factory CompletedExercise.fromMap(Map<String, dynamic> data) {

@@ -73,7 +73,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
                   leading: const Icon(Icons.edit, color: Colors.white),
-                  title: const Text('Ändra', style: TextStyle(color: Colors.white)),
+                  title: const Text('Edit', style: TextStyle(color: Colors.white)),
                   onTap: () {
                     Navigator.of(context).pop(); // Stäng menyn först
                     _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
@@ -84,7 +84,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
                   leading: const Icon(Icons.delete, color: Colors.white),
-                  title: const Text('Ta bort', style: TextStyle(color: Colors.white)),
+                  title: const Text('Remove', style: TextStyle(color: Colors.white)),
                   onTap: () {
                     Navigator.of(context).pop(); // Stäng menyn
                     setState(() {
@@ -97,7 +97,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
                 leading: const Icon(Icons.reorder, color: Colors.white),
-                title: const Text('Ändra ordning', style: TextStyle(color: Colors.white)),
+                title: const Text('Change order', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.of(context).pop(); // Stäng menyn
                   // Växla till omordningsläge
@@ -161,8 +161,6 @@ Future<void> _navigateAndAddExercise() async {
     context,
     MaterialPageRoute(builder: (context) => const ChooseCategoryScreen()),
   );
-
-    print('👉 RESULT RECEIVED: $result');
 
 
   // Kontrollera om vi faktiskt fick tillbaka ett resultat (dvs. inte null)
@@ -247,11 +245,8 @@ Future<void> _navigateAndAddExercise() async {
         } 
       }
 
-    } catch (e, s) { // Fånga även "stack trace"
-    // DENNA DEL ÄR NY OCH VIKTIG
-    print('🚨 AN ERROR OCCURRED AFTER SAVING!');
-    print('Error object: $e');
-    print('Stack trace: $s');
+    } catch (e) { // Fånga även "stack trace"
+
     
     if(mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -285,7 +280,7 @@ Widget build(BuildContext context) {
               children: [
                 Text(
                   // NYTT: Byt text baserat på läge
-                  widget.workoutToEdit == null ? 'Create' : 'Edit Workout',
+                  widget.workoutToEdit == null ? 'Create Workout' : 'Edit Workout',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 36,

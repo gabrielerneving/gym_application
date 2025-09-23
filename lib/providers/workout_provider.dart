@@ -55,41 +55,70 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
 
   // ----- PUBLIKA METODER (anropas från UI) -----
 
-  void startWorkout(WorkoutProgram program) {
-    if (state.isRunning) return;
+Future<void> startWorkout(WorkoutProgram program) async {
+  if (state.isRunning) return;
 
-    final initialExercises = program.exercises.map((exercise) {
-      return CompletedExercise(
-        name: exercise.name,
-        sets: List.generate(exercise.sets, (_) => CompletedSet(weight: 0, reps: 0)),
-      );
-    }).toList();
-
-    final newSession = WorkoutSession(
-      id: program.id, // Återanvänd program-id för enkelhetens skull
-      programTitle: program.title,
-      date: DateTime.now(),
-      durationInMinutes: 0,
-      completedExercises: initialExercises,
+  // STEG 1: Hitta det senaste passet av denna typ
+  final lastSession = await dbService.findLastSessionOfProgram(program.title);
+  
+  // STEG 2: Skapa det nya passet och fyll i gammal data där det är möjligt
+  final initialExercises = program.exercises.map((currentExercise) {
+    
+    // Försök hitta en matchande övning i det gamla passet
+    final lastExerciseData = lastSession?.completedExercises.firstWhere(
+      (completedEx) => completedEx.name == currentExercise.name,
+      orElse: () => CompletedExercise(name: "", sets: []), // Returnera en tom om ingen match hittas
     );
 
-    state = ActiveWorkoutState(session: newSession, isRunning: true, elapsedSeconds: 0);
-    _startTimer();
-  }
+    // Skapa de nya seten
+    return CompletedExercise(
+      name: currentExercise.name,
+      sets: List.generate(currentExercise.sets, (setIndex) {
+        // Om det finns gammal data för detta set, använd den. Annars, skapa ett tomt set.
+        if (lastExerciseData != null && setIndex < lastExerciseData.sets.length) {
+          final lastSet = lastExerciseData.sets[setIndex];
+          return CompletedSet(weight: lastSet.weight, reps: lastSet.reps, notes: lastSet.notes);
+        } else {
+          return CompletedSet(weight: 0, reps: 0, notes: null);
+        }
+      }),
+    );
+  }).toList();
 
-  void updateSetData(int exerciseIndex, int setIndex, double weight, int reps) {
-    if (!state.isRunning || state.session == null) return;
-    
-    final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
-    final exerciseToUpdate = updatedExercises[exerciseIndex];
-    final updatedSets = List<CompletedSet>.from(exerciseToUpdate.sets);
-    
-    updatedSets[setIndex] = CompletedSet(weight: weight, reps: reps);
-    updatedExercises[exerciseIndex] = CompletedExercise(name: exerciseToUpdate.name, sets: updatedSets);
-    
-    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
-    _saveStateToFirestore();
-  }
+  final newSession = WorkoutSession(
+    id: program.id,
+    programTitle: program.title,
+    date: DateTime.now(),
+    durationInMinutes: 0,
+    completedExercises: initialExercises,
+  );
+
+  // STEG 3: Uppdatera statet och starta timern (som förut)
+  state = ActiveWorkoutState(session: newSession, isRunning: true, elapsedSeconds: 0);
+  _startTimer();
+}
+
+  void updateSetData(int exerciseIndex, int setIndex, {double? weight, int? reps, String? notes}) {
+  if (!state.isRunning || state.session == null) return;
+  
+  // Använd copyWith för en mycket renare och säkrare uppdatering
+  final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
+  final exerciseToUpdate = updatedExercises[exerciseIndex];
+  final updatedSets = List<CompletedSet>.from(exerciseToUpdate.sets);
+  
+  // Hämta det nuvarande setet och skapa en uppdaterad version
+  final currentSet = updatedSets[setIndex];
+  updatedSets[setIndex] = currentSet.copyWith(
+    weight: weight,
+    reps: reps,
+    notes: notes,
+  );
+  
+  updatedExercises[exerciseIndex] = exerciseToUpdate.copyWith(sets: updatedSets);
+  
+  state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+  _saveStateToFirestore();
+}
 
   Future<void> finishWorkout() async {
     if (!state.isRunning || state.session == null) return;

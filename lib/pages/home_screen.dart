@@ -159,17 +159,10 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           _showWorkoutOptions(context, program, dbService);
                         },
                         onStartWorkout: () {
-                          // 1. STARTA PASSET I PROVIDERN
                           ref.read(workoutProvider.notifier).startWorkout(program);
-
-                          // 2. NAVIGERA TILL SPELAREN
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              // Notera att vi inte längre skickar med programmet,
-                              // eftersom spelaren kommer att läsa det från providern.
-                              builder: (context) => const ActiveWorkoutScreen(),
-                            ),
-                          );
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (context) => const ActiveWorkoutScreen(),
+                          ));
                         },
                       );
                     },
