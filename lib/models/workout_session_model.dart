@@ -25,9 +25,9 @@ class CompletedSet {
 
   factory CompletedSet.fromMap(Map<String, dynamic> data) {
   return CompletedSet(
-    weight: (data['weight'] as num).toDouble(),
-    reps: data['reps'],
-    notes: data['notes'], // NYTT: Hämta anteckningar om de finns
+    weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
+    reps: data['reps'] ?? 0,
+    notes: data['notes'], // Kan vara null, det är okej
   );
 }
 }
@@ -48,9 +48,9 @@ class CompletedExercise {
   }
 
   factory CompletedExercise.fromMap(Map<String, dynamic> data) {
-  var setsList = data['sets'] as List;
-  List<CompletedSet> sets = setsList.map((s) => CompletedSet.fromMap(s)).toList();
-  return CompletedExercise(name: data['name'], sets: sets);
+  var setsList = data['sets'] as List<dynamic>? ?? <dynamic>[];
+  List<CompletedSet> sets = setsList.map((s) => CompletedSet.fromMap(s as Map<String, dynamic>)).toList();
+  return CompletedExercise(name: data['name'] ?? '', sets: sets);
 }
 
 }
@@ -85,15 +85,15 @@ class WorkoutSession {
     };
   }
   factory WorkoutSession.fromFirestore(Map<String, dynamic> data) {
-  var exercisesList = data['completedExercises'] as List;
-  List<CompletedExercise> exercises = exercisesList.map((e) => CompletedExercise.fromMap(e)).toList();
+  var exercisesList = data['completedExercises'] as List<dynamic>? ?? <dynamic>[];
+  List<CompletedExercise> exercises = exercisesList.map((e) => CompletedExercise.fromMap(e as Map<String, dynamic>)).toList();
 
   return WorkoutSession(
-    id: data['id'],
-    programTitle: data['programTitle'],
+    id: data['id'] ?? '',
+    programTitle: data['programTitle'] ?? '',
     // Firestore sparar Timestamps, vi måste konvertera dem till DateTime
-    date: (data['date'] as Timestamp).toDate(),
-    durationInMinutes: data['durationInMinutes'],
+    date: data['date'] != null ? (data['date'] as Timestamp).toDate() : DateTime.now(),
+    durationInMinutes: data['durationInMinutes'] ?? 0,
     completedExercises: exercises,
   );
 }

@@ -80,13 +80,24 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         // Skapa/uppdatera controllers baserat på om användaren redigerat fältet
         // Logik: Bara redigerade fält ska ha text i controller
         // Icke-redigerade fält ska vara tomma så placeholder (hint) visas
+        // Om värdet är 0 eller null och inte redierat, visa som tomt (inte som "0")
         final isWeightEdited = providerEdited.contains(weightKey);
         final isRepsEdited = providerEdited.contains(repsKey);
         final isNotesEdited = providerEdited.contains(notesKey);
 
-        final weightText = isWeightEdited ? set.weight.toString() : '';
-        final repsText = isRepsEdited ? set.reps.toString() : '';
-        final notesText = isNotesEdited ? (set.notes ?? '') : '';
+        String weightText = '';
+        String repsText = '';
+        String notesText = '';
+
+        if (isWeightEdited && set.weight > 0) {
+          weightText = set.weight.toString();
+        }
+        if (isRepsEdited && set.reps > 0) {
+          repsText = set.reps.toString();
+        }
+        if (isNotesEdited && set.notes != null && set.notes!.isNotEmpty) {
+          notesText = set.notes!;
+        }
 
         _controllers[weightKey]?.dispose();
         _controllers[repsKey]?.dispose();

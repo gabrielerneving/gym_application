@@ -71,26 +71,13 @@ Future<void> startWorkout(WorkoutProgram program) async {
   // STEG 1: Hitta det senaste passet av denna typ
   final lastSession = await dbService.findLastSessionOfProgram(program.title);
   
-  // STEG 2: Skapa det nya passet och fyll i gammal data där det är möjligt
+  // STEG 2: Skapa det nya passet med TOMMA värden (inte förra passets värden)
   final initialExercises = program.exercises.map((currentExercise) {
-    
-    // Försök hitta en matchande övning i det gamla passet
-    final lastExerciseData = lastSession?.completedExercises.firstWhere(
-      (completedEx) => completedEx.name == currentExercise.name,
-      orElse: () => CompletedExercise(name: "", sets: []), // Returnera en tom om ingen match hittas
-    );
-
-    // Skapa de nya seten
     return CompletedExercise(
       name: currentExercise.name,
       sets: List.generate(currentExercise.sets, (setIndex) {
-        // Om det finns gammal data för detta set, använd den. Annars, skapa ett tomt set.
-        if (lastExerciseData != null && setIndex < lastExerciseData.sets.length) {
-          final lastSet = lastExerciseData.sets[setIndex];
-          return CompletedSet(weight: lastSet.weight, reps: lastSet.reps, notes: lastSet.notes);
-        } else {
-          return CompletedSet(weight: 0, reps: 0, notes: null);
-        }
+        // Alla nya pass börjar med tomma värden
+        return CompletedSet(weight: 0, reps: 0, notes: null);
       }),
     );
   }).toList();
@@ -103,16 +90,32 @@ Future<void> startWorkout(WorkoutProgram program) async {
     completedExercises: initialExercises,
   );
 
-  // STEG 3: Bygg placeholders från initialExercises (förra passets värden)
+  // STEG 3: Bygg placeholders från förra passets värden (INTE nuvarande session)
   final Map<String, dynamic> placeholders = <String, dynamic>{};
-  for (int exIndex = 0; exIndex < initialExercises.length; exIndex++) {
-    final ex = initialExercises[exIndex];
-    for (int setIndex = 0; setIndex < ex.sets.length; setIndex++) {
-      final set = ex.sets[setIndex];
-      placeholders['w_${exIndex}_$setIndex'] = set.weight;
-      placeholders['r_${exIndex}_$setIndex'] = set.reps;
-      if (set.notes != null && set.notes!.isNotEmpty) {
-        placeholders['n_${exIndex}_$setIndex'] = set.notes;
+  if (lastSession != null) {
+    for (int exIndex = 0; exIndex < program.exercises.length; exIndex++) {
+      final currentExercise = program.exercises[exIndex];
+      
+      // Försök hitta en matchande övning i det gamla passet
+      final lastExerciseData = lastSession.completedExercises.firstWhere(
+        (completedEx) => completedEx.name == currentExercise.name,
+        orElse: () => CompletedExercise(name: "", sets: []),
+      );
+
+      // Skapa placeholders från förra passets data
+      for (int setIndex = 0; setIndex < currentExercise.sets; setIndex++) {
+        if (lastExerciseData.sets.isNotEmpty && setIndex < lastExerciseData.sets.length) {
+          final lastSet = lastExerciseData.sets[setIndex];
+          if (lastSet.weight > 0) {
+            placeholders['w_${exIndex}_$setIndex'] = lastSet.weight;
+          }
+          if (lastSet.reps > 0) {
+            placeholders['r_${exIndex}_$setIndex'] = lastSet.reps;
+          }
+          if (lastSet.notes != null && lastSet.notes!.isNotEmpty) {
+            placeholders['n_${exIndex}_$setIndex'] = lastSet.notes;
+          }
+        }
       }
     }
   }
