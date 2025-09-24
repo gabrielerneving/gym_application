@@ -452,6 +452,149 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     
     return personalRecords;
   }
+
+  // MUSKELGRUPP STATISTIK METODER
+
+  // Lista över alla muskelgrupper
+  static const List<String> muscleGroups = [
+    'Shoulders',
+    'Legs', 
+    'Biceps',
+    'Triceps',
+    'Chest',
+    'Back',
+    'Abs',
+  ];
+
+  // Hämta alla MasterExercises för att koppla övningsnamn till muskelgrupper
+  Future<Map<String, String>> getExerciseToMuscleGroupMap() async {
+    try {
+      final exerciseToMuscleGroup = <String, String>{};
+      
+      for (final muscleGroup in muscleGroups) {
+        final snapshot = await _db
+            .collection('users')
+            .doc(uid)
+            .collection('master_exercises')
+            .where('category', isEqualTo: muscleGroup)  
+            .get();
+            
+        for (final doc in snapshot.docs) {
+          final exerciseData = doc.data();
+          final exerciseName = exerciseData['name'] as String;
+          exerciseToMuscleGroup[exerciseName] = muscleGroup;
+        }
+      }
+      
+      return exerciseToMuscleGroup;
+    } catch (e) {
+      print('Error fetching exercise to muscle group mapping: $e');
+      return {};
+    }
+  }
+
+  // Räkna sets per muskelgrupp från träningshistorik
+  Future<Map<String, int>> getMuscleGroupSetCounts() async {
+    try {
+      final sessions = await getAllWorkoutSessions();
+      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
+      final muscleGroupCounts = <String, int>{};
+      
+      // Initialisera alla muskelgrupper med 0
+      for (final muscleGroup in muscleGroups) {
+        muscleGroupCounts[muscleGroup] = 0;
+      }
+      
+      // Räkna sets för varje session
+      for (final session in sessions) {
+        for (final completedExercise in session.completedExercises) {
+          final exerciseName = completedExercise.name;
+          final muscleGroup = exerciseToMuscleGroup[exerciseName];
+          
+          if (muscleGroup != null) {
+            muscleGroupCounts[muscleGroup] = 
+                (muscleGroupCounts[muscleGroup] ?? 0) + completedExercise.sets.length;
+          }
+        }
+      }
+      
+      return muscleGroupCounts;
+    } catch (e) {
+      print('Error calculating muscle group set counts: $e');
+      return {};
+    }
+  }
+
+  // Räkna sets per muskelgrupp för en specifik tidsperiod
+  Future<Map<String, int>> getMuscleGroupSetCountsInPeriod({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final sessions = await getWorkoutSessionsInPeriod(
+        startDate: startDate,
+        endDate: endDate,
+      );
+      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
+      final muscleGroupCounts = <String, int>{};
+      
+      // Initialisera alla muskelgrupper med 0
+      for (final muscleGroup in muscleGroups) {
+        muscleGroupCounts[muscleGroup] = 0;
+      }
+      
+      // Räkna sets för varje session i perioden
+      for (final session in sessions) {
+        for (final completedExercise in session.completedExercises) {
+          final exerciseName = completedExercise.name;
+          final muscleGroup = exerciseToMuscleGroup[exerciseName];
+          
+          if (muscleGroup != null) {
+            muscleGroupCounts[muscleGroup] = 
+                (muscleGroupCounts[muscleGroup] ?? 0) + completedExercise.sets.length;
+          }
+        }
+      }
+      
+      return muscleGroupCounts;
+    } catch (e) {
+      print('Error calculating muscle group set counts for period: $e');
+      return {};
+    }
+  }
+
+  // Hitta mest tränade muskelgrupper (sorterat)
+  Future<List<MuscleGroupStat>> getMostTrainedMuscleGroups() async {
+    final setCounts = await getMuscleGroupSetCounts();
+    final stats = <MuscleGroupStat>[];
+    
+    for (final entry in setCounts.entries) {
+      stats.add(MuscleGroupStat(
+        muscleGroup: entry.key,
+        setCount: entry.value,
+      ));
+    }
+    
+    // Sortera efter antal sets (högst först)
+    stats.sort((a, b) => b.setCount.compareTo(a.setCount));
+    
+    return stats;
+  }
+
+  // Beräkna muskelgrupp fördelning i procent
+  Future<Map<String, double>> getMuscleGroupPercentages() async {
+    final setCounts = await getMuscleGroupSetCounts();
+    final totalSets = setCounts.values.fold<int>(0, (sum, count) => sum + count);
+    
+    if (totalSets == 0) return {};
+    
+    final percentages = <String, double>{};
+    for (final entry in setCounts.entries) {
+      percentages[entry.key] = (entry.value / totalSets) * 100;
+    }
+    
+    return percentages;
+  }
 }
 
 // Dataklasser för progression
@@ -490,6 +633,16 @@ class PersonalRecord {
     required this.weight,
     required this.date,
     required this.sessionId,
+  });
+}
+
+class MuscleGroupStat {
+  final String muscleGroup;
+  final int setCount;
+
+  MuscleGroupStat({
+    required this.muscleGroup,
+    required this.setCount,
   });
 }
 

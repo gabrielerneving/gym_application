@@ -5,6 +5,7 @@ import '../widgets/stat_card.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import 'progression_screen.dart';
+import 'muscle_groups_screen.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
@@ -171,6 +172,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           // Progression button
                           _buildProgressionButton(),
                           
+                          const SizedBox(height: 16),
+
+                          // Muscle groups button
+                          _buildMuscleGroupsButton(),
+                          
                           const SizedBox(height: 24),
 
                           // Kort för populära workouts
@@ -196,11 +202,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
-                  BoxShadow(
-                    color: const Color(0xFFDC2626).withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2)
-                  ),
+                  
                 ],
                 border: Border.all(
                   color: Colors.white.withOpacity(0.1),
@@ -298,6 +300,77 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'View weight progression charts',
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey.shade600,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMuscleGroupsButton() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MuscleGroupsScreen(),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181B),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF2A2A2A),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.radar,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Muscle Groups',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Analyze muscle group distribution',
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 14,
