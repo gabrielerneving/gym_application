@@ -233,5 +233,263 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     return null;
   }
 }
+
+  // STATISTIK METODER
+  
+  // Hämta alla träningspass för statistik
+  Future<List<WorkoutSession>> getAllWorkoutSessions() async {
+    try {
+      final querySnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .orderBy('date', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => WorkoutSession.fromFirestore(doc.data()))
+          .toList();
+    } catch (e) {
+      print("Error fetching workout sessions: $e");
+      return [];
+    }
+  }
+
+  // Hämta träningspass för en specifik tidsperiod
+  Future<List<WorkoutSession>> getWorkoutSessionsInPeriod({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final querySnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .where('date', isGreaterThanOrEqualTo: startDate)
+          .where('date', isLessThanOrEqualTo: endDate)
+          .orderBy('date', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => WorkoutSession.fromFirestore(doc.data()))
+          .toList();
+    } catch (e) {
+      print("Error fetching workout sessions in period: $e");
+      return [];
+    }
+  }
+
+  // Räkna träningspass denna månad
+  Future<int> getWorkoutsThisMonth() async {
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    
+    final sessions = await getWorkoutSessionsInPeriod(
+      startDate: startOfMonth,
+      endDate: endOfMonth,
+    );
+    
+    return sessions.length;
+  }
+
+  // Räkna totala antal träningspass
+  Future<int> getTotalWorkouts() async {
+    try {
+      final querySnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .get();
+
+      return querySnapshot.docs.length;
+    } catch (e) {
+      print("Error counting total workouts: $e");
+      return 0;
+    }
+  }
+
+  // Räkna total träningstid i timmar
+  Future<double> getTotalTrainingHours() async {
+    final sessions = await getAllWorkoutSessions();
+    final totalMinutes = sessions.fold<int>(
+      0, 
+      (sum, session) => sum + session.durationInMinutes,
+    );
+    return totalMinutes / 60.0;
+  }
+
+  // Hämta mest tränade program
+  Future<Map<String, int>> getMostTrainedPrograms() async {
+    final sessions = await getAllWorkoutSessions();
+    final programCounts = <String, int>{};
+    
+    for (final session in sessions) {
+      programCounts[session.programTitle] = 
+          (programCounts[session.programTitle] ?? 0) + 1;
+    }
+    
+    // Sortera efter antal träningar
+    final sortedEntries = programCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    return Map.fromEntries(sortedEntries);
+  }
+
+  // Beräkna genomsnittlig träningstid
+  Future<double> getAverageWorkoutDuration() async {
+    final sessions = await getAllWorkoutSessions();
+    if (sessions.isEmpty) return 0.0;
+    
+    final totalMinutes = sessions.fold<int>(
+      0, 
+      (sum, session) => sum + session.durationInMinutes,
+    );
+    
+    return totalMinutes / sessions.length;
+  }
+
+  // PROGRESSION METODER FÖR GRAFER
+
+  // Hämta alla unika övningsnamn från historiken
+  Future<List<String>> getAllExerciseNames() async {
+    final sessions = await getAllWorkoutSessions();
+    final exerciseNames = <String>{};
+    
+    for (final session in sessions) {
+      for (final exercise in session.completedExercises) {
+        exerciseNames.add(exercise.name);
+      }
+    }
+    
+    return exerciseNames.toList()..sort();
+  }
+
+  // Hämta viktprogression för en specifik övning över tid
+  Future<List<ProgressionDataPoint>> getExerciseProgression(String exerciseName) async {
+    final sessions = await getAllWorkoutSessions();
+    final progressionData = <ProgressionDataPoint>[];
+    
+    for (final session in sessions) {
+      // Leta efter övningen i denna session
+      final exercise = session.completedExercises
+          .where((ex) => ex.name == exerciseName)
+          .firstOrNull;
+      
+      if (exercise != null && exercise.sets.isNotEmpty) {
+        // Hitta det tyngsta setet för denna övning i denna session
+        final maxWeight = exercise.sets
+            .map((set) => set.weight)
+            .reduce((a, b) => a > b ? a : b);
+        
+        progressionData.add(
+          ProgressionDataPoint(
+            date: session.date,
+            weight: maxWeight,
+            sessionId: session.id,
+          ),
+        );
+      }
+    }
+    
+    // Sortera efter datum (äldst först)
+    progressionData.sort((a, b) => a.date.compareTo(b.date));
+    
+    return progressionData;
+  }
+
+  // Hämta volymprogression (weight * reps * sets) för en övning
+  Future<List<VolumeDataPoint>> getExerciseVolumeProgression(String exerciseName) async {
+    final sessions = await getAllWorkoutSessions();
+    final volumeData = <VolumeDataPoint>[];
+    
+    for (final session in sessions) {
+      final exercise = session.completedExercises
+          .where((ex) => ex.name == exerciseName)
+          .firstOrNull;
+      
+      if (exercise != null && exercise.sets.isNotEmpty) {
+        // Beräkna total volym för denna övning i denna session
+        double totalVolume = 0;
+        for (final set in exercise.sets) {
+          totalVolume += set.weight * set.reps;
+        }
+        
+        volumeData.add(
+          VolumeDataPoint(
+            date: session.date,
+            volume: totalVolume,
+            sessionId: session.id,
+          ),
+        );
+      }
+    }
+    
+    volumeData.sort((a, b) => a.date.compareTo(b.date));
+    return volumeData;
+  }
+
+  // Hämta personliga rekord för alla övningar
+  Future<Map<String, PersonalRecord>> getAllPersonalRecords() async {
+    final exerciseNames = await getAllExerciseNames();
+    final personalRecords = <String, PersonalRecord>{};
+    
+    for (final exerciseName in exerciseNames) {
+      final progression = await getExerciseProgression(exerciseName);
+      if (progression.isNotEmpty) {
+        // Hitta det tyngsta lyftet för denna övning
+        final maxWeightPoint = progression
+            .reduce((a, b) => a.weight > b.weight ? a : b);
+        
+        personalRecords[exerciseName] = PersonalRecord(
+          exerciseName: exerciseName,
+          weight: maxWeightPoint.weight,
+          date: maxWeightPoint.date,
+          sessionId: maxWeightPoint.sessionId,
+        );
+      }
+    }
+    
+    return personalRecords;
+  }
+}
+
+// Dataklasser för progression
+class ProgressionDataPoint {
+  final DateTime date;
+  final double weight;
+  final String sessionId;
+
+  ProgressionDataPoint({
+    required this.date,
+    required this.weight,
+    required this.sessionId,
+  });
+}
+
+class VolumeDataPoint {
+  final DateTime date;
+  final double volume;
+  final String sessionId;
+
+  VolumeDataPoint({
+    required this.date,
+    required this.volume,
+    required this.sessionId,
+  });
+}
+
+class PersonalRecord {
+  final String exerciseName;
+  final double weight;
+  final DateTime date;
+  final String sessionId;
+
+  PersonalRecord({
+    required this.exerciseName,
+    required this.weight,
+    required this.date,
+    required this.sessionId,
+  });
 }
 
