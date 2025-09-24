@@ -6,6 +6,7 @@ import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/workout_widget.dart'; // Din befintliga widget
 import '../providers/workout_provider.dart';
+import '../pages/program_detail_page.dart';
 import 'create_workout.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -163,6 +164,15 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (context) => const ActiveWorkoutScreen(),
                           ));
+                        },
+                        onTap: () {
+                          // Visa program struktur utan tidigare data
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProgramDetailPage(program: program),
+                            ),
+                          );
                         },
                       );
                     },

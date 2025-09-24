@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/workout_session_model.dart';
+import '../pages/workout_detail_page.dart';
 
 class WorkoutHistoryWidget extends StatelessWidget {
   final WorkoutSession session;
@@ -9,75 +10,146 @@ class WorkoutHistoryWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF18181B), // En specifik mörkgrå färg
-      margin: const EdgeInsets.symmetric(vertical: 10.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25), side: const BorderSide(
-      color: Color(0xFF4C4C4C), // grå border
-      width: 1,                 // tjocklek på border
-    ),),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => WorkoutDetailPage(session: session),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
+        padding: const EdgeInsets.all(18.0),
+        decoration: BoxDecoration(
+          color: const Color(0xFF18181B),
+          borderRadius: BorderRadius.circular(12), // Mindre rundning för Android-stil
+          border: Border.all(
+            color: const Color(0xFF2A2A2A), // Tillbaka till subtil grå border
+            width: 0.5,
+          ),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header row med titel och stats
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.programTitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                // Vänster sida - titel och datum
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        session.programTitle,
+                        style: const TextStyle(
+                          color: Colors.white, // Tillbaka till vit för titel
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat('EEEE, MMMM d').format(session.date),
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('MMM d, yyyy').format(session.date),
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                
+                // Höger sida - kompakta stats
+                Row(
                   children: [
-                    Text(
-                      '${session.durationInMinutes} min',
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    // Timer chip - Subtle style
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.timer,
+                            size: 14,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${session.durationInMinutes}m',
+                            style: TextStyle(
+                              color: Colors.grey.shade300,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${session.completedExercises.length} exercises',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                    const SizedBox(width: 8),
+                    
+                    // Exercises count - Subtle style
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${session.completedExercises.length}',
+                        style: TextStyle(
+                          color: Colors.grey.shade300,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.grey.shade600,
+                      size: 16,
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            ...session.completedExercises.map((exercise) {
-              // Skapa en textsträng för varje set
-              final setsDetails = exercise.sets.map((set) {
-                return '  - ${set.weight} kg x ${set.reps} reps';
-              }).join('\n'); // Lägg till en ny rad mellan varje set
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
+            
+            const SizedBox(height: 12),
+            
+            // Övningar preview - bara namnen
+            Text(
+              session.completedExercises.take(3).map((e) => e.name).join(' • '),
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            
+            if (session.completedExercises.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '${exercise.name}\n$setsDetails', // Visa övningens namn följt av set-detaljerna
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.5),
+                  '+${session.completedExercises.length - 3} more',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
-              );
-            }).toList(),
+              ),
           ],
         ),
       ),
