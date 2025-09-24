@@ -266,10 +266,21 @@ Future<void> startWorkout(WorkoutProgram program) async {
 
   void _resumeWorkout(WorkoutSession session, int secondsToAdd) {
       final savedDurationInSeconds = session.durationInMinutes * 60;
+      final totalElapsedSeconds = savedDurationInSeconds + secondsToAdd;
+      
+      // Kontrollera om träningspasset har pågått för länge redan när vi återupptar (8 timmar = 28800 sekunder)
+      if (totalElapsedSeconds >= 28800) {
+        print('Workout exceeded 8 hours, auto-finishing on resume...');
+        // Avsluta workoutet automatiskt istället för att återuppta
+        dbService.deleteActiveWorkoutState();
+        state = state.copyWith(clearStaleSession: true);
+        return;
+      }
+      
       state = ActiveWorkoutState(
         session: session,
         isRunning: true,
-        elapsedSeconds: savedDurationInSeconds + secondsToAdd,
+        elapsedSeconds: totalElapsedSeconds,
         staleSession: null,
         editedFields: state.editedFields.isNotEmpty ? state.editedFields : <String>{},
       );
@@ -280,8 +291,17 @@ Future<void> startWorkout(WorkoutProgram program) async {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if(mounted){
-        state = state.copyWith(elapsedSeconds: state.elapsedSeconds + 1);
-        if (state.elapsedSeconds % 15 == 0) {
+        final newElapsedSeconds = state.elapsedSeconds + 1;
+        state = state.copyWith(elapsedSeconds: newElapsedSeconds);
+        
+        // Kontrollera om träningspasset har pågått för länge (8 timmar = 28800 sekunder)
+        if (newElapsedSeconds >= 28800) {
+          print('Workout has been running for 8 hours, auto-finishing...');
+          finishWorkout();
+          return;
+        }
+        
+        if (newElapsedSeconds % 15 == 0) {
           _saveStateToFirestore();
         }
       } else {

@@ -131,11 +131,11 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
   String _getPeriodText() {
     switch (selectedPeriod) {
       case TimePeriod.thisMonth:
-        return 'Denna månad';
+        return 'This month';
       case TimePeriod.lastThreeMonths:
-        return 'Senaste 3 månader';
+        return 'Last 3 months';
       case TimePeriod.allTime:
-        return 'All tid';
+        return 'All time';
     }
   }
 
@@ -260,7 +260,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Denna månad',
+                  'This month',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: selectedPeriod == TimePeriod.thisMonth ? Colors.white : Colors.grey.shade400,
@@ -281,7 +281,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Senaste 3 mån',
+                  'Last 3 months',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: selectedPeriod == TimePeriod.lastThreeMonths ? Colors.white : Colors.grey.shade400,
@@ -302,7 +302,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'All tid',
+                  'All time',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: selectedPeriod == TimePeriod.allTime ? Colors.white : Colors.grey.shade400,
@@ -420,7 +420,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 30),
           Expanded(
             child: selectedChartType == 0
                 ? MuscleRadarChartWidget(
@@ -431,8 +431,11 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   ),
           ),
         ],
+
       ),
+      
     );
+    
   }
 
   Widget _buildTopMuscleGroupsList() {
