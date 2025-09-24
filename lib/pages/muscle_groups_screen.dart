@@ -11,6 +11,8 @@ class MuscleGroupsScreen extends StatefulWidget {
   _MuscleGroupsScreenState createState() => _MuscleGroupsScreenState();
 }
 
+enum TimePeriod { thisMonth, lastThreeMonths, allTime }
+
 class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
   DatabaseService? _dbService;
   Map<String, int> muscleGroupCounts = {};
@@ -18,6 +20,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
   List<MuscleGroupStat> mostTrainedMuscles = [];
   bool isLoading = true;
   int selectedChartType = 0; // 0 = radar, 1 = bar chart
+  TimePeriod selectedPeriod = TimePeriod.allTime;
 
   @override
   void initState() {
@@ -40,18 +43,63 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
   Future<void> _loadMuscleData() async {
     if (_dbService == null) return;
 
+    setState(() {
+      isLoading = true;
+    });
+
     try {
-      final results = await Future.wait([
-        _dbService!.getMuscleGroupSetCounts(),
-        _dbService!.getMuscleGroupPercentages(),
-        _dbService!.getMostTrainedMuscleGroups(),
-      ]);
+      // Beräkna datum baserat på vald period
+      final now = DateTime.now();
+      DateTime? startDate;
+      DateTime? endDate = now;
+
+      switch (selectedPeriod) {
+        case TimePeriod.thisMonth:
+          startDate = DateTime(now.year, now.month, 1);
+          break;
+        case TimePeriod.lastThreeMonths:
+          startDate = DateTime(now.year, now.month - 3, now.day);
+          break;
+        case TimePeriod.allTime:
+          startDate = null;
+          endDate = null;
+          break;
+      }
+
+      // Använd period-specifika metoder
+      final Map<String, int> counts;
+      if (startDate != null && endDate != null) {
+        counts = await _dbService!.getMuscleGroupSetCountsInPeriod(
+          startDate: startDate,
+          endDate: endDate,
+        );
+      } else {
+        counts = await _dbService!.getMuscleGroupSetCounts();
+      }
+
+      // Beräkna procent och mest tränade muskler
+      final totalSets = counts.values.fold<int>(0, (sum, count) => sum + count);
+      final percentages = <String, double>{};
+      final stats = <MuscleGroupStat>[];
+
+      for (final entry in counts.entries) {
+        if (totalSets > 0) {
+          percentages[entry.key] = (entry.value / totalSets) * 100;
+        }
+        stats.add(MuscleGroupStat(
+          muscleGroup: entry.key,
+          setCount: entry.value,
+        ));
+      }
+
+      // Sortera stats
+      stats.sort((a, b) => b.setCount.compareTo(a.setCount));
 
       if (mounted) {
         setState(() {
-          muscleGroupCounts = results[0] as Map<String, int>;
-          muscleGroupPercentages = results[1] as Map<String, double>;
-          mostTrainedMuscles = results[2] as List<MuscleGroupStat>;
+          muscleGroupCounts = counts;
+          muscleGroupPercentages = percentages;
+          mostTrainedMuscles = stats;
           isLoading = false;
         });
       }
@@ -62,6 +110,32 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
           isLoading = false;
         });
       }
+    }
+  }
+
+  void _onPeriodChanged(TimePeriod newPeriod) {
+    if (selectedPeriod != newPeriod) {
+      setState(() {
+        selectedPeriod = newPeriod;
+      });
+      _loadMuscleData();
+    }
+  }
+
+  String _getChartTitle() {
+    final chartType = selectedChartType == 0 ? 'Muscle Distribution' : 'Sets per Muscle Group';
+    final period = _getPeriodText();
+    return '$chartType - $period';
+  }
+
+  String _getPeriodText() {
+    switch (selectedPeriod) {
+      case TimePeriod.thisMonth:
+        return 'Denna månad';
+      case TimePeriod.lastThreeMonths:
+        return 'Senaste 3 månader';
+      case TimePeriod.allTime:
+        return 'All tid';
     }
   }
 
@@ -109,6 +183,10 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Time period selector
+                      _buildTimePeriodSelector(),
+                      const SizedBox(height: 16),
+
                       // Chart type selector
                       _buildChartTypeSelector(),
                       const SizedBox(height: 24),
@@ -152,6 +230,88 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimePeriodSelector() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF18181B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF2A2A2A),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _onPeriodChanged(TimePeriod.thisMonth),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedPeriod == TimePeriod.thisMonth ? const Color(0xFFDC2626) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Denna månad',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selectedPeriod == TimePeriod.thisMonth ? Colors.white : Colors.grey.shade400,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _onPeriodChanged(TimePeriod.lastThreeMonths),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedPeriod == TimePeriod.lastThreeMonths ? const Color(0xFFDC2626) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Senaste 3 mån',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selectedPeriod == TimePeriod.lastThreeMonths ? Colors.white : Colors.grey.shade400,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _onPeriodChanged(TimePeriod.allTime),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedPeriod == TimePeriod.allTime ? const Color(0xFFDC2626) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'All tid',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selectedPeriod == TimePeriod.allTime ? Colors.white : Colors.grey.shade400,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -253,7 +413,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            selectedChartType == 0 ? 'Muscle Distribution' : 'Sets per Muscle Group',
+            _getChartTitle(),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
