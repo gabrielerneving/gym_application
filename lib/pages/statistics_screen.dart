@@ -127,9 +127,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         color: Color(0xFFDC2626),
                       ),
                     )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100),
-                      child: Column(
+                  : RefreshIndicator(
+                      color: const Color(0xFFDC2626),
+                      backgroundColor: Colors.grey.shade900,
+                      onRefresh: () async {
+                        await _loadStatistics();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Statistics refreshed'),
+                              backgroundColor: Color(0xFFDC2626),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100),
+                        child: Column(
                         children: [
                           // Grid med 2x2 statistik-kort
                           GridView.count(
@@ -182,6 +198,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           // Kort för populära workouts
                           PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
                         ],
+                        ),
                       ),
                     ),
               ),

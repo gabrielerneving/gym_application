@@ -177,10 +177,48 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFDC2626)))
           : muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)
-              ? _buildEmptyState()
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
+              ? RefreshIndicator(
+                  color: const Color(0xFFDC2626),
+                  backgroundColor: Colors.grey.shade900,
+                  onRefresh: () async {
+                    await _loadMuscleData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Statistics refreshed'),
+                          backgroundColor: Color(0xFFDC2626),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height - 200,
+                      child: _buildEmptyState(),
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  color: const Color(0xFFDC2626),
+                  backgroundColor: Colors.grey.shade900,
+                  onRefresh: () async {
+                    await _loadMuscleData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Statistics refreshed'),
+                          backgroundColor: Color(0xFFDC2626),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Time period selector
@@ -198,6 +236,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                       // Top muscle groups list
                       _buildTopMuscleGroupsList(),
                     ],
+                    ),
                   ),
                 ),
     );
