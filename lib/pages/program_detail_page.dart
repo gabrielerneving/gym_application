@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/workout_model.dart';
+import 'create_workout.dart';
 
 class ProgramDetailPage extends StatelessWidget {
   final WorkoutProgram program;
@@ -26,6 +27,19 @@ class ProgramDetailPage extends StatelessWidget {
           ),
         ),
         centerTitle: false, // Android-stil
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreateWorkoutScreen(workoutToEdit: program),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

@@ -127,6 +127,76 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   // Vi behöver inte längre ta emot ett program, eftersom vi läser det från providern.
 
+  void _showWorkoutOptionsDialog() {
+    final session = ref.read(workoutProvider).session;
+    if (session == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF18181B),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.white),
+                title: const Text('Edit Program', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('Modify exercises and sets', style: TextStyle(color: Colors.grey)),
+                onTap: () {
+                  Navigator.pop(context); // Stäng menyn
+                  _editCurrentProgram();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline, color: Colors.white),
+                title: const Text('Workout Info', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('View program details', style: TextStyle(color: Colors.grey)),
+                onTap: () {
+                  Navigator.pop(context); // Stäng menyn
+                  // Navigation till program detail kan läggas till här senare
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  void _editCurrentProgram() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF18181B),
+        title: const Text('Edit Active Workout?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Editing the program will pause your current workout. Your progress will be saved.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: Implementera fullständig edit-funktionalitet för active workout
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Edit during active workout - Coming soon!'),
+                  backgroundColor: Color(0xFFDC2626),
+                ),
+              );
+            },
+            child: const Text('Continue', style: TextStyle(color: Color(0xFFDC2626))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   // ÄNDRING 2: build-metoden tar nu bara BuildContext eftersom ref är tillgängligt direkt
   Widget build(BuildContext context) {
@@ -194,6 +264,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                   Navigator.of(context).pop();
                 },
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                  onPressed: () => _showWorkoutOptionsDialog(),
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
                   decoration: const BoxDecoration(
