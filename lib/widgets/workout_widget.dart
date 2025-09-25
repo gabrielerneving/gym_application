@@ -28,6 +28,10 @@ class WorkoutWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF18181B),
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey.withOpacity(0.2),
+            width: 1,
+          ),
         ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

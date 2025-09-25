@@ -26,8 +26,8 @@ class WorkoutHistoryWidget extends StatelessWidget {
           color: const Color(0xFF18181B),
           borderRadius: BorderRadius.circular(12), // Mindre rundning för Android-stil
           border: Border.all(
-            color: const Color(0xFF2A2A2A), // Tillbaka till subtil grå border
-            width: 0.5,
+            color: Colors.grey.withOpacity(0.2),
+            width: 1,
           ),
         ),
         child: Column(
