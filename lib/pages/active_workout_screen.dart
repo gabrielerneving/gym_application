@@ -325,6 +325,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, exerciseIndex) {
                     final exercise = session.completedExercises[exerciseIndex];
+                    // Count warm-up sets by checking isWarmUp property
+                    final warmUpSets = exercise.sets.where((set) => set.isWarmUp).length;
                     
                     return Container(
                       margin: const EdgeInsets.only(bottom: 24),
@@ -391,6 +393,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 set: set,
                                 setIndex: setIndex,
                                 exerciseIndex: exerciseIndex,
+                                warmUpSets: warmUpSets,
                                 weightKey: weightKey,
                                 repsKey: repsKey,
                                 notesKey: notesKey,
@@ -468,6 +471,7 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
   final dynamic set;
   final int setIndex;
   final int exerciseIndex;
+  final int warmUpSets; // Number of warm-up sets for this exercise
   final String weightKey;
   final String repsKey;
   final String notesKey;
@@ -483,6 +487,7 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
     required this.set,
     required this.setIndex,
     required this.exerciseIndex,
+    required this.warmUpSets,
     required this.weightKey,
     required this.repsKey,
     required this.notesKey,
@@ -645,26 +650,67 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
               ),
               child: Row(
                 children: [
-                  // Set nummer - minimal design
+                  // Set nummer - different design for warm-up vs working sets
                   Container(
-                    width: 24,
+                    width: 24, 
                     height: 24,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: widget.set.isWarmUp 
+                        ? Colors.orange.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
+                      border: widget.set.isWarmUp 
+                        ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
+                        : null,
                     ),
                     child: Center(
-                      child: Text(
-                        '${widget.setIndex + 1}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 12,
-                        ),
-                      ),
+                      child: widget.set.isWarmUp
+                        ? Icon(
+                            Icons.local_fire_department,
+                            color: Colors.orange,
+                            size: 14,
+                          )
+                        : Text(
+                            '${widget.setIndex - widget.warmUpSets + 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                            ),
+                          ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
+                  
+                  // Set type label
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.set.isWarmUp ? 'Warm-up' : 'Working',
+                          style: TextStyle(
+                            color: widget.set.isWarmUp ? Colors.orange : Colors.grey.shade400,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          widget.set.isWarmUp 
+                            ? 'Set ${widget.setIndex + 1}'
+                            : 'Set ${widget.setIndex - widget.warmUpSets + 1}',
+                          style: TextStyle(
+                            color: widget.set.isWarmUp ? Colors.orange.shade300 : Colors.grey.shade500,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   
                   // Weight input - clean design
                   Expanded(

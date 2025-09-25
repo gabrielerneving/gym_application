@@ -117,18 +117,41 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
 
 // METOD 2: Visar en dialog för att ändra antal sets
 Future<void> _showEditSetsDialog(Exercise exercise) async {
-  final setsController = TextEditingController(text: exercise.sets.toString());
+  final workingSetsController = TextEditingController(text: exercise.workingSets.toString());
+  final warmUpSetsController = TextEditingController(text: exercise.warmUpSets.toString());
 
   return showDialog<void>(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
         title: Text('Edit sets for ${exercise.name}'),
-        content: TextField(
-          controller: setsController,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Number of Sets'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: workingSetsController,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Working Sets',
+                hintText: 'Sets that count in statistics',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: warmUpSetsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Warm-up Sets',
+                hintText: 'Sets for warming up (optional)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Total: ${(int.tryParse(workingSetsController.text) ?? 0) + (int.tryParse(warmUpSetsController.text) ?? 0)} sets',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
         ),
         actions: <Widget>[
           TextButton(
@@ -139,8 +162,12 @@ Future<void> _showEditSetsDialog(Exercise exercise) async {
             child: const Text('Save'),
             onPressed: () {
               setState(() {
-                // Uppdatera antalet sets på den befintliga övningen
-                exercise.sets = int.tryParse(setsController.text) ?? exercise.sets;
+                final workingSets = int.tryParse(workingSetsController.text) ?? 0;
+                final warmUpSets = int.tryParse(warmUpSetsController.text) ?? 0;
+                
+                exercise.workingSets = workingSets;
+                exercise.warmUpSets = warmUpSets;
+                exercise.sets = workingSets + warmUpSets; // Uppdatera total
               });
               Navigator.of(context).pop();
             },
@@ -171,7 +198,9 @@ Future<void> _navigateAndAddExercise() async {
     final newExercise = Exercise(
       id: const Uuid().v4(), // Skapa ett HELT NYTT unikt ID för denna instans!
       name: result.name,
-      sets: 1, // Sätt ett standardvärde för sets
+      sets: 1, // Sätt ett standardvärde för total sets
+      workingSets: 1, // Default: 3 working sets
+      warmUpSets: 0, // Default: 0 warm-up sets
     );
 
     // Lägg till den nya övningen i listan och rita om UI:t

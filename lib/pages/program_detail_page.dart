@@ -155,7 +155,9 @@ class ProgramDetailPage extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${exercise.sets} sets planned',
+                                exercise.warmUpSets > 0 
+                                  ? '${exercise.workingSets} working + ${exercise.warmUpSets} warm-up sets'
+                                  : '${exercise.sets} sets planned',
                                 style: TextStyle(
                                   color: Colors.grey.shade400,
                                   fontSize: 13,
@@ -181,27 +183,67 @@ class ProgramDetailPage extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            // Set number
+                            // Set number with warm-up indication
                             Container(
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
+                                color: setIndex < exercise.warmUpSets
+                                  ? Colors.orange.withOpacity(0.2)
+                                  : Colors.white.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
+                                border: setIndex < exercise.warmUpSets
+                                  ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
+                                  : null,
                               ),
                               child: Center(
-                                child: Text(
-                                  '${setIndex + 1}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                child: setIndex < exercise.warmUpSets
+                                  ? Icon(
+                                      Icons.local_fire_department,
+                                      color: Colors.orange,
+                                      size: 12,
+                                    )
+                                  : Text(
+                                      '${setIndex - exercise.warmUpSets + 1}',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                 ),
                               ),
                             ),
                             
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
+                            
+                            // Set type label
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    setIndex < exercise.warmUpSets ? 'Warm-up' : 'Working',
+                                    style: TextStyle(
+                                      color: setIndex < exercise.warmUpSets ? Colors.orange : Colors.grey.shade500,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    setIndex < exercise.warmUpSets 
+                                      ? 'Set ${setIndex + 1}'
+                                      : 'Set ${setIndex - exercise.warmUpSets + 1}',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 8,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            const SizedBox(width: 8),
                             
                             // Empty placeholders for weight/reps/notes
                             Expanded(

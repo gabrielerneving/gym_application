@@ -71,8 +71,13 @@ class WorkoutDetailPage extends StatelessWidget {
                       ),
                       _buildStatItem(
                         icon: Icons.repeat,
-                        label: 'Total Sets',
-                        value: '${session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.length)}',
+                        label: 'Working Sets',
+                        value: '${session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => !set.isWarmUp).length)}',
+                      ),
+                      _buildStatItem(
+                        icon: Icons.local_fire_department,
+                        label: 'Warm-up Sets',
+                        value: '${session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => set.isWarmUp).length)}',
                       ),
                     ],
                   ),
@@ -162,23 +167,34 @@ class WorkoutDetailPage extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            // Set number
+                            // Set number with warm-up indication
                             Container(
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
+                                color: set.isWarmUp 
+                                  ? Colors.orange.withOpacity(0.2)
+                                  : Colors.white.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
+                                border: set.isWarmUp 
+                                  ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
+                                  : null,
                               ),
                               child: Center(
-                                child: Text(
-                                  '${setIndex + 1}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
+                                child: set.isWarmUp
+                                  ? Icon(
+                                      Icons.local_fire_department,
+                                      color: Colors.orange,
+                                      size: 12,
+                                    )
+                                  : Text(
+                                      '${setIndex + 1}',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                               ),
                             ),
                             

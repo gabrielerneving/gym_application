@@ -35,11 +35,39 @@ class ExerciseListItem extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        subtitle: Text(
-          '${exercise.sets} set',
-          style: TextStyle(
-            color: Colors.grey.shade400,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${exercise.sets} sets total',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+              ),
+            ),
+            if (exercise.warmUpSets > 0)
+              Row(
+                children: [
+                  Icon(Icons.local_fire_department, 
+                       color: Colors.orange, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${exercise.warmUpSets} warm-up + ${exercise.workingSets} working',
+                    style: TextStyle(
+                      color: Colors.orange.shade300,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                '${exercise.workingSets} working sets',
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 12,
+                ),
+              ),
+          ],
         ),
         trailing: isReordering
             ? const Icon(Icons.drag_handle, color: Colors.white)

@@ -76,8 +76,14 @@ Future<void> startWorkout(WorkoutProgram program) async {
     return CompletedExercise(
       name: currentExercise.name,
       sets: List.generate(currentExercise.sets, (setIndex) {
-        // Alla nya pass börjar med tomma värden
-        return CompletedSet(weight: 0, reps: 0, notes: null);
+        // Första setIndex < warmUpSets är warm-up sets
+        final isWarmUpSet = setIndex < currentExercise.warmUpSets;
+        return CompletedSet(
+          weight: 0, 
+          reps: 0, 
+          notes: null,
+          isWarmUp: isWarmUpSet,
+        );
       }),
     );
   }).toList();

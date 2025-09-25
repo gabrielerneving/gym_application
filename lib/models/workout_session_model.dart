@@ -6,30 +6,43 @@ class CompletedSet {
   final double weight;
   final int reps;
   final String? notes; // NYTT: Lägg till ett valfritt fält för anteckningar
+  final bool isWarmUp; // NYTT: Markera om detta är ett warm-up set
 
-  CompletedSet({required this.weight, required this.reps, this.notes});
+  CompletedSet({
+    required this.weight, 
+    required this.reps, 
+    this.notes,
+    this.isWarmUp = false, // Default är working set
+  });
 
   // copyWith metod för att skapa uppdaterade kopior
-  CompletedSet copyWith({double? weight, int? reps, String? notes}) {
+  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp}) {
     return CompletedSet(
       weight: weight ?? this.weight,
       reps: reps ?? this.reps,
       notes: notes ?? this.notes,
+      isWarmUp: isWarmUp ?? this.isWarmUp,
     );
   }
 
   // Metod för att konvertera till en Map för Firestore
   Map<String, dynamic> toMap() {
-    return {'weight': weight, 'reps': reps, 'notes': notes};
+    return {
+      'weight': weight, 
+      'reps': reps, 
+      'notes': notes,
+      'isWarmUp': isWarmUp,
+    };
   }
 
   factory CompletedSet.fromMap(Map<String, dynamic> data) {
-  return CompletedSet(
-    weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
-    reps: data['reps'] ?? 0,
-    notes: data['notes'], // Kan vara null, det är okej
-  );
-}
+    return CompletedSet(
+      weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
+      reps: data['reps'] ?? 0,
+      notes: data['notes'], // Kan vara null, det är okej
+      isWarmUp: data['isWarmUp'] ?? false, // Default false för backward compatibility
+    );
+  }
 }
 
 // Vi uppdaterar den här klassen också

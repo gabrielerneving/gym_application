@@ -31,6 +31,8 @@ class DatabaseService {
           'id': exercise.id,
           'name': exercise.name,
           'sets': exercise.sets,
+          'workingSets': exercise.workingSets,
+          'warmUpSets': exercise.warmUpSets,
         }).toList(),
       });
     } catch (e) {
@@ -99,6 +101,8 @@ Future<void> updateWorkoutProgram(WorkoutProgram program) async {
         'id': exercise.id,
         'name': exercise.name,
         'sets': exercise.sets,
+        'workingSets': exercise.workingSets,
+        'warmUpSets': exercise.warmUpSets,
       }).toList(),
     });
   } catch (e) {
@@ -377,18 +381,21 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .firstOrNull;
       
       if (exercise != null && exercise.sets.isNotEmpty) {
-        // Hitta det tyngsta setet för denna övning i denna session
-        final maxWeight = exercise.sets
-            .map((set) => set.weight)
-            .reduce((a, b) => a > b ? a : b);
+        // Hitta det tyngsta setet för denna övning i denna session (exklusive warm-up sets)
+        final workingSets = exercise.sets.where((set) => !set.isWarmUp);
+        if (workingSets.isNotEmpty) {
+          final maxWeight = workingSets
+              .map((set) => set.weight)
+              .reduce((a, b) => a > b ? a : b);
         
-        progressionData.add(
-          ProgressionDataPoint(
-            date: session.date,
-            weight: maxWeight,
-            sessionId: session.id,
-          ),
-        );
+          progressionData.add(
+            ProgressionDataPoint(
+              date: session.date,
+              weight: maxWeight,
+              sessionId: session.id,
+            ),
+          );
+        }
       }
     }
     
@@ -409,10 +416,13 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .firstOrNull;
       
       if (exercise != null && exercise.sets.isNotEmpty) {
-        // Beräkna total volym för denna övning i denna session
+        // Beräkna total volym för denna övning i denna session (exklusive warm-up sets)
         double totalVolume = 0;
         for (final set in exercise.sets) {
-          totalVolume += set.weight * set.reps;
+          // Räkna bara working sets, inte warm-up sets
+          if (!set.isWarmUp) {
+            totalVolume += set.weight * set.reps;
+          }
         }
         
         volumeData.add(
@@ -512,8 +522,10 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           final muscleGroup = exerciseToMuscleGroup[exerciseName];
           
           if (muscleGroup != null) {
+            // Räkna bara working sets, inte warm-up sets
+            final workingSetsCount = completedExercise.sets.where((set) => !set.isWarmUp).length;
             muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + completedExercise.sets.length;
+                (muscleGroupCounts[muscleGroup] ?? 0) + workingSetsCount;
           }
         }
       }
@@ -550,8 +562,10 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           final muscleGroup = exerciseToMuscleGroup[exerciseName];
           
           if (muscleGroup != null) {
+            // Räkna bara working sets, inte warm-up sets
+            final workingSetsCount = completedExercise.sets.where((set) => !set.isWarmUp).length;
             muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + completedExercise.sets.length;
+                (muscleGroupCounts[muscleGroup] ?? 0) + workingSetsCount;
           }
         }
       }
