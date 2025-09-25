@@ -45,7 +45,7 @@ class WorkoutWidget extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.delete, color: Colors.grey),
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
                 onPressed: onMenuPressed, // Anropa callbacken när den trycks
               ),
             ],

@@ -82,6 +82,11 @@ class ProgramDetailPage extends StatelessWidget {
                         label: 'Total Sets',
                         value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.sets)}',
                       ),
+                       _buildStatItem(
+                        icon: Icons.repeat,
+                        label: 'Working Sets',
+                        value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.workingSets)}',
+                      ),
                     ],
                   ),
                 ],
