@@ -11,6 +11,7 @@ class ChooseCategoryScreen extends StatelessWidget {
     'Quads',
     'Hamstrings',
     'Glutes',
+    'Calf',
     'Biceps',
     'Triceps',
     'Chest',

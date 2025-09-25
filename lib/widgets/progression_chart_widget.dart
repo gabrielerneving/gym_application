@@ -94,6 +94,16 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
   }
 
   Widget _buildChart() {
+    // Kontrollera om vi har data
+    if (progressionData.isEmpty) {
+      return const Center(
+        child: Text(
+          'No progression data available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     // Skapa FlSpot-punkter från progressionData
     final spots = progressionData.asMap().entries.map((entry) {
       final index = entry.key;
@@ -106,10 +116,15 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
     final minWeight = weights.reduce((a, b) => a < b ? a : b);
     final maxWeight = weights.reduce((a, b) => a > b ? a : b);
     
-    // Lägg till lite marginal
-    final margin = (maxWeight - minWeight) * 0.1;
+    // Lägg till lite marginal, hantera fall där alla vikter är samma
+    final weightRange = maxWeight - minWeight;
+    final margin = weightRange > 0 ? weightRange * 0.1 : (maxWeight > 0 ? maxWeight * 0.1 : 1.0);
     final yMin = (minWeight - margin).clamp(0.0, double.infinity);
     final yMax = maxWeight + margin;
+    
+    // Säkerställ att horizontalInterval aldrig är 0
+    final yRange = yMax - yMin;
+    final horizontalInterval = yRange > 0 ? yRange / 4 : 1.0;
 
     return LineChart(
       LineChartData(
@@ -117,7 +132,7 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
           show: true,
           drawVerticalLine: false,
           drawHorizontalLine: true,
-          horizontalInterval: (yMax - yMin) / 4,
+          horizontalInterval: horizontalInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: Colors.grey.shade800.withOpacity(0.3),

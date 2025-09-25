@@ -471,6 +471,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     'Quads', 
     'Hamstrings',
     'Glutes',
+    'Calf',
     'Biceps',
     'Triceps',
     'Chest',

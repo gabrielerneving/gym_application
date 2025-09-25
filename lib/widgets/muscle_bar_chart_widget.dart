@@ -38,6 +38,16 @@ class MuscleBarChartWidget extends StatelessWidget {
   }
 
   Widget _buildBarChart() {
+    // Kontrollera om vi har data
+    if (muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)) {
+      return const Center(
+        child: Text(
+          'No muscle group data available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     // Ordna muskelgrupperna alfabetiskt
     final sortedEntries = muscleGroupCounts.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
@@ -80,7 +90,7 @@ class MuscleBarChartWidget extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           drawHorizontalLine: true,
-          horizontalInterval: maxValue / 4,
+          horizontalInterval: maxValue > 0 ? maxValue / 4 : 1.0,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: Colors.grey.shade800.withOpacity(0.3),
@@ -168,6 +178,7 @@ class MuscleBarChartWidget extends StatelessWidget {
       case 'Quads': return 'QUAD';
       case 'Hamstrings': return 'HAM';
       case 'Glutes': return 'GLUT';
+      case 'Calf': return 'CALF';
       case 'Abs': return 'ABS';
       default: return muscleGroup.substring(0, 3).toUpperCase();
     }
@@ -183,6 +194,7 @@ class MuscleBarChartWidget extends StatelessWidget {
       case 'Quads': return const Color(0xFFE11D48);
       case 'Hamstrings': return const Color(0xFFDC2F02);
       case 'Glutes': return const Color(0xFFB91C1C);
+      case 'Calf': return const Color(0xFFEA580C);
       case 'Abs': return const Color(0xFF06B6D4);
       default: return Colors.grey;
     }
