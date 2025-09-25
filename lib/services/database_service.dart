@@ -468,7 +468,9 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   // Lista över alla muskelgrupper
   static const List<String> muscleGroups = [
     'Shoulders',
-    'Legs', 
+    'Quads', 
+    'Hamstrings',
+    'Glutes',
     'Biceps',
     'Triceps',
     'Chest',
@@ -496,10 +498,45 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         }
       }
       
+      // Also check for legacy "Legs" category and map to "Quads"
+      final legsSnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('master_exercises')
+          .where('category', isEqualTo: 'Legs')
+          .get();
+          
+      for (final doc in legsSnapshot.docs) {
+        final exerciseData = doc.data();
+        final exerciseName = exerciseData['name'] as String;
+        exerciseToMuscleGroup[exerciseName] = 'Quads'; // Map legacy "Legs" to "Quads"
+      }
+      
+      // Migration: Handle legacy "Legs" category
+      await _migrateLegsCategory();
+      
       return exerciseToMuscleGroup;
     } catch (e) {
       print('Error fetching exercise to muscle group mapping: $e');
       return {};
+    }
+  }
+
+  // Migration method to convert "Legs" to "Quads"
+  Future<void> _migrateLegsCategory() async {
+    try {
+      final snapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('master_exercises')
+          .where('category', isEqualTo: 'Legs')
+          .get();
+          
+      for (final doc in snapshot.docs) {
+        await doc.reference.update({'category': 'Quads'});
+      }
+    } catch (e) {
+      print('Error migrating Legs category: $e');
     }
   }
 

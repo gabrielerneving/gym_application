@@ -165,7 +165,9 @@ class MuscleBarChartWidget extends StatelessWidget {
       case 'Triceps': return 'TRI';
       case 'Chest': return 'CHT';
       case 'Back': return 'BCK';
-      case 'Legs': return 'LEGS';
+      case 'Quads': return 'QUAD';
+      case 'Hamstrings': return 'HAM';
+      case 'Glutes': return 'GLUT';
       case 'Abs': return 'ABS';
       default: return muscleGroup.substring(0, 3).toUpperCase();
     }
@@ -178,7 +180,9 @@ class MuscleBarChartWidget extends StatelessWidget {
       case 'Shoulders': return const Color(0xFF2563EB);
       case 'Biceps': return const Color(0xFF7C3AED);
       case 'Triceps': return const Color(0xFFEAB308);
-      case 'Legs': return const Color(0xFFE11D48);
+      case 'Quads': return const Color(0xFFE11D48);
+      case 'Hamstrings': return const Color(0xFFDC2F02);
+      case 'Glutes': return const Color(0xFFB91C1C);
       case 'Abs': return const Color(0xFF06B6D4);
       default: return Colors.grey;
     }

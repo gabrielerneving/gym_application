@@ -545,7 +545,9 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
       case 'Shoulders': return const Color(0xFF2563EB);
       case 'Biceps': return const Color(0xFF7C3AED);
       case 'Triceps': return const Color(0xFFEAB308);
-      case 'Legs': return const Color(0xFFE11D48);
+      case 'Quads': return const Color(0xFFE11D48);
+      case 'Hamstrings': return const Color(0xFFDC2F02);
+      case 'Glutes': return const Color(0xFFB91C1C);
       case 'Abs': return const Color(0xFF06B6D4);
       default: return Colors.grey;
     }

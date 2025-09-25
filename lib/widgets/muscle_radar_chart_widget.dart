@@ -48,7 +48,9 @@ class MuscleRadarChartWidget extends StatelessWidget {
       'Back',
       'Biceps',
       'Triceps',
-      'Legs',
+      'Quads',
+      'Hamstrings',
+      'Glutes',
       'Abs',
     ];
 

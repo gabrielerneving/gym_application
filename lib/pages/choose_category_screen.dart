@@ -8,7 +8,9 @@ class ChooseCategoryScreen extends StatelessWidget {
   // Hårdkodad lista med kategorier. Kan senare hämtas från databasen om man vill.
   final List<String> categories = const [
     'Shoulders',
-    'Legs',
+    'Quads',
+    'Hamstrings',
+    'Glutes',
     'Biceps',
     'Triceps',
     'Chest',

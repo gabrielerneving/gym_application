@@ -18,7 +18,7 @@ class _CreateExerciseScreenState extends State<CreateExerciseScreen> {
   bool _isLoading = false;
 
   final List<String> _categories = const [
-    'Shoulders', 'Legs', 'Biceps', 'Triceps', 'Chest', 'Back', 'Abs', 'Cardio'
+    'Shoulders', 'Quads', 'Hamstrings', 'Glutes', 'Biceps', 'Triceps', 'Chest', 'Back', 'Abs', 'Cardio'
   ];
 
   Future<void> _saveExercise() async {
