@@ -38,6 +38,34 @@ Future<bool> _showDeleteConfirmationDialog(BuildContext context, String programT
   return result ?? false;
 }
 
+void _showActiveWorkoutDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF18181B),
+        title: const Text(
+          'Workout Already Active',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'You already have an active workout in progress. Please finish or cancel your current workout before starting a new one.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'OK',
+              style: TextStyle(color: Color(0xFFDC2626)),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseService dbService) {
   showModalBottomSheet(
     context: context,
@@ -160,6 +188,13 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           _showWorkoutOptions(context, program, dbService);
                         },
                         onStartWorkout: () {
+                          // Kontrollera om ett workout redan pågår
+                          final activeWorkout = ref.read(workoutProvider);
+                          if (activeWorkout.isRunning) {
+                            _showActiveWorkoutDialog(context);
+                            return;
+                          }
+                          
                           ref.read(workoutProvider.notifier).startWorkout(program);
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (context) => const ActiveWorkoutScreen(),
