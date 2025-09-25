@@ -226,7 +226,10 @@ Future<void> _navigateAndAddExercise() async {
       await DatabaseService(uid: uid).saveWorkoutProgram(newProgram);
     }
 
-      // 5. Ge feedback och navigera tillbaka
+      // 5. Stäng tangentbordet först
+      FocusManager.instance.primaryFocus?.unfocus();
+      
+      // 6. Ge feedback och navigera tillbaka
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Workout saved successfully!')),

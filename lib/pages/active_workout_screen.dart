@@ -733,6 +733,10 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           ),
           keyboardType: keyboardType,
           textAlign: label == 'notes' ? TextAlign.left : TextAlign.center,
+          // Gör notes-fältet expanderande vertikalt
+          maxLines: label == 'notes' ? null : 1,
+          minLines: label == 'notes' ? 1 : 1,
+          expands: false,
           onChanged: onChanged,
         ),
       ],
