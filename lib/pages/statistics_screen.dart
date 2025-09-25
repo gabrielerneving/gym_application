@@ -135,7 +135,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Statistics refreshed'),
+                              content: Text('Statistics refreshed', style: TextStyle(color: Colors.white),),
                               backgroundColor: Color(0xFFDC2626),
                               duration: Duration(seconds: 2),
                             ),
