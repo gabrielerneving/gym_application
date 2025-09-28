@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'create_exercise_screen.dart'; // Skärm C
-import 'exercise_list_screen.dart'; // Skärm B
+import 'create_exercise_screen.dart'; 
+import 'exercise_list_screen.dart'; 
 
 class ChooseCategoryScreen extends StatelessWidget {
   const ChooseCategoryScreen({Key? key}) : super(key: key);
 
-  // Hårdkodad lista med kategorier. Kan senare hämtas från databasen om man vill.
+  // Hårdkodad lista med kategorier för tillfället, ska kanske ändras??.
   final List<String> categories = const [
     'Shoulders',
     'Quads',
@@ -29,7 +29,7 @@ class ChooseCategoryScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.add, color: Colors.red, size: 30),
             onPressed: () {
-              // Navigera till skärmen för att skapa en ny övning (Skärm C)
+              // Navigera till skärmen för att skapa en ny övning 
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (context) => const CreateExerciseScreen()),
               );
@@ -45,10 +45,10 @@ class ChooseCategoryScreen extends StatelessWidget {
           color: Colors.grey.shade900,
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12), // rundade hörn
+            borderRadius: BorderRadius.circular(12), 
             side: const BorderSide(
-              color: Color(0xFF4D4D4D), // färgen på ramen
-              width: 1,          // tjockleken på ramen
+              color: Color(0xFF4D4D4D), 
+              width: 1,          
             ),
           ),
           child: ListTile(

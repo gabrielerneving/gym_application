@@ -14,7 +14,7 @@ class ExerciseListScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(category), // Visa kategorinamnet
+        title: Text(category), 
         backgroundColor: Colors.black,
       ),
       body: StreamBuilder<List<MasterExercise>>(
@@ -37,16 +37,15 @@ class ExerciseListScreen extends StatelessWidget {
                 color: Colors.grey.shade900,
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                  shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12), // rundade hörn
+            borderRadius: BorderRadius.circular(12), 
             side: const BorderSide(
-              color: Color(0xFF4D4D4D), // färgen på ramen
-              width: 1,          // tjockleken på ramen
+              color: Color(0xFF4D4D4D), 
+              width: 1,         
             ),
           ),
                 child: ListTile(
                   title: Text(exercise.name, style: const TextStyle(color: Colors.white)),
                   onTap: () {
-                    print('✅ TAPPED ON: ${exercise.name}. Popping with this value.');
                     Navigator.of(context).pop(exercise);
                   },
                 ),

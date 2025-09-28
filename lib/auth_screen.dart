@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// Vi kommer att skapa denna fil i nästa steg
 import 'services/auth_service.dart';
 
 class AuthScreen extends StatefulWidget {

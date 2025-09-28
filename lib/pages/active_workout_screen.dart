@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/workout_provider.dart'; // Importera vår nya provider
+import '../providers/workout_provider.dart'; 
 
-// ÄNDRING 1: Byt från ConsumerWidget till ConsumerStatefulWidget
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
   const ActiveWorkoutScreen({Key? key}) : super(key: key);
 
@@ -13,11 +12,10 @@ class ActiveWorkoutScreen extends ConsumerStatefulWidget {
 }
 
 class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
-  // En Map för att hålla alla våra controllers
+  // En Map för att hålla alla controllers
   final Map<String, TextEditingController> _controllers = {};
-  // Lokal cache används inte längre som sanning; vi läser från provider-state
-  final Set<String> _editedFields = {}; // kept only for transient UI but source of truth is provider
-  String? _currentSessionId; // to prevent redundant reinitialization
+  final Set<String> _editedFields = {}; 
+  String? _currentSessionId; 
 
   @override
   void initState() {
@@ -30,7 +28,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   @override
   void didUpdateWidget(ActiveWorkoutScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Re-initialize controllers when widget updates (e.g., new workout started)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeControllers();
     });
@@ -50,9 +47,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     final session = ref.read(workoutProvider).session;
     if (session == null) return;
 
-    // Only reinitialize when session id changes
     if (_currentSessionId == session.id && _controllers.isNotEmpty) {
-      // Still update edited fields cache
       final providerEdited = ref.read(workoutProvider).editedFields;
       _editedFields
         ..clear()
@@ -61,7 +56,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
     _currentSessionId = session.id;
 
-    // Synka editedFields med provider
     final providerEdited = ref.read(workoutProvider).editedFields;
     _editedFields
       ..clear()
@@ -108,7 +102,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       }
     }
     
-    // Tvinga en rebuild efter att controllers initialiserats
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {});
@@ -124,8 +117,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
     super.dispose();
   }
-
-  // Vi behöver inte längre ta emot ett program, eftersom vi läser det från providern.
 
   void _showWorkoutOptionsDialog() {
     final session = ref.read(workoutProvider).session;
@@ -144,7 +135,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 title: const Text('Edit Program', style: TextStyle(color: Colors.white)),
                 subtitle: const Text('Modify exercises and sets', style: TextStyle(color: Colors.grey)),
                 onTap: () {
-                  Navigator.pop(context); // Stäng menyn
+                  Navigator.pop(context);
                   _editCurrentProgram();
                 },
               ),
@@ -153,8 +144,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 title: const Text('Workout Info', style: TextStyle(color: Colors.white)),
                 subtitle: const Text('View program details', style: TextStyle(color: Colors.grey)),
                 onTap: () {
-                  Navigator.pop(context); // Stäng menyn
-                  // Navigation till program detail kan läggas till här senare
+                  Navigator.pop(context); 
                 },
               ),
             ],
@@ -198,14 +188,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
 
   @override
-  // ÄNDRING 2: build-metoden tar nu bara BuildContext eftersom ref är tillgängligt direkt
   Widget build(BuildContext context) {
     // ÄNDRING 3: Läs det aktuella statet från providern.
     // .watch() gör att skärmen automatiskt byggs om när statet ändras.
     final activeWorkoutState = ref.watch(workoutProvider);
     final session = activeWorkoutState.session;
 
-    // Säkerställ att controllers är initierade när vi har en session
     if (session != null && _controllers.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _initializeControllers();
@@ -219,7 +207,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       });
     }
 
-    // Om inget pass är igång (t.ex. om användaren navigerar hit via en länk av misstag),
+    // Om inget pass är igång (t.ex. om användaren navigerar hit via en länk av misstag eller på något sätt),
     // visa ett felmeddelande.
     if (session == null || !activeWorkoutState.isRunning) {
       return const Scaffold(
@@ -227,7 +215,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       );
     }
 
-    // Snygg formatering för timern
+    // formatering för timern
     String formatDuration(int totalSeconds) {
       final duration = Duration(seconds: totalSeconds);
       final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -238,19 +226,17 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     // Hantera tillbaka-knappen utan dialog
     return WillPopScope(
       onWillPop: () async {
-        // Timer fortsätter att löpa! Ingen pausning.
-        return true; // Tillåt navigering direkt
+        // Timer fortsätter att köra
+        return true; 
       },
       child: GestureDetector(
         onTap: () {
-          // Stäng tangentbordet när användaren klickar utanför textfält
           FocusScope.of(context).unfocus();
         },
         child: Scaffold(
         backgroundColor: Colors.black,
         body: CustomScrollView(
           slivers: [
-            // Clean header med timer
             SliverAppBar(
               expandedHeight: 120,
               floating: false,
@@ -260,7 +246,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                 onPressed: () {
-                  // Timer fortsätter att löpa! Ingen pausning.
                   Navigator.of(context).pop();
                 },
               ),
@@ -325,7 +310,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, exerciseIndex) {
                     final exercise = session.completedExercises[exerciseIndex];
-                    // Count warm-up sets by checking isWarmUp property
                     final warmUpSets = exercise.sets.where((set) => set.isWarmUp).length;
                     
                     return Container(
@@ -333,7 +317,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Övningsnamn - clean header
+                          // Övningsnamn
                           Container(
                             margin: const EdgeInsets.only(bottom: 16),
                             child: Row(
@@ -342,7 +326,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFDC2626), // Röd färg
+                                    color: const Color(0xFFDC2626), 
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Center(
@@ -419,8 +403,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 ),
               ),
             ),
-            
-            // Clean finish workout button - floating bottom
+
+            // Clean finish workout knapp, alltid längst ner
             SliverFillRemaining(
               hasScrollBody: false,
               child: Column(
@@ -471,7 +455,7 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
   final dynamic set;
   final int setIndex;
   final int exerciseIndex;
-  final int warmUpSets; // Number of warm-up sets for this exercise
+  final int warmUpSets; 
   final String weightKey;
   final String repsKey;
   final String notesKey;
@@ -513,7 +497,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 400), // Längre för Material 3 Expressive
+      duration: const Duration(milliseconds: 400), 
       vsync: this,
     );
     _offsetAnimation = Tween<double>(
@@ -521,7 +505,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       end: 0.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOutCubic, // Material 3 Expressive curve
+      curve: Curves.easeOutCubic,
     ));
   }
 
@@ -534,12 +518,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
   void _handlePanUpdate(DragUpdateDetails details) {
     setState(() {
       _swipeOffset += details.delta.dx;
-      _swipeOffset = _swipeOffset.clamp(-60.0, 60.0); // Större range för mjukare känsla
+      _swipeOffset = _swipeOffset.clamp(-60.0, 60.0); 
     });
   }
 
   void _handlePanEnd(DragEndDetails details) {
-    // Material 3 Expressive: Lägre hastighetströskel och mjukare detection
     final horizontalVelocity = details.velocity.pixelsPerSecond.dx.abs();
     final verticalVelocity = details.velocity.pixelsPerSecond.dy.abs();
     final isHorizontalSwipe = horizontalVelocity > verticalVelocity;
@@ -558,10 +541,9 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           (ph[nKey] is String && (ph[nKey] as String).isNotEmpty));
 
       if (hasPlaceholders) {
-        // Provide haptic feedback
+        // haptic feedback
         HapticFeedback.lightImpact();
         
-        // Fill in the controllers and mark as edited
         double? w;
         int? r;
         String? n;
@@ -592,13 +574,12 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       }
     }
     
-    // Material 3 Expressive: Mjuk animation tillbaka med easing curve
     _offsetAnimation = Tween<double>(
       begin: _swipeOffset,
       end: 0.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOutCubic, // Material 3 Expressive curve
+      curve: Curves.easeOutCubic, 
     ));
     
     _animationController.forward(from: 0.0).then((_) {

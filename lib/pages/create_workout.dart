@@ -5,8 +5,8 @@ import '../models/exercise_model.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/exercise_list_item.dart';
-import 'choose_category_screen.dart'; // Importera den nya skärmen
-import '../models/master_exercise_model.dart'; // Importera MasterExercise-modellen
+import 'choose_category_screen.dart'; 
+import '../models/master_exercise_model.dart'; 
 
 
 
@@ -17,7 +17,6 @@ class CreateWorkoutScreen extends StatefulWidget {
   const CreateWorkoutScreen({
     Key? key,
     this.onWorkoutSaved,
-    // NYTT: Lägg till den i konstruktorn
     this.workoutToEdit,
   }) : super(key: key);
 
@@ -29,7 +28,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   final _workoutNameController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isLoading = false;
-  bool _isReordering = false; // Håller koll på om vi kan ändra ordning
+  bool _isReordering = false; 
 
 
   
@@ -37,13 +36,12 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 
   void initState() {
     super.initState();
-    
-    // NYTT: Kontrollera om vi är i "edit mode"
+
+    // Kontrollera om vi är i "edit mode"
     if (widget.workoutToEdit != null) {
       // Fyll i controllern med det befintliga namnet
       _workoutNameController.text = widget.workoutToEdit!.title;
       // Fyll i listan med de befintliga övningarna
-      // VIKTIGT: Vi skapar en ny lista för att undvika att ändra i originalobjektet av misstag
       _exercises = List.from(widget.workoutToEdit!.exercises);
     }
     
@@ -62,7 +60,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: Colors.grey.shade900, // Mörk bakgrundsfärg som i din design
+    backgroundColor: Colors.grey.shade900, 
     builder: (BuildContext bc) {
       return SafeArea(
         child: Padding(
@@ -86,7 +84,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
                   leading: const Icon(Icons.delete, color: Colors.white),
                   title: const Text('Remove', style: TextStyle(color: Colors.white)),
                   onTap: () {
-                    Navigator.of(context).pop(); // Stäng menyn
+                    Navigator.of(context).pop(); 
                     setState(() {
                       _exercises.removeAt(index); // Ta bort övningen från listan
                     });
@@ -99,7 +97,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
                 leading: const Icon(Icons.reorder, color: Colors.white),
                 title: const Text('Change order', style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  Navigator.of(context).pop(); // Stäng menyn
+                  Navigator.of(context).pop(); 
                   // Växla till omordningsläge
                   setState(() {
                     _isReordering = true;
@@ -179,7 +177,6 @@ Future<void> _showEditSetsDialog(Exercise exercise) async {
 }
 
 
-// NY METOD FÖR ATT HANTERA DET NYA FLÖDET
 Future<void> _navigateAndAddExercise() async {
   // Navigera till Skärm A (ChooseCategoryScreen) och VÄNTA på ett resultat.
   // Resultatet kommer att vara ett MasterExercise-objekt om användaren väljer en,
@@ -246,7 +243,7 @@ Future<void> _navigateAndAddExercise() async {
       );
       await DatabaseService(uid: uid).updateWorkoutProgram(updatedProgram);
     } else {
-      // CREATE-LÄGE (din befintliga kod)
+      // CREATE-LÄGE 
       final newProgram = WorkoutProgram(
         id: const Uuid().v4(),
         title: _workoutNameController.text.trim(),
@@ -277,7 +274,7 @@ Future<void> _navigateAndAddExercise() async {
         } 
       }
 
-    } catch (e) { // Fånga även "stack trace"
+    } catch (e) { 
 
     
     if(mounted) {
@@ -296,14 +293,13 @@ Future<void> _navigateAndAddExercise() async {
 Widget build(BuildContext context) {
   return GestureDetector(
     onTap: () {
-      // Ta bort focus när man klickar utanför textfältet
       FocusScope.of(context).unfocus();
     },
     child: Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: Colors.black, // Sätter bakgrundsfärgen
+      backgroundColor: Colors.black, 
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), // Ökat top padding för bättre spacing
+        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -311,7 +307,6 @@ Widget build(BuildContext context) {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  // NYTT: Byt text baserat på läge
                   widget.workoutToEdit == null ? 'Create Workout' : 'Edit Workout',
                   style: TextStyle(
                     color: Colors.white,
@@ -350,14 +345,14 @@ Widget build(BuildContext context) {
                 labelText: 'Name',
                 labelStyle: const TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), // default rundade hörn
+                  borderRadius: BorderRadius.circular(12), 
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), // rundade hörn även här
+                  borderRadius: BorderRadius.circular(12), 
                   borderSide: BorderSide(color: Colors.grey.shade800),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), // rundade hörn när fältet är aktivt
+                  borderRadius: BorderRadius.circular(12), 
                   borderSide: const BorderSide(color: Colors.red),
                 ),
               ),
@@ -365,7 +360,7 @@ Widget build(BuildContext context) {
             const SizedBox(height: 30),
             const Center(
               child: SizedBox(
-                width: 330, // här styr du längden
+                width: 330, 
                 child: Divider(
                   color: Color(0xFFDC2626),
                   thickness: 1,
@@ -374,7 +369,7 @@ Widget build(BuildContext context) {
             ),
             Expanded(
               child: ReorderableListView(
-                // Denna funktion är HJÄRTAT i ReorderableListView.
+                // Denna funktion är centrala delen i ReorderableListView.
                 // Den anropas när användaren har dragit ett objekt och släppt det på en ny plats.
                 onReorder: (int oldIndex, int newIndex) {
                   setState(() {
@@ -417,7 +412,7 @@ Widget build(BuildContext context) {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Color(0xFFDC2626),
-                    minimumSize: Size(MediaQuery.of(context).size.width * 0.8, 55), // 80% av skärmbredden
+                    minimumSize: Size(MediaQuery.of(context).size.width * 0.8, 55), 
                   ),
                   child: const Text(
                     'Add exercise',
@@ -430,7 +425,7 @@ Widget build(BuildContext context) {
                 ),
               ),
             ),
-            SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40), // Dynamisk höjd
+            SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40),
           ],
         ),
       ),

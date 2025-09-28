@@ -15,31 +15,30 @@ class WorkoutDetailPage extends StatelessWidget {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24), // Subtil röd accent
+          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24), // Röd accent
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           session.programTitle,
           style: const TextStyle(
-            color: Colors.white, // Tillbaka till vit
+            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
-        centerTitle: false, // Android-stil, vänsterställd
+        centerTitle: false, // Android-stil
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header stats card - Android Material style
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF18181B),
-                borderRadius: BorderRadius.circular(12), // Mindre rundning
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: const Color(0xFF2A2A2A),
                   width: 0.5,
@@ -86,8 +85,6 @@ class WorkoutDetailPage extends StatelessWidget {
             ),
             
             const SizedBox(height: 24),
-            
-            // Exercises list
             Text(
               'Exercises',
               style: const TextStyle(

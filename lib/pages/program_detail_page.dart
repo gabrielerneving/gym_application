@@ -46,7 +46,6 @@ class ProgramDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header stats card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -94,8 +93,6 @@ class ProgramDetailPage extends StatelessWidget {
             ),
             
             const SizedBox(height: 24),
-            
-            // Exercises list
             Text(
               'Exercises',
               style: const TextStyle(

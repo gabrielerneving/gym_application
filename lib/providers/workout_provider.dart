@@ -6,19 +6,14 @@ import '../models/workout_model.dart';
 import '../models/workout_session_model.dart';
 import '../services/database_service.dart';
 
-// ====================================================================
-// KLASS 1: STATE-OBJEKTET
-// Detta är ett enkelt, "dumt" objekt som bara håller datan.
-// Den är "immutable", vilket betyder att vi skapar en ny kopia varje
-// gång något ändras, vilket är en bra praxis med Riverpod.
-// ====================================================================
+// State-objekt för aktivt träningspass (immutable)
 class ActiveWorkoutState {
   final WorkoutSession? session;
   final bool isRunning;
   final int elapsedSeconds;
-  final WorkoutSession? staleSession; // För att hantera gamla, bortglömda pass
-  final Set<String> editedFields; // Håller koll på vilka fält som är redigerade i pågående pass
-  final Map<String, dynamic> placeholders; // Basvärden från föregående avslutade pass (per fält)
+  final WorkoutSession? staleSession; // Gamla obesvarade pass
+  final Set<String> editedFields; // Spårar redigerade fält
+  final Map<String, dynamic> placeholders; // Basvärden från förra passet
 
   ActiveWorkoutState({
     this.session,
@@ -30,13 +25,13 @@ class ActiveWorkoutState {
   })  : editedFields = editedFields ?? <String>{},
         placeholders = placeholders ?? <String, dynamic>{};
 
-  // En hjälpmetod för att enkelt skapa en ny, uppdaterad kopia av statet.
+  // Skapar ny kopia av state med uppdateringar
   ActiveWorkoutState copyWith({
     WorkoutSession? session,
     bool? isRunning,
     int? elapsedSeconds,
     WorkoutSession? staleSession,
-    bool clearStaleSession = false, // Specialflagga för att kunna nollställa
+    bool clearStaleSession = false, // Flagga för att nollställa staleSession
     Set<String>? editedFields,
     Map<String, dynamic>? placeholders,
   }) {
@@ -51,11 +46,7 @@ class ActiveWorkoutState {
   }
 }
 
-// ====================================================================
-// KLASS 2: STATE NOTIFIER ("HJÄRNAN")
-// Detta är den aktiva klassen som innehåller all logik för att
-// starta, pausa, uppdatera och avsluta ett träningspass.
-// ====================================================================
+// StateNotifier som hanterar träningspass-logik
 class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
   final DatabaseService dbService;
   Timer? _timer;
@@ -63,20 +54,18 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
   WorkoutStateNotifier(this.dbService)
     : super(ActiveWorkoutState(editedFields: <String>{}, placeholders: <String, dynamic>{}));
 
-  // ----- PUBLIKA METODER (anropas från UI) -----
-
 Future<void> startWorkout(WorkoutProgram program) async {
   if (state.isRunning) return;
 
-  // STEG 1: Hitta det senaste passet av denna typ
+  // STEG 1: Hitta senaste passet av denna typ
   final lastSession = await dbService.findLastSessionOfProgram(program.title);
   
-  // STEG 2: Skapa det nya passet med TOMMA värden (inte förra passets värden)
+  // STEG 2: Skapa nytt pass med tomma värden
   final initialExercises = program.exercises.map((currentExercise) {
     return CompletedExercise(
       name: currentExercise.name,
       sets: List.generate(currentExercise.sets, (setIndex) {
-        // Första setIndex < warmUpSets är warm-up sets
+        // Första sets är warm-up
         final isWarmUpSet = setIndex < currentExercise.warmUpSets;
         return CompletedSet(
           weight: 0, 

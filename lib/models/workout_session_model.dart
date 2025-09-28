@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'exercise_model.dart'; // Vi återanvänder Exercise-modellen!
-// Vi skapar en liten hjälpklass för att representera ett slutfört set
+import 'exercise_model.dart'; 
 class CompletedSet {
   final double weight;
   final int reps;
-  final String? notes; // NYTT: Lägg till ett valfritt fält för anteckningar
-  final bool isWarmUp; // NYTT: Markera om detta är ett warm-up set
+  final String? notes; 
+  final bool isWarmUp; 
 
   CompletedSet({
     required this.weight, 
@@ -15,7 +14,7 @@ class CompletedSet {
     this.isWarmUp = false, // Default är working set
   });
 
-  // copyWith metod för att skapa uppdaterade kopior
+  // copyWith metod för att skapa uppdaterade kopior, användbar för immutability vilket innebär att objekt inte ändras direkt utan en ny kopia skapas med ändringar
   CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp}) {
     return CompletedSet(
       weight: weight ?? this.weight,
@@ -39,13 +38,12 @@ class CompletedSet {
     return CompletedSet(
       weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
       reps: data['reps'] ?? 0,
-      notes: data['notes'], // Kan vara null, det är okej
-      isWarmUp: data['isWarmUp'] ?? false, // Default false för backward compatibility
+      notes: data['notes'], 
+      isWarmUp: data['isWarmUp'] ?? false, 
     );
   }
 }
 
-// Vi uppdaterar den här klassen också
 class CompletedExercise {
   final String name;
   final List<CompletedSet> sets;
@@ -70,13 +68,11 @@ class CompletedExercise {
 
 
 
-// Huvudmodellen för sessionen
 class WorkoutSession {
   final String id;
   final String programTitle;
   final DateTime date;
   final int durationInMinutes;
-  // ÄNDRAD: Använder vår nya, mer detaljerade modell
   final List<CompletedExercise> completedExercises;
   
 
@@ -104,7 +100,6 @@ class WorkoutSession {
   return WorkoutSession(
     id: data['id'] ?? '',
     programTitle: data['programTitle'] ?? '',
-    // Firestore sparar Timestamps, vi måste konvertera dem till DateTime
     date: data['date'] != null ? (data['date'] as Timestamp).toDate() : DateTime.now(),
     durationInMinutes: data['durationInMinutes'] ?? 0,
     completedExercises: exercises,

@@ -99,17 +99,11 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Exercise selector
                       _buildExerciseSelector(),
                       const SizedBox(height: 24),
-
-                      // Personal record card
                       if (selectedExercise != null && personalRecords.containsKey(selectedExercise))
                         _buildPersonalRecordCard(),
-
                       const SizedBox(height: 24),
-
-                      // Progression chart
                       if (selectedExercise != null)
                         _buildProgressionChart(),
                     ],

@@ -1,8 +1,8 @@
-import 'exercise_model.dart'; // Importera din Exercise-modell
+import 'exercise_model.dart'; 
 
 class WorkoutProgram {
   String title;
-  List<Exercise> exercises; // Byt ut exerciseCount mot en lista
+  List<Exercise> exercises; 
   String id;
 
   // Enkel getter för att få antalet övningar
@@ -14,7 +14,7 @@ class WorkoutProgram {
     required this.id,
   });
 
-  // FACTORY CONSTRUCTOR: Skapar ett WorkoutProgram från Firestore-data (en Map)
+  // Skapar ett WorkoutProgram från Firestore-data (en Map)
   factory WorkoutProgram.fromFirestore(Map<String, dynamic> data) {
     // Konvertera listan av exercise-maps från Firestore tillbaka till en lista av Exercise-objekt
     var exercisesList = data['exercises'] as List;

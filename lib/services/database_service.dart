@@ -1,32 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/workout_model.dart'; // Importera din modell
-import '../models/master_exercise_model.dart'; // Importera din MasterExercise-modell
-import '../models/exercise_model.dart'; // Importera din Exercise-modell
-import '../models/workout_session_model.dart'; // Importera din WorkoutSession-modell
+import '../models/workout_model.dart';
+import '../models/master_exercise_model.dart';
+import '../models/exercise_model.dart';
+import '../models/workout_session_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DatabaseService {
-  // Hämta en instans av Firestore
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // En referens till den specifika användarens data
+  // Användarens unika ID
   final String uid;
   DatabaseService({required this.uid});
 
-  // Metod för att spara ett nytt träningsprogram
+  // Sparar träningsprogram i Firebase
   Future<void> saveWorkoutProgram(WorkoutProgram program) async {
     try {
-      // Vi skapar en datastruktur:
-      // users -> {userId} -> workout_programs -> {programId} -> {programdata}
+      // Firebase-struktur: users -> {userId} -> workout_programs -> {programId}
       
-      // Skapa en referens till collectionen för den här användarens träningsprogram
+      // Referens till användarens träningsprogram
       final collectionRef = _db.collection('users').doc(uid).collection('workout_programs');
 
-      // Använd program.id som dokument-ID
       await collectionRef.doc(program.id).set({
         'title': program.title,
         'id': program.id,
-        // Vi måste konvertera listan med övningar till ett format Firestore förstår (en lista av Maps)
+        // Konvertera övningar till Firestore-format
         'exercises': program.exercises.map((exercise) => {
           'id': exercise.id,
           'name': exercise.name,
@@ -37,21 +34,16 @@ class DatabaseService {
       });
     } catch (e) {
       print('Error saving workout program: $e');
-      // Här kan du kasta ett eget fel om du vill hantera det i UI:t
       rethrow;
     }
   }
 
-// Metod för att hämta en STREAM av träningsprogram
+// Hämtar stream av träningsprogram (real-time updates)
 Stream<List<WorkoutProgram>> getWorkoutPrograms() {
   final collectionRef = _db.collection('users').doc(uid).collection('workout_programs');
 
-  // Lyssna på ändringar i collectionen
   return collectionRef.snapshots().map((snapshot) {
-    // För varje "snapshot" (ny version av datan), konvertera varje dokument
-    // till ett WorkoutProgram-objekt.
     return snapshot.docs.map((doc) {
-      // Vi behöver en metod i vår modell för att konvertera Firestore-data till ett objekt
       return WorkoutProgram.fromFirestore(doc.data());
     }).toList();
   });

@@ -18,7 +18,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   int _selectedIndex = 3; // Index 3 är den aktiva "profil"-ikonen
   DatabaseService? _dbService;
   
-  // Statistik data som vi laddar från databasen
+  // Statistik data från databasen
   int workoutsThisMonth = 0;
   int totalWorkouts = 0;
   double totalHours = 0.0;
@@ -84,10 +84,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Huvudinnehåll
           Column(
             children: [
-              // AppBar-området
               Container(
                 height: 80,
                 padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
@@ -119,7 +117,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ],
                 ),
               ),
-              // Scrollbart innehåll
               Expanded(
                 child: isLoading 
                   ? const Center(
@@ -147,7 +144,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100),
                         child: Column(
                         children: [
-                          // Grid med 2x2 statistik-kort
+                          // 2x2 statistik-kort
                           GridView.count(
                             crossAxisCount: 2,
                             shrinkWrap: true,
@@ -184,18 +181,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
-
-                          // Progression button
                           _buildProgressionButton(),
-                          
                           const SizedBox(height: 16),
-
-                          // Muscle groups button
                           _buildMuscleGroupsButton(),
-                          
                           const SizedBox(height: 24),
-
-                          // Kort för populära workouts
                           PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
                         ],
                         ),
@@ -232,7 +221,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   _buildNavItem(Icons.home_outlined, 0),
                   _buildNavItem(Icons.fitness_center_outlined, 1),
                   _buildNavItem(Icons.history, 2),
-                  _buildNavItem(Icons.bar_chart_outlined, 3), // Detta är den aktiva
+                  _buildNavItem(Icons.bar_chart_outlined, 3), // Aktiv ikon
                 ],
               ),
             ),

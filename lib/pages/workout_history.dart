@@ -12,10 +12,8 @@ class WorkoutHistoryScreen extends StatefulWidget {
 }
 
 class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
-  // Ta bort den hårdkodade listan helt och hållet
-  // final List<WorkoutSession> _workoutHistory = [ ... ];
-
-  int _selectedIndex = 2; // Index för din bottom nav bar
+  // Använder nu Firebase istället för hårdkodad data
+  int _selectedIndex = 2; // Index för bottom nav bar
 
   @override
   Widget build(BuildContext context) {
@@ -32,10 +30,8 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Huvudinnehåll
           Column(
             children: [
-              // AppBar-området
               Container(
                 height: 80,
                 padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
@@ -52,7 +48,6 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Lista med träningshistorik
               Expanded(
                 child: StreamBuilder<List<WorkoutSession>>(
                   stream: dbService.getWorkoutSessions(),
@@ -76,7 +71,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                     final workoutHistory = snapshot.data!;
 
                     return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100), // Extra bottom padding för navbar
+                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100), // Extra padding för navbar
                       itemCount: workoutHistory.length,
                       itemBuilder: (context, index) {
                         return WorkoutHistoryWidget(session: workoutHistory[index]);
@@ -87,8 +82,6 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
               ),
             ],
           ),
-
-          // Flytande navbar
           Positioned(
             bottom: 20,
             left: 16,

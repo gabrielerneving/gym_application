@@ -14,7 +14,7 @@ class CreateExerciseScreen extends StatefulWidget {
 class _CreateExerciseScreenState extends State<CreateExerciseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  String? _selectedCategory; // För att hålla reda på vald kategori
+  String? _selectedCategory; // Håller reda på vald kategori
   bool _isLoading = false;
 
   final List<String> _categories = const [
@@ -42,7 +42,7 @@ class _CreateExerciseScreenState extends State<CreateExerciseScreen> {
           Navigator.of(context).pop();
         }
       } catch (e) {
-        // Visa fel
+        // Error handling kan läggas till här
       } finally {
         if (mounted) {
           setState(() { _isLoading = false; });

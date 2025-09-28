@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gym_app/pages/active_workout_screen.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
-import '../widgets/workout_widget.dart'; // Din befintliga widget
+import '../widgets/workout_widget.dart'; 
 import '../providers/workout_provider.dart';
 import '../pages/program_detail_page.dart';
 import 'create_workout.dart';
@@ -23,11 +23,11 @@ Future<bool> _showDeleteConfirmationDialog(BuildContext context, String programT
         content: Text('Are you sure you want to delete "$programTitle"? This action cannot be undone.'),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false), // Returnera false
+            onPressed: () => Navigator.of(context).pop(false), 
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true), // Returnera true
+            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -77,7 +77,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
               leading: const Icon(Icons.edit),
               title: const Text('Edit'),
               onTap: () {
-                Navigator.of(context).pop(); // Stäng menyn
+                Navigator.of(context).pop(); 
                 // Navigera till CreateWorkoutScreen och skicka med programmet
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (context) => CreateWorkoutScreen(workoutToEdit: program),
@@ -88,7 +88,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete', style: TextStyle(color: Colors.red)),
               onTap: () async {
-                Navigator.of(context).pop(); // Stäng menyn
+                Navigator.of(context).pop(); 
                 final shouldDelete = await _showDeleteConfirmationDialog(context, program.title);
                 if (shouldDelete) {
                   await dbService.deleteWorkoutProgram(program.id);
@@ -106,7 +106,6 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // NYTT: Hämta den inloggade användarens unika ID
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     // Säkerhetskoll ifall något skulle gå fel och vi inte har ett UID
@@ -118,14 +117,14 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
       );
     }
 
-    // NYTT: Skapa en instans av vår DatabaseService
+    // Skapa en instans av vår DatabaseService
     final dbService = DatabaseService(uid: uid);
 
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 0, 0, 0),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), // Ökat top padding för bättre spacing
-        // NYTT: StreamBuilder för att hämta och visa data i realtid
+        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
+        // StreamBuilder för att hämta och visa data i realtid
         child: StreamBuilder<List<WorkoutProgram>>(
           stream: dbService.getWorkoutPrograms(),
           builder: (context, snapshot) {
@@ -144,10 +143,9 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
               return _buildEmptyState(); // Anropar en snyggare "tom" vy
             }
 
-            // Om vi har data!
+            // Om vi har data
             final programs = snapshot.data!;
 
-            // Detta är din befintliga UI-struktur, nu med dynamisk data
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -159,7 +157,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                // ÄNDRAT: Visar det faktiska antalet sparade pass
+                // Visar det faktiska antalet sparade pass
                 Text(
                   '${programs.length} workouts saved',
                   style: const TextStyle(
@@ -168,7 +166,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                   ),
                 ),
                 Expanded(
-                  // ÄNDRAT: Använder ListView.builder för att effektivt bygga listan
+                  // Använder ListView.builder för att effektivt bygga listan
                   child: ListView.builder(
                     itemCount: programs.length,
                     itemBuilder: (context, index) {
@@ -179,7 +177,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           .take(3)
                           .join(', ');
 
-                      // Använder din befintliga WorkoutWidget!
+                      // Använder befintliga WorkoutWidget!
                       return WorkoutWidget(
                         title: program.title,
                         description: '$description...',

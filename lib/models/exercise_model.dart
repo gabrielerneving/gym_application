@@ -1,6 +1,6 @@
 class Exercise {
   String name;
-  int sets; // Total sets (working + warm-up) för backward compatibility
+  int sets; // Totala mängden sets (working + warm-up)
   int workingSets; // Bara working sets som räknas i statistik
   int warmUpSets; // Warm-up sets som INTE räknas i statistik
   String id;
@@ -19,19 +19,19 @@ class Exercise {
     // Säkerställ att total sets matchar
     sets = workingSets + warmUpSets;
   }
-  
-  // Factory constructor för att skapa en Exercise från en Map
+
+  // Factory constructor för att skapa en Exercise från en Map från Firebase
   factory Exercise.fromMap(Map<String, dynamic> data) {
     return Exercise(
       id: data['id'] ?? '',
       name: data['name'] ?? 'No Name',
       sets: data['sets'] ?? 0,
-      workingSets: data['workingSets'] ?? data['sets'] ?? 0, // Fallback till sets för backward compatibility
+      workingSets: data['workingSets'] ?? data['sets'] ?? 0, 
       warmUpSets: data['warmUpSets'] ?? 0,
     );
   }
   
-  // Convert Exercise to Map för Firebase
+  // Convertera Exercise to Map för Firebase
   Map<String, dynamic> toMap() {
     return {
       'id': id,

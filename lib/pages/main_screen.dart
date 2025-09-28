@@ -60,8 +60,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
 
     _widgetOptions = <Widget>[
     HomeScreen(
-      onSwitchToProfileTab: () {  // Här definierar du vad som ska hända
-        _onItemTapped(3); // Anropa din befintliga metod för att byta flik till index 3 (Profile)
+      onSwitchToProfileTab: () {  
+        _onItemTapped(3); 
       },
     ),
       CreateWorkoutScreen(
@@ -99,7 +99,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
   }
 
 Widget build(BuildContext context) {
-  // Läs av workoutProvider som förut
   final activeWorkout = ref.watch(workoutProvider);
 
   // Sätt status bar stil
@@ -381,8 +380,8 @@ Widget build(BuildContext context) {
                                       ? Colors.white
                                       : Colors.grey[500],
                                   size: _selectedIndex == index 
-                                      ? (index == 1 ? 32 : 26)  // Plus-ikonen blir 32px när aktiv
-                                      : (index == 1 ? 28 : 24), // Plus-ikonen blir 28px när inaktiv
+                                      ? (index == 1 ? 32 : 26)  
+                                      : (index == 1 ? 28 : 24), 
                                 ),
                               ),
                             );

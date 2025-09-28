@@ -48,7 +48,6 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
     });
 
     try {
-      // Beräkna datum baserat på vald period
       final now = DateTime.now();
       DateTime? startDate;
       DateTime? endDate = now;
@@ -66,7 +65,6 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
           break;
       }
 
-      // Använd period-specifika metoder
       final Map<String, int> counts;
       if (startDate != null && endDate != null) {
         counts = await _dbService!.getMuscleGroupSetCountsInPeriod(
@@ -77,7 +75,6 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
         counts = await _dbService!.getMuscleGroupSetCounts();
       }
 
-      // Beräkna procent och mest tränade muskler
       final totalSets = counts.values.fold<int>(0, (sum, count) => sum + count);
       final percentages = <String, double>{};
       final stats = <MuscleGroupStat>[];
@@ -92,7 +89,6 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
         ));
       }
 
-      // Sortera stats
       stats.sort((a, b) => b.setCount.compareTo(a.setCount));
 
       if (mounted) {
@@ -160,7 +156,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
         ),
         centerTitle: false,
         actions: [
-          // Toggle mellan radar och bar chart
+          // Toggle mellan chart-typer
           IconButton(
             icon: Icon(
               selectedChartType == 0 ? Icons.bar_chart : Icons.radar,
@@ -221,19 +217,12 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                     child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Time period selector
                       _buildTimePeriodSelector(),
                       const SizedBox(height: 16),
-
-                      // Chart type selector
                       _buildChartTypeSelector(),
                       const SizedBox(height: 24),
-
-                      // Main chart
                       _buildMainChart(),
                       const SizedBox(height: 24),
-
-                      // Top muscle groups list
                       _buildTopMuscleGroupsList(),
                     ],
                     ),
@@ -470,11 +459,8 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   ),
           ),
         ],
-
       ),
-      
     );
-    
   }
 
   Widget _buildTopMuscleGroupsList() {
