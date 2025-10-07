@@ -81,6 +81,56 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     }
   }
 
+  Future<void> _showLogoutConfirmation(BuildContext context) async {
+    final theme = ref.watch(themeProvider);
+    
+    final bool? shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: theme.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Sign Out',
+            style: TextStyle(
+              color: theme.text,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to sign out?',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: theme.textSecondary),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.primary,
+              ),
+              child: const Text(
+                'Sign Out',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout == true) {
+      await AuthService().signOut();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
@@ -130,9 +180,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       child: IconButton(
                         icon: Icon(Icons.logout, color: theme.text),
                         tooltip: 'Log out',
-                        onPressed: () async {
-                          await AuthService().signOut();
-                        },
+                        onPressed: () => _showLogoutConfirmation(context),
                       ),
                     ),
                   ],
@@ -223,7 +271,22 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               decoration: BoxDecoration(
                 color: theme.card,
                 borderRadius: BorderRadius.circular(30),
-               
+                boxShadow: [
+                  // Huvudskugga - mjukare och mindre aggressiv
+                  BoxShadow(
+                    color: theme.primary.withOpacity(0.04),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                    spreadRadius: 0,
+                  ),
+                  // Liten skugga nära navbaren
+                  BoxShadow(
+                    color: theme.primary.withOpacity(0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                    spreadRadius: -1,
+                  ),
+                ],
                 border: Border.all(
                   color: theme.textSecondary.withOpacity(0.1),
                   width: 0.5,

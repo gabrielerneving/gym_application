@@ -295,15 +295,19 @@ Widget build(BuildContext context) {
               color: theme.card,
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
+                // Huvudskugga - mjukare och mindre aggressiv
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: theme.primary.withOpacity(0.04),
                   blurRadius: 20,
-                  offset: const Offset(0, 8),
+                  offset: const Offset(0, 6),
+                  spreadRadius: 0,
                 ),
+                // Liten skugga nära navbaren
                 BoxShadow(
-                  color: theme.primary.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2)
+                  color: theme.primary.withOpacity(0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                  spreadRadius: -1,
                 ),
               ],
               border: Border.all(

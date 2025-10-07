@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/auth_service.dart';
+import 'providers/theme_provider.dart';
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
 
   @override
-  _AuthScreenState createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   // Enkel state för att växla mellan Login och Register
   bool _isLogin = true; 
   bool _isLoading = false;
@@ -75,7 +77,10 @@ void _submitAuthForm() async {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    
     return Scaffold(
+      backgroundColor: theme.background,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -86,7 +91,11 @@ void _submitAuthForm() async {
               children: [
                 Text(
                   _isLogin ? 'Login' : 'Create Account',
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 32, 
+                    fontWeight: FontWeight.bold,
+                    color: theme.text,
+                  ),
                 ),
                 const SizedBox(height: 40),
 
@@ -94,9 +103,24 @@ void _submitAuthForm() async {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(color: theme.text),
                   decoration: InputDecoration(
                     labelText: 'Email',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    labelStyle: TextStyle(color: theme.textSecondary),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.textSecondary.withOpacity(0.3)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.textSecondary.withOpacity(0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.primary, width: 2),
+                    ),
+                    fillColor: theme.card,
+                    filled: true,
                   ),
                   validator: (value) {
                     if (value == null || !value.contains('@')) {
@@ -111,9 +135,24 @@ void _submitAuthForm() async {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: true, // Döljer lösenordet
+                  style: TextStyle(color: theme.text),
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    labelStyle: TextStyle(color: theme.textSecondary),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.textSecondary.withOpacity(0.3)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.textSecondary.withOpacity(0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: theme.primary, width: 2),
+                    ),
+                    fillColor: theme.card,
+                    filled: true,
                   ),
                   validator: (value) {
                     if (value == null || value.length < 6) {
@@ -130,8 +169,11 @@ void _submitAuthForm() async {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _submitAuthForm,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
+                      backgroundColor: theme.primary,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 2,
+                      shadowColor: theme.primary.withOpacity(0.3),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -153,10 +195,17 @@ void _submitAuthForm() async {
                       _isLogin = !_isLogin;
                     });
                   },
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.primary,
+                  ),
                   child: Text(
                     _isLogin
                         ? 'Don\'t have an account? Register'
                         : 'Already have an account? Login',
+                    style: TextStyle(
+                      color: theme.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],

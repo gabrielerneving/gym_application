@@ -4,6 +4,56 @@ import '../services/auth_service.dart';
 import '../widgets/theme_selector.dart';
 import '../providers/theme_provider.dart';
 
+Future<void> _showLogoutConfirmation(BuildContext context, WidgetRef ref) async {
+  final theme = ref.watch(themeProvider);
+  
+  final bool? shouldLogout = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        backgroundColor: theme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Sign Out',
+          style: TextStyle(
+            color: theme.text,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to sign out?',
+          style: TextStyle(color: theme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: theme.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.primary,
+            ),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (shouldLogout == true) {
+    await AuthService().signOut();
+  }
+}
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -83,9 +133,7 @@ class SettingsScreen extends ConsumerWidget {
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        await AuthService().signOut();
-                      },
+                      onPressed: () => _showLogoutConfirmation(context, ref),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: currentTheme.primaryLight,
                         foregroundColor: Colors.white,
