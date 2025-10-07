@@ -98,16 +98,70 @@ class AppTheme {
     error: Color(0xFFEF4444),
   );
 
+  // Ocean Blue theme - Deep blues with elegant gradients
+  static const oceanBlueTheme = AppColors(
+    primary: Color(0xFF1E40AF),        // Deep ocean blue
+    primaryLight: Color(0xFF3B82F6),   // Bright blue
+    background: Color(0xFF0F172A),     // Deep navy background
+    backgroundDark: Color(0xFF020617), // Almost black navy
+    card: Color(0xFF1E293B),           // Dark blue-gray cards
+    surface: Color(0xFF334155),        // Medium blue-gray surface
+    accent: Color(0xFF60A5FA),         // Light blue accent
+    text: Color(0xFFE2E8F0),           // Light blue-white text
+    textSecondary: Color(0xFF94A3B8),  // Blue-gray secondary text
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    error: Color(0xFFEF4444),
+  );
+
+  // Forest Green theme - Rich greens with nature vibes
+  static const forestGreenTheme = AppColors(
+    primary: Color(0xFF059669),        // Rich emerald green
+    primaryLight: Color(0xFF10B981),   // Bright green
+    background: Color(0xFF0C1E0F),     // Deep forest background
+    backgroundDark: Color(0xFF064E3B), // Dark forest green
+    card: Color(0xFF1F2937),           // Dark green-gray cards
+    surface: Color(0xFF374151),        // Medium green-gray surface
+    accent: Color(0xFF34D399),         // Light mint green accent
+    text: Color(0xFFECFDF5),           // Light green-white text
+    textSecondary: Color(0xFF9CA3AF),  // Green-gray secondary text
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    error: Color(0xFFEF4444),
+  );
+
+  // Lavender Dreams theme - Soft feminine pinks with subtle lavender
+  static const lavenderDreamsTheme = AppColors(
+    primary: Color(0xFFE879F9),        // Soft pink-magenta
+    primaryLight: Color(0xFFF0ABFC),   // Light pink-lavender
+    background: Color(0xFFFDF2F8),     // Very light pink background
+    backgroundDark: Color(0xFFFFFFFF), // Pure white
+    card: Color(0xFFFFFFFF),           // White cards with subtle shadow
+    surface: Color(0xFFFCE7F3),        // Light pink surface
+    accent: Color(0xFFD946EF),         // Bright magenta accent
+    text: Color(0xFF831843),           // Deep pink text
+    textSecondary: Color(0xFFA21CAF),  // Medium pink for secondary text
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    error: Color(0xFFEF4444),
+  );
+
   // List of all available themes
   static const List<AppColors> allThemes = [
     darkRedTheme,
     pinkTheme,
+    oceanBlueTheme,
+    forestGreenTheme,
+    lavenderDreamsTheme,
   ];
 
   // Theme names
   static const List<String> themeNames = [
     'Dark Red',
     'Pink',
+    'Ocean Blue',
+    'Forest Green',
+    'Lavender Dreams',
   ];
 
   /// Get theme by index

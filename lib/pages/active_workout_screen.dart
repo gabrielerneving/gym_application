@@ -820,17 +820,22 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
               fontSize: 15,
               fontWeight: FontWeight.w400,
             ),
-            border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             filled: true,
-            fillColor: theme.card.withOpacity(0.3),
+            fillColor: theme.card.withOpacity(0.8),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
+              borderSide: BorderSide(
+                color: theme.textSecondary.withOpacity(0.3),
+                width: 1,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Colors.white, width: 1),
+              borderSide: BorderSide(
+                color: theme.primary,
+                width: 2,
+              ),
             ),
           ),
           keyboardType: keyboardType,

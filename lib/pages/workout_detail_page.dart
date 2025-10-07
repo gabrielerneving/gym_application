@@ -128,7 +128,7 @@ class WorkoutDetailPage extends ConsumerWidget {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFDC2626), // Din röda färg
+                            color: theme.primary, // Använd tema-färg istället
                             borderRadius: BorderRadius.circular(8), // Lite mer rundning
                           ),
                           child: Center(

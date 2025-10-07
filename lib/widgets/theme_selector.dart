@@ -111,12 +111,18 @@ class _ThemeButton extends ConsumerWidget {
                   : null,
             ),
             const SizedBox(height: 8),
-            Text(
-              name,
-              style: TextStyle(
-                color: isSelected ? currentTheme.text : currentTheme.textSecondary,
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected ? currentTheme.text : currentTheme.textSecondary,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
             ),
           ],

@@ -33,7 +33,7 @@ class ProgramDetailPage extends ConsumerWidget {
         centerTitle: false,
         actions: [
           IconButton(
-            icon: Icon(Icons.edit, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),
+            icon: Icon(Icons.edit, color: theme.primary.withOpacity(0.8), size: 24),
             onPressed: () {
               Navigator.push(
                 context,
