@@ -179,15 +179,15 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
               isExpanded: true,
               dropdownColor: theme.card,
               icon: Icon(Icons.arrow_drop_down, color: theme.textSecondary),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: theme.text,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
               items: exerciseNames.map((String exercise) {
                 return DropdownMenuItem<String>(
                   value: exercise,
-                  child: Text(exercise),
+                  child: Text(exercise, style: TextStyle(color: theme.text)),
                 );
               }).toList(),
               onChanged: (String? newValue) {

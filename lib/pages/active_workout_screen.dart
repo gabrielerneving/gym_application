@@ -249,14 +249,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               backgroundColor: theme.background,
               elevation: 0,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                icon: Icon(Icons.arrow_back, color: theme.text, size: 20),
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                  icon: Icon(Icons.edit, color: theme.text, size: 20),
                   onPressed: () => _showWorkoutOptionsDialog(),
                 ),
               ],
@@ -287,14 +287,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: theme.textSecondary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withOpacity(0.2)),
+                            border: Border.all(color: theme.textSecondary.withOpacity(0.2)),
                           ),
                           child: Text(
                             formatDuration(activeWorkoutState.elapsedSeconds),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: theme.text,
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
                               fontFeatures: [FontFeature.tabularFigures()],
@@ -338,7 +338,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                     child: Text(
                                       String.fromCharCode(65 + exerciseIndex),
                                       style: const TextStyle(
-                                        color: Color.fromARGB(255, 255, 255, 255),
+                                        color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -349,8 +349,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 Expanded(
                                   child: Text(
                                     exercise.name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: theme.text,
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -374,9 +374,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                               // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
                               final providerState = ref.watch(workoutProvider);
                               final edited = providerState.editedFields;
-                              final weightColor = edited.contains(weightKey) ? Colors.white : theme.textSecondary;
-                              final repsColor = edited.contains(repsKey) ? Colors.white : theme.textSecondary;
-                              final notesColor = edited.contains(notesKey) ? Colors.white : theme.textSecondary;
+                              final weightColor = edited.contains(weightKey) ? theme.text : theme.textSecondary;
+                              final repsColor = edited.contains(repsKey) ? theme.text : theme.textSecondary;
+                              final notesColor = edited.contains(notesKey) ? theme.text : theme.textSecondary;
                               
                               return SwipeableSetRowNew(
                                 set: set,
@@ -648,8 +648,8 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                           )
                         : Text(
                             '${widget.setIndex - widget.warmUpSets + 1}',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: theme.text,
                               fontWeight: FontWeight.w500,
                               fontSize: 12,
                             ),

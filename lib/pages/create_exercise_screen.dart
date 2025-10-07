@@ -77,13 +77,33 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
+                style: TextStyle(color: theme.text),
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: theme.textSecondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: theme.primary),
+                  ),
+                ),
                 validator: (value) => (value == null || value.isEmpty) ? 'Please enter a name' : null,
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                hint: const Text('Category'),
+                style: TextStyle(color: theme.text),
+                dropdownColor: theme.card,
+                hint: Text('Category', style: TextStyle(color: theme.textSecondary)),
+                decoration: InputDecoration(
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: theme.textSecondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: theme.primary),
+                  ),
+                ),
                 onChanged: (String? newValue) {
                   setState(() {
                     _selectedCategory = newValue;
@@ -92,7 +112,7 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
                 items: _categories.map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
-                    child: Text(value),
+                    child: Text(value, style: TextStyle(color: theme.text)),
                   );
                 }).toList(),
                 validator: (value) => value == null ? 'Please select a category' : null,

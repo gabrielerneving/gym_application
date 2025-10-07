@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../widgets/theme_selector.dart';
 import '../providers/theme_provider.dart';
@@ -11,108 +10,30 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTheme = ref.watch(themeProvider);
-    final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       backgroundColor: currentTheme.background,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar
-          SliverAppBar(
-            expandedHeight: 120,
-            floating: false,
-            pinned: true,
-            backgroundColor: currentTheme.card,
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'Settings',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      currentTheme.primary.withOpacity(0.3),
-                      currentTheme.background,
-                    ],
-                  ),
-                ),
-              ),
-            ),
+      appBar: AppBar(
+        title: Text(
+          'Settings',
+          style: TextStyle(
+            color: currentTheme.text,
+            fontWeight: FontWeight.bold,
           ),
+        ),
+        backgroundColor: currentTheme.background,
+        elevation: 0,
+        iconTheme: IconThemeData(color: currentTheme.text),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
 
-          // Content
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
+          // Theme Section
+          const ThemeSelector(),
 
-                // User Info Section
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: currentTheme.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: currentTheme.surface,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: currentTheme.primary,
-                        child: Text(
-                          user?.email?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user?.email ?? 'User',
-                              style: TextStyle(
-                                color: currentTheme.text,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Gym App User',
-                              style: TextStyle(
-                                color: currentTheme.textSecondary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Theme Section
-                const ThemeSelector(),
-
-                const SizedBox(height: 32),
+          const SizedBox(height: 32),
 
                 // App Info Section
                 Padding(
@@ -191,10 +112,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
 
-                const SizedBox(height: 40),
-              ],
-            ),
-          ),
+          const SizedBox(height: 40),
         ],
       ),
     );

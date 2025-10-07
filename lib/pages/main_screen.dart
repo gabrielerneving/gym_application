@@ -23,6 +23,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
   late int _selectedIndex;
   late AnimationController _animationController;
   late AnimationController _iconAnimationController;
+  late AnimationController _bannerAnimationController;
 
   late final List<Widget> _widgetOptions; 
 
@@ -47,12 +48,17 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
     });
     _selectedIndex = widget.initialTabIndex;
     _animationController = AnimationController(
+      duration: const Duration(milliseconds: 200), // For tab animations
+      vsync: this,
+    );
+    
+    _bannerAnimationController = AnimationController(
       duration: const Duration(milliseconds: 2000), // Längre duration för mjuk pulsning
       vsync: this,
     );
     
     // Starta kontinuerlig pulsning för workout banner
-    _animationController.repeat(reverse: true);
+    _bannerAnimationController.repeat(reverse: true);
     
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
@@ -81,6 +87,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
   void dispose() {
     _animationController.dispose();
     _iconAnimationController.dispose();
+    _bannerAnimationController.dispose();
     super.dispose();
   }
 
@@ -142,7 +149,7 @@ Widget build(BuildContext context) {
             left: 0,
             right: 0,
             child: AnimatedBuilder(
-              animation: _animationController,
+              animation: _bannerAnimationController,
               builder: (context, child) {
                 final statusBarHeight = MediaQuery.of(context).padding.top;
                 return Container(
@@ -153,41 +160,27 @@ Widget build(BuildContext context) {
                     right: 12,
                   ),
                   decoration: BoxDecoration(
-                    // Gradient som täcker hela övre området
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color.fromARGB(255, 0, 0, 0), // Samma som scaffold bakgrund
-                        const Color.fromARGB(255, 0, 0, 0).withOpacity(0.9),
-                        Colors.transparent,
-                      ],
-                      stops: [0.0, 0.7, 1.0],
-                    ),
+                    // Enkel transparent bakgrund utan gradient
+                    color: Colors.transparent,
                   ),
                   child: Transform.scale(
-                    scale: 1.0 + (_animationController.value * 0.02),
+                    scale: 1.0 + (_bannerAnimationController.value * 0.02),
                     child: Container(
                       height: 60,
                       decoration: BoxDecoration(
-                        // Enklare svart design med subtle röd accent
-                        color: Colors.black.withOpacity(0.9),
+                        // Använd tema färger för clean design
+                        color: theme.card.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFDC2626).withOpacity(0.2 + (_animationController.value * 0.1)),
-                            blurRadius: 10 + (_animationController.value * 3),
-                            offset: const Offset(0, 2),
-                            spreadRadius: 0.5,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: theme.primary.withOpacity(0.15 + (_bannerAnimationController.value * 0.08)),
+                            blurRadius: 10 + (_bannerAnimationController.value * 3),
+                            offset: const Offset(0, 0),
+                            spreadRadius: 1,
                           ),
                         ],
                         border: Border.all(
-                          color: const Color(0xFFDC2626).withOpacity(0.3 + (_animationController.value * 0.2)),
+                          color: theme.primary.withOpacity(0.3 + (_bannerAnimationController.value * 0.2)),
                           width: 1,
                         ),
                       ),
@@ -206,19 +199,19 @@ Widget build(BuildContext context) {
                               children: [
                                 // Enklare pulsande ikon
                                 AnimatedBuilder(
-                                  animation: _animationController,
+                                  animation: _bannerAnimationController,
                                   builder: (context, child) {
                                     return Transform.scale(
-                                      scale: 1.0 + (_animationController.value * 0.1),
+                                      scale: 1.0 + (_bannerAnimationController.value * 0.1),
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFDC2626).withOpacity(0.2 + (_animationController.value * 0.1)),
+                                          color: theme.primary.withOpacity(0.2 + (_bannerAnimationController.value * 0.1)),
                                           shape: BoxShape.circle,
                                         ),
-                                        child: const Icon(
+                                        child: Icon(
                                           Icons.fitness_center,
-                                          color: Colors.white,
+                                          color: theme.text,
                                           size: 18,
                                         ),
                                       ),
@@ -235,14 +228,14 @@ Widget build(BuildContext context) {
                                       Text(
                                         'Workout Active',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: theme.text,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                           shadows: [
                                             Shadow(
                                               offset: const Offset(0, 1),
-                                              blurRadius: 2,
-                                              color: Colors.black.withOpacity(0.5),
+                                              blurRadius: 3,
+                                              color: theme.primary.withOpacity(0.2),
                                             ),
                                           ],
                                         ),
@@ -250,7 +243,7 @@ Widget build(BuildContext context) {
                                       Text(
                                         'Tap to continue',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: theme.textSecondary,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -260,19 +253,19 @@ Widget build(BuildContext context) {
                                 ),
                                 // Enklare animerad pil
                                 AnimatedBuilder(
-                                  animation: _animationController,
+                                  animation: _bannerAnimationController,
                                   builder: (context, child) {
                                     return Transform.translate(
-                                      offset: Offset(_animationController.value * 2, 0),
+                                      offset: Offset(_bannerAnimationController.value * 2, 0),
                                       child: Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFDC2626).withOpacity(0.3),
+                                          color: theme.primary.withOpacity(0.3),
                                           borderRadius: BorderRadius.circular(20),
                                         ),
-                                        child: const Icon(
+                                        child: Icon(
                                           Icons.play_arrow,
-                                          color: Colors.white,
+                                          color: theme.text,
                                           size: 20,
                                         ),
                                       ),

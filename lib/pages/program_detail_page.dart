@@ -135,7 +135,7 @@ class ProgramDetailPage extends ConsumerWidget {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFDC2626),
+                            color: theme.primary,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(

@@ -14,12 +14,12 @@ class ThemeSelector extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Text(
             'Choose Theme',
             style: TextStyle(
-              color: Colors.white,
+              color: currentTheme.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -50,62 +50,13 @@ class ThemeSelector extends ConsumerWidget {
             },
           ),
         ),
-        const SizedBox(height: 8),
-        // Preview container showing current theme
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            height: 120,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  currentTheme.primary,
-                  currentTheme.accent,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: currentTheme.primary.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.palette_outlined,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    AppTheme.themeNames[AppTheme.getThemeIndex(currentTheme)],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
 }
 
 /// Individual theme button
-class _ThemeButton extends StatelessWidget {
+class _ThemeButton extends ConsumerWidget {
   final Color color;
   final String name;
   final bool isSelected;
@@ -119,17 +70,18 @@ class _ThemeButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentTheme = ref.watch(themeProvider);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: 70,
         decoration: BoxDecoration(
-          color: const Color(0xFF27272A),
+          color: currentTheme.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? color : Colors.transparent,
+            color: isSelected ? color : currentTheme.textSecondary.withOpacity(0.2),
             width: 3,
           ),
         ),
@@ -162,7 +114,7 @@ class _ThemeButton extends StatelessWidget {
             Text(
               name,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey,
+                color: isSelected ? currentTheme.text : currentTheme.textSecondary,
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
