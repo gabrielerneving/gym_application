@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
+import '../providers/theme_provider.dart';
 
-class ProgressionChartWidget extends StatefulWidget {
+class ProgressionChartWidget extends ConsumerStatefulWidget {
   final String exerciseName;
   final DatabaseService dbService;
 
@@ -16,7 +18,7 @@ class ProgressionChartWidget extends StatefulWidget {
   _ProgressionChartWidgetState createState() => _ProgressionChartWidgetState();
 }
 
-class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
+class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget> {
   List<ProgressionDataPoint> progressionData = [];
   bool isLoading = true;
 
@@ -59,10 +61,12 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    
     if (isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          color: Color(0xFFDC2626),
+          color: theme.primary,
         ),
       );
     }
@@ -75,13 +79,13 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
             Icon(
               Icons.show_chart,
               size: 48,
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
               'No data for this exercise',
               style: TextStyle(
-                color: Colors.grey.shade400,
+                color: theme.textSecondary,
                 fontSize: 16,
               ),
             ),
@@ -90,10 +94,10 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
       );
     }
 
-    return _buildChart();
+    return _buildChart(theme);
   }
 
-  Widget _buildChart() {
+  Widget _buildChart(dynamic theme) {
     // Kontrollera om vi har data
     if (progressionData.isEmpty) {
       return const Center(
@@ -135,7 +139,7 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
           horizontalInterval: horizontalInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
-              color: Colors.grey.shade800.withOpacity(0.3),
+              color: theme.textSecondary.withOpacity(0.3),
               strokeWidth: 0.5,
             );
           },
@@ -158,7 +162,7 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
                     child: Text(
                       '${date.day}/${date.month}',
                       style: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: theme.textSecondary,
                         fontSize: 10,
                       ),
                     ),
@@ -177,7 +181,7 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
                 return Text(
                   '${value.toStringAsFixed(0)}kg',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: theme.textSecondary,
                     fontSize: 10,
                   ),
                 );
@@ -195,10 +199,10 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [
-                Color(0xFFDC2626),
-                Color(0xFFEF4444),
+                theme.primary,
+                theme.primaryLight,
               ],
             ),
             barWidth: 3,
@@ -208,9 +212,9 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
               getDotPainter: (spot, percent, barData, index) {
                 return FlDotCirclePainter(
                   radius: 4,
-                  color: const Color(0xFFDC2626),
+                  color: theme.primary,
                   strokeWidth: 2,
-                  strokeColor: Colors.white,
+                  strokeColor: theme.background,
                 );
               },
             ),
@@ -218,8 +222,8 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFFDC2626).withOpacity(0.1),
-                  const Color(0xFFDC2626).withOpacity(0.02),
+                  theme.primary.withOpacity(0.1),
+                  theme.primary.withOpacity(0.02),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -230,7 +234,7 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (touchedSpot) => const Color(0xFF18181B),
+            getTooltipColor: (touchedSpot) => theme.card,
             getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
               return touchedBarSpots.map((barSpot) {
                 final index = barSpot.x.toInt();
@@ -238,8 +242,8 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
                   final dataPoint = progressionData[index];
                   return LineTooltipItem(
                     '${dataPoint.weight.toStringAsFixed(1)} kg\n${_formatDate(dataPoint.date)}',
-                    const TextStyle(
-                      color: Colors.white,
+                    TextStyle(
+                      color: theme.text,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -254,16 +258,16 @@ class _ProgressionChartWidgetState extends State<ProgressionChartWidget> {
             return spotIndexes.map((spotIndex) {
               return TouchedSpotIndicatorData(
                 FlLine(
-                  color: const Color(0xFFDC2626).withOpacity(0.5),
+                  color: theme.primary.withOpacity(0.5),
                   strokeWidth: 2,
                 ),
                 FlDotData(
                   getDotPainter: (spot, percent, barData, index) {
                     return FlDotCirclePainter(
                       radius: 6,
-                      color: const Color(0xFFDC2626),
+                      color: theme.primary,
                       strokeWidth: 2,
-                      strokeColor: Colors.white,
+                      strokeColor: theme.background,
                     );
                   },
                 ),

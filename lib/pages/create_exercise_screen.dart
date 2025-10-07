@@ -1,17 +1,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/master_exercise_model.dart';
+import '../providers/theme_provider.dart';
 import '../services/database_service.dart';
 
-class CreateExerciseScreen extends StatefulWidget {
+class CreateExerciseScreen extends ConsumerStatefulWidget {
   const CreateExerciseScreen({Key? key}) : super(key: key);
 
   @override
-  _CreateExerciseScreenState createState() => _CreateExerciseScreenState();
+  ConsumerState<CreateExerciseScreen> createState() => _CreateExerciseScreenState();
 }
 
-class _CreateExerciseScreenState extends State<CreateExerciseScreen> {
+class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   String? _selectedCategory; // Håller reda på vald kategori

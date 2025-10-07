@@ -1,32 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/workout_model.dart';
+import '../providers/theme_provider.dart';
 import 'create_workout.dart';
 
-class ProgramDetailPage extends StatelessWidget {
+class ProgramDetailPage extends ConsumerWidget {
   final WorkoutProgram program;
 
   const ProgramDetailPage({Key? key, required this.program}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
+    
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.background,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),
+          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           program.title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
-        centerTitle: false, // Android-stil
+        centerTitle: false,
         actions: [
           IconButton(
             icon: Icon(Icons.edit, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),

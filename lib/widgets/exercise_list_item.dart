@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/exercise_model.dart'; // Se till att sökvägen till din modell är korrekt
+import '../providers/theme_provider.dart';
 
 
-class ExerciseListItem extends StatelessWidget {
+class ExerciseListItem extends ConsumerWidget {
   // Denna widget tar emot ett Exercise-objekt för att veta vad den ska visa.
   final Exercise exercise;
   final VoidCallback onMenuPressed;
@@ -19,9 +21,11 @@ class ExerciseListItem extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
+    
     return Card(
-      color: Color(0xFF18181B), // Mörkgrå färg som i din design
+      color: theme.card, // Mörkgrå färg som i din design
       margin: const EdgeInsets.symmetric(vertical: 8.0), // Lite utrymme mellan varje item
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15.0), // Rundade hörn
@@ -30,8 +34,8 @@ class ExerciseListItem extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5.0),
         title: Text(
           exercise.name,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.text,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -41,19 +45,19 @@ class ExerciseListItem extends StatelessWidget {
             Text(
               '${exercise.sets} sets total',
               style: TextStyle(
-                color: Colors.grey.shade400,
+                color: theme.textSecondary,
               ),
             ),
             if (exercise.warmUpSets > 0)
               Row(
                 children: [
                   Icon(Icons.local_fire_department, 
-                       color: Colors.orange, size: 14),
+                       color: theme.accent, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     '${exercise.warmUpSets} warm-up + ${exercise.workingSets} working',
                     style: TextStyle(
-                      color: Colors.orange.shade300,
+                      color: theme.accent,
                       fontSize: 12,
                     ),
                   ),
@@ -63,16 +67,16 @@ class ExerciseListItem extends StatelessWidget {
               Text(
                 '${exercise.workingSets} working sets',
                 style: TextStyle(
-                  color: Colors.grey.shade500,
+                  color: theme.textSecondary,
                   fontSize: 12,
                 ),
               ),
           ],
         ),
         trailing: isReordering
-            ? const Icon(Icons.drag_handle, color: Colors.white)
+            ? Icon(Icons.drag_handle, color: theme.text)
             : IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
+                icon: Icon(Icons.more_vert, color: theme.text),
                 onPressed: onMenuPressed,
               ),
       ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/theme_provider.dart';
 
-class MuscleRadarChartWidget extends StatelessWidget {
+class MuscleRadarChartWidget extends ConsumerWidget {
   final Map<String, int> muscleGroupCounts;
 
   const MuscleRadarChartWidget({
@@ -10,7 +12,8 @@ class MuscleRadarChartWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     if (muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)) {
       return Center(
         child: Column(
@@ -19,13 +22,13 @@ class MuscleRadarChartWidget extends StatelessWidget {
             Icon(
               Icons.radar,
               size: 48,
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
               'No muscle data available',
               style: TextStyle(
-                color: Colors.grey.shade400,
+                color: theme.textSecondary,
                 fontSize: 16,
               ),
             ),
@@ -34,10 +37,10 @@ class MuscleRadarChartWidget extends StatelessWidget {
       );
     }
 
-    return _buildRadarChart();
+    return _buildRadarChart(theme);
   }
 
-  Widget _buildRadarChart() {
+  Widget _buildRadarChart(dynamic theme) {
     // Hitta maxvärdet för skalning
     final maxValue = muscleGroupCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
     
@@ -57,8 +60,8 @@ class MuscleRadarChartWidget extends StatelessWidget {
     // Skapa data punkter för radar chart
     final radarDataSets = <RadarDataSet>[
       RadarDataSet(
-        fillColor: const Color(0xFFDC2626).withOpacity(0.2),
-        borderColor: const Color(0xFFDC2626),
+        fillColor: theme.primary.withOpacity(0.2),
+        borderColor: theme.primary,
         borderWidth: 3,
         entryRadius: 4,
         dataEntries: orderedMuscleGroups.map((muscleGroup) {
@@ -77,8 +80,8 @@ class MuscleRadarChartWidget extends StatelessWidget {
         borderData: FlBorderData(show: false),
         radarBorderData: const BorderSide(color: Colors.transparent),
         titlePositionPercentageOffset: 0.15,
-        titleTextStyle: const TextStyle(
-          color: Colors.white,
+        titleTextStyle: TextStyle(
+          color: theme.text,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -95,15 +98,15 @@ class MuscleRadarChartWidget extends StatelessWidget {
         },
         tickCount: 4,
         ticksTextStyle: TextStyle(
-          color: Colors.grey.shade600,
+          color: theme.textSecondary,
           fontSize: 10,
         ),
         tickBorderData: BorderSide(
-          color: Colors.grey.shade800.withOpacity(0.3),
+          color: theme.textSecondary.withOpacity(0.3),
           width: 1,
         ),
         gridBorderData: BorderSide(
-          color: Colors.grey.shade800.withOpacity(0.3),
+          color: theme.textSecondary.withOpacity(0.3),
           width: 1,
         ),
       ),

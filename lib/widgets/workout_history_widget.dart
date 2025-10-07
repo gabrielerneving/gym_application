@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../providers/theme_provider.dart';
 import '../models/workout_session_model.dart';
 import '../pages/workout_detail_page.dart';
 
-class WorkoutHistoryWidget extends StatelessWidget {
+class WorkoutHistoryWidget extends ConsumerWidget {
   final WorkoutSession session;
 
   const WorkoutHistoryWidget({Key? key, required this.session}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -23,7 +26,7 @@ class WorkoutHistoryWidget extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
         padding: const EdgeInsets.all(18.0),
         decoration: BoxDecoration(
-          color: const Color(0xFF18181B),
+          color: theme.card,
           borderRadius: BorderRadius.circular(12), // Mindre rundning för Android-stil
           border: Border.all(
             color: Colors.grey.withOpacity(0.2),

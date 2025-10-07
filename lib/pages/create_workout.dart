@@ -1,17 +1,21 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart'; 
 import '../models/exercise_model.dart';
+import '../providers/theme_provider.dart';
 import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/exercise_list_item.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/gradient_text.dart';
 import 'choose_category_screen.dart'; 
 import '../models/master_exercise_model.dart'; 
 
 
 
 
-class CreateWorkoutScreen extends StatefulWidget {
+class CreateWorkoutScreen extends ConsumerStatefulWidget {
   final Function(int)? onWorkoutSaved;
    final WorkoutProgram? workoutToEdit;
   const CreateWorkoutScreen({
@@ -24,7 +28,7 @@ class CreateWorkoutScreen extends StatefulWidget {
   _CreateWorkoutScreenState createState() => _CreateWorkoutScreenState();
 }
 
-class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
+class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   final _workoutNameController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isLoading = false;
@@ -58,9 +62,10 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 
   // METOD 1: Visar själva menyn
 void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
+  final theme = ref.read(themeProvider);
   showModalBottomSheet(
     context: context,
-    backgroundColor: Colors.grey.shade900, 
+    backgroundColor: theme.card, 
     builder: (BuildContext bc) {
       return SafeArea(
         child: Padding(
@@ -70,8 +75,8 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
               Padding(
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
-                  leading: const Icon(Icons.edit, color: Colors.white),
-                  title: const Text('Edit', style: TextStyle(color: Colors.white)),
+                  leading: Icon(Icons.edit, color: theme.text),
+                  title: Text('Edit', style: TextStyle(color: theme.text)),
                   onTap: () {
                     Navigator.of(context).pop(); // Stäng menyn först
                     _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
@@ -81,8 +86,8 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
               Padding(
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.white),
-                  title: const Text('Remove', style: TextStyle(color: Colors.white)),
+                  leading: Icon(Icons.delete, color: theme.text),
+                  title: Text('Remove', style: TextStyle(color: theme.text)),
                   onTap: () {
                     Navigator.of(context).pop(); 
                     setState(() {
@@ -94,8 +99,8 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
               Padding(
                 padding: const EdgeInsets.all(5.0),
                 child: ListTile(
-                leading: const Icon(Icons.reorder, color: Colors.white),
-                title: const Text('Change order', style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.reorder, color: theme.text),
+                title: Text('Change order', style: TextStyle(color: theme.text)),
                 onTap: () {
                   Navigator.of(context).pop(); 
                   // Växla till omordningsläge
@@ -291,13 +296,14 @@ Future<void> _navigateAndAddExercise() async {
 
 @override
 Widget build(BuildContext context) {
+  final theme = ref.watch(themeProvider);
   return GestureDetector(
     onTap: () {
       FocusScope.of(context).unfocus();
     },
     child: Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: Colors.black, 
+      backgroundColor: theme.background, 
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
         child: Column(
@@ -306,13 +312,13 @@ Widget build(BuildContext context) {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  widget.workoutToEdit == null ? 'Create Workout' : 'Edit Workout',
-                  style: TextStyle(
-                    color: Colors.white,
+                GradientText(
+                  text: widget.workoutToEdit == null ? 'Create Workout' : 'Edit Workout',
+                  style: const TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
                   ),
+                  currentThemeIndex: ref.watch(themeIndexProvider),
                 ),
                 // Om vi är i omordningsläge, visa en "Done"-knapp.
                 // Annars, visa den vanliga "Save"-knappen.
@@ -323,16 +329,16 @@ Widget build(BuildContext context) {
                         _isReordering = false; // Gå tillbaka till normalläge
                       });
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    child: const Text('Done', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.success),
+                    child: Text('Done', style: TextStyle(color: theme.text)),
                   )
                 else
                   ElevatedButton(
                     onPressed: _isLoading ? null : _saveWorkout,
-                    style: ElevatedButton.styleFrom(backgroundColor: Color(0xFFDC2626)),
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.primary),
                     child: _isLoading
                         ? const CircularProgressIndicator()
-                        : const Text('Save', style: TextStyle(color: Colors.white)),
+                        : Text('Save', style: TextStyle(color: theme.text)),
                   ),
               ],
             ),
@@ -340,29 +346,29 @@ Widget build(BuildContext context) {
             TextField(
               controller: _workoutNameController,
               focusNode: _focusNode,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: theme.text),
               decoration: InputDecoration(
                 labelText: 'Name',
-                labelStyle: const TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
+                labelStyle: TextStyle(color: theme.text),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), 
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), 
-                  borderSide: BorderSide(color: Colors.grey.shade800),
+                  borderSide: BorderSide(color: theme.textSecondary),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12), 
-                  borderSide: const BorderSide(color: Colors.red),
+                  borderSide: BorderSide(color: theme.primary),
                 ),
               ),
             ),
             const SizedBox(height: 30),
-            const Center(
+            Center(
               child: SizedBox(
                 width: 330, 
                 child: Divider(
-                  color: Color(0xFFDC2626),
+                  color: theme.primary,
                   thickness: 1,
                 ),
               ),
@@ -406,21 +412,16 @@ Widget build(BuildContext context) {
             Visibility(
               visible: !_focusNode.hasFocus,
               child: Center(
-                child: ElevatedButton(
+                child: GradientButton(
+                  text: 'Add exercise',
                   onPressed: () {
                     _navigateAndAddExercise();
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFFDC2626),
-                    minimumSize: Size(MediaQuery.of(context).size.width * 0.8, 55), 
-                  ),
-                  child: const Text(
-                    'Add exercise',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: 55,
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/theme_provider.dart';
 
-class StatCard extends StatelessWidget {
+class StatCard extends ConsumerWidget {
   final String title;
   final String value;
   final String unit;
@@ -19,16 +21,22 @@ class StatCard extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
+    final themeIndex = ref.watch(themeIndexProvider);
+    final isPrimaryCard = backgroundColor == const Color(0xFFDC2626);
+    
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        // Use gradient only for primary cards in pink theme
+        gradient: isPrimaryCard && themeIndex == 1 ? theme.primaryGradient : null,
+        color: isPrimaryCard && themeIndex == 1 ? null : (isPrimaryCard ? theme.primary : theme.card),
         borderRadius: BorderRadius.circular(20),
-        border: backgroundColor == const Color(0xFFDC2626) // Röd färg
-            ? null // Ingen border för röd bakgrund
+        border: isPrimaryCard // Primary card
+            ? null // No border for primary background
             : Border.all(
-                color: const Color(0xFF4C4C4C), // grå border
+                color: theme.textSecondary.withOpacity(0.2), // gray border
                 width: 1,
               ),
       ),
@@ -38,9 +46,9 @@ class StatCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: iconColor, size: 18),
+              Icon(icon, color: backgroundColor == const Color(0xFFDC2626) ? Colors.white : theme.primary, size: 18),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+              Text(title, style: TextStyle(color: backgroundColor == const Color(0xFFDC2626) ? Colors.white.withOpacity(0.8) : theme.textSecondary, fontSize: 14)),
             ],
           ),
           Column(
@@ -48,15 +56,15 @@ class StatCard extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: backgroundColor == const Color(0xFFDC2626) ? Colors.white : theme.text,
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
                 unit,
-                style: TextStyle(color: const Color.fromARGB(255, 255, 255, 255), fontSize: 14),
+                style: TextStyle(color: backgroundColor == const Color(0xFFDC2626) ? Colors.white.withOpacity(0.8) : theme.textSecondary, fontSize: 14),
               ),
             ],
           ),

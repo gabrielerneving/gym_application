@@ -8,6 +8,7 @@ import 'workout_history.dart';
 import 'statistics_screen.dart';
 import 'active_workout_screen.dart';
 import '../providers/workout_provider.dart';
+import '../providers/theme_provider.dart';
 
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -113,10 +114,12 @@ Widget build(BuildContext context) {
   final double navBarWidth = MediaQuery.of(context).size.width - 32;
   final double itemWidth = navBarWidth / _icons.length;
 
+  final theme = ref.watch(themeProvider);
+  
   return Scaffold(
     extendBody: true,
     extendBodyBehindAppBar: true,
-    backgroundColor: const Color(0xFF1B1C20),
+    backgroundColor: theme.background,
     
     body: Stack(
       children: [
@@ -296,7 +299,7 @@ Widget build(BuildContext context) {
           child: Container(
             height: 65,
             decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 15, 15, 15),
+              color: theme.card,
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
@@ -305,13 +308,13 @@ Widget build(BuildContext context) {
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color: const Color(0xFFDC2626).withOpacity(0.1),
+                  color: theme.primary.withOpacity(0.1),
                   blurRadius: 8,
                   offset: const Offset(0, 2)
                 ),
               ],
               border: Border.all(
-                color: Colors.white.withOpacity(0.1),
+                color: theme.primary.withOpacity(0.1),
                 width: 0.5,
               ),
             ),
@@ -331,18 +334,11 @@ Widget build(BuildContext context) {
                       width: 70,
                       height: 45,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFFDC2626),
-                            Color.fromARGB(255, 250, 47, 47),
-                          ],
-                        ),
+                        gradient: theme.primaryGradient,
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color.fromARGB(255, 224, 0, 0).withOpacity(0.2),
+                            color: theme.primary.withOpacity(0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 1),
                           ),
@@ -377,8 +373,8 @@ Widget build(BuildContext context) {
                               child: Icon(
                                   _selectedIndex == index ? _activeIcons[index] : _icons[index],
                                   color: _selectedIndex == index
-                                      ? Colors.white
-                                      : Colors.grey[500],
+                                      ? theme.text
+                                      : theme.textSecondary,
                                   size: _selectedIndex == index 
                                       ? (index == 1 ? 32 : 26)  
                                       : (index == 1 ? 28 : 24), 

@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
 import '../widgets/muscle_radar_chart_widget.dart';
 import '../widgets/muscle_bar_chart_widget.dart';
+import '../providers/theme_provider.dart';
 
-class MuscleGroupsScreen extends StatefulWidget {
+class MuscleGroupsScreen extends ConsumerStatefulWidget {
   const MuscleGroupsScreen({Key? key}) : super(key: key);
 
   @override
-  _MuscleGroupsScreenState createState() => _MuscleGroupsScreenState();
+  ConsumerState<MuscleGroupsScreen> createState() => _MuscleGroupsScreenState();
 }
 
 enum TimePeriod { thisMonth, lastThreeMonths, allTime }
 
-class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
+class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
   DatabaseService? _dbService;
   Map<String, int> muscleGroupCounts = {};
   Map<String, double> muscleGroupPercentages = {};
@@ -137,19 +139,20 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.background,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),
+          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Muscle Groups',
           style: TextStyle(
-            color: Colors.white,
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
@@ -160,7 +163,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
           IconButton(
             icon: Icon(
               selectedChartType == 0 ? Icons.bar_chart : Icons.radar,
-              color: const Color(0xFFDC2626),
+              color: theme.primary,
             ),
             onPressed: () {
               setState(() {
@@ -171,19 +174,19 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFDC2626)))
+          ? Center(child: CircularProgressIndicator(color: theme.primary))
           : muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)
               ? RefreshIndicator(
-                  color: const Color(0xFFDC2626),
-                  backgroundColor: Colors.grey.shade900,
+                  color: theme.primary,
+                  backgroundColor: theme.card,
                   onRefresh: () async {
                     await _loadMuscleData();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Statistics refreshed'),
-                          backgroundColor: Color(0xFFDC2626),
-                          duration: Duration(seconds: 2),
+                        SnackBar(
+                          content: Text('Statistics refreshed', style: TextStyle(color: theme.text)),
+                          backgroundColor: theme.primary,
+                          duration: const Duration(seconds: 2),
                         ),
                       );
                     }
@@ -197,15 +200,15 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  color: const Color(0xFFDC2626),
-                  backgroundColor: Colors.grey.shade900,
+                  color: theme.primary,
+                  backgroundColor: theme.card,
                   onRefresh: () async {
                     await _loadMuscleData();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Statistics refreshed'),
-                          backgroundColor: Color(0xFFDC2626),
+                        SnackBar(
+                          content: Text('Statistics refreshed', style: TextStyle(color: theme.text)),
+                          backgroundColor: theme.primary,
                           duration: Duration(seconds: 2),
                         ),
                       );
@@ -265,14 +268,15 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
   }
 
   Widget _buildTimePeriodSelector() {
+    final theme = ref.watch(themeProvider);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181B),
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF2A2A2A),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -284,14 +288,14 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: selectedPeriod == TimePeriod.thisMonth ? const Color(0xFFDC2626) : Colors.transparent,
+                  color: selectedPeriod == TimePeriod.thisMonth ? theme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'This month',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: selectedPeriod == TimePeriod.thisMonth ? Colors.white : Colors.grey.shade400,
+                    color: selectedPeriod == TimePeriod.thisMonth ? theme.text : theme.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -326,7 +330,7 @@ class _MuscleGroupsScreenState extends State<MuscleGroupsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: selectedPeriod == TimePeriod.allTime ? const Color(0xFFDC2626) : Colors.transparent,
+                  color: selectedPeriod == TimePeriod.allTime ? theme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

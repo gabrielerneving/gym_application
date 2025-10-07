@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/popular_workouts_card.dart';
 import '../widgets/stat_card.dart';
+import '../widgets/gradient_text.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../providers/theme_provider.dart';
 import 'progression_screen.dart';
 import 'muscle_groups_screen.dart';
+import 'settings_screen.dart';
 
-class StatisticsScreen extends StatefulWidget {
+class StatisticsScreen extends ConsumerStatefulWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
 
   @override
-  _StatisticsScreenState createState() => _StatisticsScreenState();
+  ConsumerState<StatisticsScreen> createState() => _StatisticsScreenState();
 }
 
-class _StatisticsScreenState extends State<StatisticsScreen> {
+class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   int _selectedIndex = 3; // Index 3 är den aktiva "profil"-ikonen
   DatabaseService? _dbService;
   
@@ -79,9 +83,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    final themeIndex = ref.watch(themeIndexProvider);
+    
     return Scaffold(
       extendBody: true,
-      backgroundColor: Colors.black,
+      backgroundColor: theme.background,
       body: Stack(
         children: [
           Column(
@@ -91,23 +98,37 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
                 child: Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Align(
                         alignment: Alignment.bottomLeft,
-                        child: Text(
-                          'Statistics',
-                          style: TextStyle(
-                            color: Colors.white,
+                        child: GradientText(
+                          text: 'Statistics',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 34,
                           ),
+                          currentThemeIndex: themeIndex,
                         ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: IconButton(
-                        icon: const Icon(Icons.logout, color: Colors.white),
+                        icon: Icon(Icons.settings, color: theme.text),
+                        tooltip: 'Settings',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: IconButton(
+                        icon: Icon(Icons.logout, color: theme.text),
                         tooltip: 'Log out',
                         onPressed: () async {
                           await AuthService().signOut();
@@ -119,22 +140,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
               Expanded(
                 child: isLoading 
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator(
-                        color: Color(0xFFDC2626),
+                        color: theme.primary,
                       ),
                     )
                   : RefreshIndicator(
-                      color: const Color(0xFFDC2626),
-                      backgroundColor: Colors.grey.shade900,
+                      color: theme.primary,
+                      backgroundColor: theme.card,
                       onRefresh: () async {
                         await _loadStatistics();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Statistics refreshed', style: TextStyle(color: Colors.white),),
-                              backgroundColor: Color(0xFFDC2626),
-                              duration: Duration(seconds: 2),
+                            SnackBar(
+                              content: Text('Statistics refreshed', style: TextStyle(color: theme.text),),
+                              backgroundColor: theme.primary,
+                              duration: const Duration(seconds: 2),
                             ),
                           );
                         }

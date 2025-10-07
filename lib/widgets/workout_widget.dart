@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/theme_provider.dart';
+import 'gradient_button.dart';
 
-class WorkoutWidget extends StatelessWidget {
+class WorkoutWidget extends ConsumerWidget {
   final String title;
   final String description;
   final int exerciseCount;
@@ -19,14 +22,15 @@ class WorkoutWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFF18181B),
+          color: theme.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: Colors.grey.withOpacity(0.2),
@@ -41,8 +45,8 @@ class WorkoutWidget extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.text,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
@@ -72,23 +76,13 @@ class WorkoutWidget extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 12),
-          SizedBox(
+          GradientButton(
+            text: 'Start workout',
+            onPressed: onStartWorkout ?? () {},
             width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: onStartWorkout,
-              child: const Text(
-                'Start workout',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-
-              ),
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            borderRadius: 15,
+            textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ],
       ),

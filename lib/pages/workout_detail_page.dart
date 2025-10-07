@@ -1,32 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../models/workout_session_model.dart';
+import '../providers/theme_provider.dart';
 
-class WorkoutDetailPage extends StatelessWidget {
+class WorkoutDetailPage extends ConsumerWidget {
   final WorkoutSession session;
 
   const WorkoutDetailPage({Key? key, required this.session}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
+    
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.background,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24), // Röd accent
+          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           session.programTitle,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
-        centerTitle: false, // Android-stil
+        centerTitle: false,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -37,10 +41,10 @@ class WorkoutDetailPage extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF18181B),
+                color: theme.card,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF2A2A2A),
+                  color: theme.textSecondary.withOpacity(0.2),
                   width: 0.5,
                 ),
               ),
@@ -49,7 +53,7 @@ class WorkoutDetailPage extends StatelessWidget {
                   Text(
                     DateFormat('EEEE, MMMM d, yyyy').format(session.date),
                     style: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: theme.textSecondary,
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
                     ),
@@ -62,21 +66,25 @@ class WorkoutDetailPage extends StatelessWidget {
                         icon: Icons.timer_outlined,
                         label: 'Duration',
                         value: '${session.durationInMinutes} min',
+                        theme: theme,
                       ),
                       _buildStatItem(
                         icon: Icons.fitness_center,
                         label: 'Exercises',
                         value: '${session.completedExercises.length}',
+                        theme: theme,
                       ),
                       _buildStatItem(
                         icon: Icons.repeat,
                         label: 'Working Sets',
                         value: '${session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => !set.isWarmUp).length)}',
+                        theme: theme,
                       ),
                       _buildStatItem(
                         icon: Icons.local_fire_department,
                         label: 'Warm-up Sets',
                         value: '${session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => set.isWarmUp).length)}',
+                        theme: theme,
                       ),
                     ],
                   ),
@@ -87,8 +95,8 @@ class WorkoutDetailPage extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Exercises',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: theme.text,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
               ),
@@ -293,19 +301,20 @@ class WorkoutDetailPage extends StatelessWidget {
     required IconData icon,
     required String label,
     required String value,
+    required theme,
   }) {
     return Column(
       children: [
         Icon(
           icon,
-          color: Colors.white, // Tillbaka till vit
+          color: theme.text,
           size: 26,
         ),
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white, // Tillbaka till vit
+          style: TextStyle(
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
@@ -314,7 +323,7 @@ class WorkoutDetailPage extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey.shade500,
+            color: theme.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),

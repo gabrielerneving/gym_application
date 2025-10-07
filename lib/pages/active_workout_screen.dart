@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/workout_provider.dart'; 
+import '../providers/workout_provider.dart';
+import '../providers/theme_provider.dart';
+import '../widgets/gradient_button.dart'; 
 
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
   const ActiveWorkoutScreen({Key? key}) : super(key: key);
@@ -119,12 +121,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
 
   void _showWorkoutOptionsDialog() {
+    final theme = ref.read(themeProvider);
     final session = ref.read(workoutProvider).session;
     if (session == null) return;
     
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF18181B),
+      backgroundColor: theme.card,
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -155,10 +158,11 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
   
   void _editCurrentProgram() {
+    final theme = ref.read(themeProvider);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF18181B),
+        backgroundColor: theme.card,
         title: const Text('Edit Active Workout?', style: TextStyle(color: Colors.white)),
         content: const Text(
           'Editing the program will pause your current workout. Your progress will be saved.',
@@ -174,13 +178,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               Navigator.pop(context);
               // TODO: Implementera fullständig edit-funktionalitet för active workout
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   content: Text('Edit during active workout - Coming soon!'),
-                  backgroundColor: Color(0xFFDC2626),
+                  backgroundColor: theme.primary,
                 ),
               );
             },
-            child: const Text('Continue', style: TextStyle(color: Color(0xFFDC2626))),
+            child: Text('Continue', style: TextStyle(color: theme.primary)),
           ),
         ],
       ),
@@ -191,6 +195,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   Widget build(BuildContext context) {
     // ÄNDRING 3: Läs det aktuella statet från providern.
     // .watch() gör att skärmen automatiskt byggs om när statet ändras.
+    final theme = ref.watch(themeProvider);
     final activeWorkoutState = ref.watch(workoutProvider);
     final session = activeWorkoutState.session;
 
@@ -234,14 +239,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           FocusScope.of(context).unfocus();
         },
         child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.background,
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
               expandedHeight: 120,
               floating: false,
               pinned: true,
-              backgroundColor: Colors.black,
+              backgroundColor: theme.background,
               elevation: 0,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
@@ -257,11 +262,11 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
               ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.black, Colors.black87],
+                      colors: [theme.background, theme.background.withOpacity(0.87)],
                     ),
                   ),
                   child: SafeArea(
@@ -271,8 +276,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                         const SizedBox(height: 20),
                         Text(
                           session.programTitle,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: theme.text,
                             fontSize: 24,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.5,
@@ -326,7 +331,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFDC2626), 
+                                    color: theme.primary, 
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Center(
@@ -412,31 +417,20 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 children: [
                   Container(
                     margin: const EdgeInsets.all(20),
-                    child: SizedBox(
+                    child: GradientButton(
+                      text: 'Finish Workout',
+                      onPressed: () async {
+                        await ref.read(workoutProvider.notifier).finishWorkout();
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
                       width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          await ref.read(workoutProvider.notifier).finishWorkout();
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFDC2626),
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(56),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Finish Workout',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      height: 56,
+                      borderRadius: 28,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -593,6 +587,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
     return AnimatedBuilder(
       animation: _offsetAnimation,
       builder: (context, child) {
@@ -706,6 +701,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                         return '';
                       })(),
                       keyboardType: TextInputType.number,
+                      theme: theme,
                       onChanged: (value) {
                         if (value.isEmpty) {
                           ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
@@ -734,6 +730,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                         return '';
                       })(),
                       keyboardType: TextInputType.number,
+                      theme: theme,
                       onChanged: (value) {
                         if (value.isEmpty) {
                           ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
@@ -763,6 +760,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                         return '';
                       })(),
                       keyboardType: TextInputType.text,
+                      theme: theme,
                       onChanged: (value) {
                         if (value.isEmpty) {
                           ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
@@ -793,6 +791,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     required String hintText,
     required TextInputType keyboardType,
     required Function(String) onChanged,
+    required theme,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,7 +823,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
             border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             filled: true,
-            fillColor: Colors.black.withOpacity(0.3),
+            fillColor: theme.card.withOpacity(0.3),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,

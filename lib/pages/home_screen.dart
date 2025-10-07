@@ -6,7 +6,10 @@ import '../models/workout_model.dart';
 import '../services/database_service.dart';
 import '../widgets/workout_widget.dart'; 
 import '../providers/workout_provider.dart';
+import '../providers/theme_provider.dart';
+import '../theme/app_theme.dart';
 import '../pages/program_detail_page.dart';
+import '../widgets/gradient_text.dart';
 import 'create_workout.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -38,26 +41,26 @@ Future<bool> _showDeleteConfirmationDialog(BuildContext context, String programT
   return result ?? false;
 }
 
-void _showActiveWorkoutDialog(BuildContext context) {
+void _showActiveWorkoutDialog(BuildContext context, AppColors theme) {
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        backgroundColor: const Color(0xFF18181B),
-        title: const Text(
+        backgroundColor: theme.card,
+        title: Text(
           'Workout Already Active',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: theme.text),
         ),
-        content: const Text(
+        content: Text(
           'You already have an active workout in progress. Please finish or cancel your current workout before starting a new one.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: theme.textSecondary),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            child: Text(
               'OK',
-              style: TextStyle(color: Color(0xFFDC2626)),
+              style: TextStyle(color: theme.primary),
             ),
           ),
         ],
@@ -106,6 +109,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     // Säkerhetskoll ifall något skulle gå fel och vi inte har ett UID
@@ -121,7 +125,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
     final dbService = DatabaseService(uid: uid);
 
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+      backgroundColor: theme.background,
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
         // StreamBuilder för att hämta och visa data i realtid
@@ -140,7 +144,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
 
             // Om vi har data, men listan är tom
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return _buildEmptyState(); // Anropar en snyggare "tom" vy
+              return _buildEmptyState(theme); // Anropar en snyggare "tom" vy
             }
 
             // Om vi har data
@@ -149,19 +153,19 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'My workouts',
-                  style: TextStyle(
-                    color: Colors.white,
+                GradientText(
+                  text: 'My workouts',
+                  style: const TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
                   ),
+                  currentThemeIndex: ref.watch(themeIndexProvider),
                 ),
                 // Visar det faktiska antalet sparade pass
                 Text(
                   '${programs.length} workouts saved',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.textSecondary,
                     fontSize: 14,
                   ),
                 ),
@@ -189,7 +193,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                           // Kontrollera om ett workout redan pågår
                           final activeWorkout = ref.read(workoutProvider);
                           if (activeWorkout.isRunning) {
-                            _showActiveWorkoutDialog(context);
+                            _showActiveWorkoutDialog(context, theme);
                             return;
                           }
                           
@@ -220,22 +224,22 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
   }
 
   // En hjälp-widget för att visa ett meddelande när inga pass finns
-  Widget _buildEmptyState() {
-    return const Center(
+  Widget _buildEmptyState(AppColors theme) {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.fitness_center, color: Colors.grey, size: 60),
-          SizedBox(height: 16),
+          Icon(Icons.fitness_center, color: theme.textSecondary, size: 60),
+          const SizedBox(height: 16),
           Text(
             'No Workouts Yet',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: theme.text),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Tap the "Create" button to add your first workout!',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 16),
+            style: TextStyle(color: theme.textSecondary, fontSize: 16),
           ),
         ],
       ),
