@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
 import '../widgets/progression_chart_widget.dart';
+import '../providers/theme_provider.dart';
+import '../theme/app_theme.dart';
 
-class ProgressionScreen extends StatefulWidget {
+class ProgressionScreen extends ConsumerStatefulWidget {
   const ProgressionScreen({Key? key}) : super(key: key);
 
   @override
-  _ProgressionScreenState createState() => _ProgressionScreenState();
+  ConsumerState<ProgressionScreen> createState() => _ProgressionScreenState();
 }
 
-class _ProgressionScreenState extends State<ProgressionScreen> {
+class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
   DatabaseService? _dbService;
   List<String> exerciseNames = [];
   Map<String, PersonalRecord> personalRecords = {};
@@ -67,19 +70,20 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.background,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: const Color(0xFFDC2626).withOpacity(0.8), size: 24),
+          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Progression',
           style: TextStyle(
-            color: Colors.white,
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
@@ -87,32 +91,32 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
         centerTitle: false,
       ),
       body: isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(
-                color: Color(0xFFDC2626),
+                color: theme.primary,
               ),
             )
           : exerciseNames.isEmpty
-              ? _buildEmptyState()
+              ? _buildEmptyState(theme)
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildExerciseSelector(),
+                      _buildExerciseSelector(theme),
                       const SizedBox(height: 24),
                       if (selectedExercise != null && personalRecords.containsKey(selectedExercise))
-                        _buildPersonalRecordCard(),
+                        _buildPersonalRecordCard(theme),
                       const SizedBox(height: 24),
                       if (selectedExercise != null)
-                        _buildProgressionChart(),
+                        _buildProgressionChart(theme),
                     ],
                   ),
                 ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppColors theme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -120,13 +124,13 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
           Icon(
             Icons.show_chart,
             size: 64,
-            color: Colors.grey.shade600,
+            color: theme.textSecondary,
           ),
           const SizedBox(height: 16),
           Text(
             'No workout data yet',
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: theme.text,
               fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
@@ -135,7 +139,7 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
           Text(
             'Complete some workouts to see your progression',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -145,15 +149,15 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
     );
   }
 
-  Widget _buildExerciseSelector() {
+  Widget _buildExerciseSelector(AppColors theme) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181B),
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF2A2A2A),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -163,7 +167,7 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
           Text(
             'Select Exercise',
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: theme.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -173,8 +177,8 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
             child: DropdownButton<String>(
               value: selectedExercise,
               isExpanded: true,
-              dropdownColor: const Color(0xFF18181B),
-              icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
+              dropdownColor: theme.card,
+              icon: Icon(Icons.arrow_drop_down, color: theme.textSecondary),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -200,13 +204,13 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
     );
   }
 
-  Widget _buildPersonalRecordCard() {
+  Widget _buildPersonalRecordCard(AppColors theme) {
     final record = personalRecords[selectedExercise!]!;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFDC2626),
+        color: theme.primary,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -251,15 +255,15 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
     );
   }
 
-  Widget _buildProgressionChart() {
+  Widget _buildProgressionChart(AppColors theme) {
     return Container(
       height: 300,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.grey.shade800.withOpacity(0.6),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -268,8 +272,8 @@ class _ProgressionScreenState extends State<ProgressionScreen> {
         children: [
           Text(
             'Weight Progression',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: theme.text,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),

@@ -24,6 +24,9 @@ class WorkoutWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
+    final themeIndex = ref.watch(themeIndexProvider);
+    final isPinkMode = themeIndex == 1; // Pink theme is at index 1
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -36,6 +39,14 @@ class WorkoutWidget extends ConsumerWidget {
             color: Colors.grey.withOpacity(0.2),
             width: 1,
           ),
+          boxShadow: isPinkMode ? [
+            BoxShadow(
+              color: const Color(0xFFFCE7F3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ] : null,
         ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,8 +91,8 @@ class WorkoutWidget extends ConsumerWidget {
             text: 'Start workout',
             onPressed: onStartWorkout ?? () {},
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            borderRadius: 15,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            borderRadius: 20,
             textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ],

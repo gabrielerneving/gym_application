@@ -202,9 +202,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          _buildProgressionButton(),
+                          _buildProgressionButton(theme),
                           const SizedBox(height: 16),
-                          _buildMuscleGroupsButton(),
+                          _buildMuscleGroupsButton(theme),
                           const SizedBox(height: 24),
                           PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
                         ],
@@ -221,28 +221,21 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             child: Container(
               height: 65,
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: theme.card,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.25),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                  
-                ],
+               
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.1),
+                  color: theme.textSecondary.withOpacity(0.1),
                   width: 0.5,
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildNavItem(Icons.home_outlined, 0),
-                  _buildNavItem(Icons.fitness_center_outlined, 1),
-                  _buildNavItem(Icons.history, 2),
-                  _buildNavItem(Icons.bar_chart_outlined, 3), // Aktiv ikon
+                  _buildNavItem(Icons.home_outlined, 0, theme),
+                  _buildNavItem(Icons.fitness_center_outlined, 1, theme),
+                  _buildNavItem(Icons.history, 2, theme),
+                  _buildNavItem(Icons.bar_chart_outlined, 3, theme), // Aktiv ikon
                 ],
               ),
             ),
@@ -252,7 +245,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  Widget _buildNavItem(IconData icon, int index) {
+  Widget _buildNavItem(IconData icon, int index, theme) {
     bool isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
@@ -263,19 +256,19 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFDC2626) : Colors.transparent,
+          color: isSelected ? theme.primary : Colors.transparent,
           shape: BoxShape.circle,
         ),
         child: Icon(
           icon,
-          color: isSelected ? Colors.white : Colors.grey.shade600,
+          color: isSelected ? Colors.white : theme.textSecondary,
           size: 28,
         ),
       ),
     );
   }
 
-  Widget _buildProgressionButton() {
+  Widget _buildProgressionButton(theme) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -289,10 +282,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF18181B),
+          color: theme.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: const Color(0xFF2A2A2A),
+            color: theme.textSecondary.withOpacity(0.2),
             width: 0.5,
           ),
         ),
@@ -302,7 +295,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFDC2626),
+                color: theme.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -316,10 +309,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Exercise Progression',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: theme.text,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -328,7 +321,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   Text(
                     'View weight progression charts',
                     style: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: theme.textSecondary,
                       fontSize: 14,
                     ),
                   ),
@@ -337,7 +330,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             ),
             Icon(
               Icons.arrow_forward_ios,
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
               size: 16,
             ),
           ],
@@ -346,7 +339,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  Widget _buildMuscleGroupsButton() {
+  Widget _buildMuscleGroupsButton(theme) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -360,10 +353,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF18181B),
+          color: theme.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: const Color(0xFF2A2A2A),
+            color: theme.textSecondary.withOpacity(0.2),
             width: 0.5,
           ),
         ),
@@ -373,7 +366,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFF2563EB),
+                color: theme.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -387,10 +380,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Muscle Groups',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: theme.text,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -399,7 +392,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   Text(
                     'Analyze muscle group distribution',
                     style: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: theme.textSecondary,
                       fontSize: 14,
                     ),
                   ),
@@ -408,7 +401,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             ),
             Icon(
               Icons.arrow_forward_ios,
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
               size: 16,
             ),
           ],

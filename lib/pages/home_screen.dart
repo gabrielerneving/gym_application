@@ -69,16 +69,18 @@ void _showActiveWorkoutDialog(BuildContext context, AppColors theme) {
   );
 }
 
-void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseService dbService) {
+void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseService dbService, WidgetRef ref) {
+  final theme = ref.read(themeProvider);
   showModalBottomSheet(
     context: context,
+    backgroundColor: theme.card,
     builder: (bc) {
       return SafeArea(
         child: Wrap(
           children: <Widget>[
             ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Edit'),
+              leading: Icon(Icons.edit, color: theme.text),
+              title: Text('Edit', style: TextStyle(color: theme.text)),
               onTap: () {
                 Navigator.of(context).pop(); 
                 // Navigera till CreateWorkoutScreen och skicka med programmet
@@ -187,7 +189,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                         description: '$description...',
                         exerciseCount: program.exercises.length,
                         onMenuPressed: () {
-                          _showWorkoutOptions(context, program, dbService);
+                          _showWorkoutOptions(context, program, dbService, ref);
                         },
                         onStartWorkout: () {
                           // Kontrollera om ett workout redan pågår

@@ -195,7 +195,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     child: SizedBox(
                       height: MediaQuery.of(context).size.height - 200,
-                      child: _buildEmptyState(),
+                      child: _buildEmptyState(theme),
                     ),
                   ),
                 )
@@ -220,13 +220,13 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                     child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildTimePeriodSelector(),
+                      _buildTimePeriodSelector(theme),
                       const SizedBox(height: 16),
-                      _buildChartTypeSelector(),
+                      _buildChartTypeSelector(theme),
                       const SizedBox(height: 24),
-                      _buildMainChart(),
+                      _buildMainChart(theme),
                       const SizedBox(height: 24),
-                      _buildTopMuscleGroupsList(),
+                      _buildTopMuscleGroupsList(theme),
                     ],
                     ),
                   ),
@@ -234,7 +234,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(dynamic theme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -242,13 +242,13 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
           Icon(
             Icons.fitness_center,
             size: 64,
-            color: Colors.grey.shade600,
+            color: theme.textSecondary,
           ),
           const SizedBox(height: 16),
           Text(
             'No muscle data yet',
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: theme.textSecondary,
               fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
@@ -257,7 +257,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
           Text(
             'Complete some workouts to see your muscle group distribution',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -267,7 +267,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     );
   }
 
-  Widget _buildTimePeriodSelector() {
+  Widget _buildTimePeriodSelector(dynamic theme) {
     final theme = ref.watch(themeProvider);
     return Container(
       width: double.infinity,
@@ -309,14 +309,14 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: selectedPeriod == TimePeriod.lastThreeMonths ? const Color(0xFFDC2626) : Colors.transparent,
+                  color: selectedPeriod == TimePeriod.lastThreeMonths ? theme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'Last 3 months',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: selectedPeriod == TimePeriod.lastThreeMonths ? Colors.white : Colors.grey.shade400,
+                    color: selectedPeriod == TimePeriod.lastThreeMonths ? Colors.white : theme.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -337,7 +337,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                   'All time',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: selectedPeriod == TimePeriod.allTime ? Colors.white : Colors.grey.shade400,
+                    color: selectedPeriod == TimePeriod.allTime ? Colors.white : theme.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -350,15 +350,15 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     );
   }
 
-  Widget _buildChartTypeSelector() {
+  Widget _buildChartTypeSelector(dynamic theme) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181B),
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF2A2A2A),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -370,7 +370,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: selectedChartType == 0 ? const Color(0xFFDC2626) : Colors.transparent,
+                  color: selectedChartType == 0 ? theme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -378,14 +378,14 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                   children: [
                     Icon(
                       Icons.radar,
-                      color: selectedChartType == 0 ? Colors.white : Colors.grey.shade400,
+                      color: selectedChartType == 0 ? Colors.white : theme.textSecondary,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Radar Chart',
                       style: TextStyle(
-                        color: selectedChartType == 0 ? Colors.white : Colors.grey.shade400,
+                        color: selectedChartType == 0 ? Colors.white : theme.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -400,7 +400,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: selectedChartType == 1 ? const Color(0xFFDC2626) : Colors.transparent,
+                  color: selectedChartType == 1 ? theme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -408,14 +408,14 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                   children: [
                     Icon(
                       Icons.bar_chart,
-                      color: selectedChartType == 1 ? Colors.white : Colors.grey.shade400,
+                      color: selectedChartType == 1 ? Colors.white : theme.textSecondary,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Bar Chart',
                       style: TextStyle(
-                        color: selectedChartType == 1 ? Colors.white : Colors.grey.shade400,
+                        color: selectedChartType == 1 ? Colors.white : theme.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -429,15 +429,15 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     );
   }
 
-  Widget _buildMainChart() {
+  Widget _buildMainChart(dynamic theme) {
     return Container(
       height: 350,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.grey.shade800.withOpacity(0.6),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -446,8 +446,8 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
         children: [
           Text(
             _getChartTitle(),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: theme.text,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -467,15 +467,15 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     );
   }
 
-  Widget _buildTopMuscleGroupsList() {
+  Widget _buildTopMuscleGroupsList(dynamic theme) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181B),
+        color: theme.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF2A2A2A),
+          color: theme.textSecondary.withOpacity(0.2),
           width: 0.5,
         ),
       ),
@@ -491,13 +491,13 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          ...mostTrainedMuscles.take(5).map((stat) => _buildMuscleStatRow(stat)),
+          ...mostTrainedMuscles.take(5).map((stat) => _buildMuscleStatRow(stat, theme)),
         ],
       ),
     );
   }
 
-  Widget _buildMuscleStatRow(MuscleGroupStat stat) {
+  Widget _buildMuscleStatRow(MuscleGroupStat stat, dynamic theme) {
     final percentage = muscleGroupPercentages[stat.muscleGroup] ?? 0.0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -528,8 +528,8 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
               children: [
                 Text(
                   stat.muscleGroup,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.text,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -537,7 +537,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                 Text(
                   '${stat.setCount} sets (${percentage.toStringAsFixed(1)}%)',
                   style: TextStyle(
-                    color: Colors.grey.shade400,
+                    color: theme.textSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -548,7 +548,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
             width: 60,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade800,
+              color: theme.textSecondary.withOpacity(0.3),
               borderRadius: BorderRadius.circular(2),
             ),
             child: FractionallySizedBox(

@@ -134,18 +134,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white),
-                title: const Text('Edit Program', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Modify exercises and sets', style: TextStyle(color: Colors.grey)),
+                leading: Icon(Icons.edit, color: theme.text),
+                title: Text('Edit Program', style: TextStyle(color: theme.text)),
+                subtitle: Text('Modify exercises and sets', style: TextStyle(color: theme.textSecondary)),
                 onTap: () {
                   Navigator.pop(context);
                   _editCurrentProgram();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.info_outline, color: Colors.white),
-                title: const Text('Workout Info', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('View program details', style: TextStyle(color: Colors.grey)),
+                leading: Icon(Icons.info_outline, color: theme.text),
+                title: Text('Workout Info', style: TextStyle(color: theme.text)),
+                subtitle: Text('View program details', style: TextStyle(color: theme.textSecondary)),
                 onTap: () {
                   Navigator.pop(context); 
                 },
@@ -163,15 +163,15 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.card,
-        title: const Text('Edit Active Workout?', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        title: Text('Edit Active Workout?', style: TextStyle(color: theme.text)),
+        content: Text(
           'Editing the program will pause your current workout. Your progress will be saved.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: theme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -374,9 +374,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                               // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
                               final providerState = ref.watch(workoutProvider);
                               final edited = providerState.editedFields;
-                              final weightColor = edited.contains(weightKey) ? Colors.white : Colors.grey.shade400;
-                              final repsColor = edited.contains(repsKey) ? Colors.white : Colors.grey.shade400;
-                              final notesColor = edited.contains(notesKey) ? Colors.white : Colors.grey.shade400;
+                              final weightColor = edited.contains(weightKey) ? Colors.white : theme.textSecondary;
+                              final repsColor = edited.contains(repsKey) ? Colors.white : theme.textSecondary;
+                              final notesColor = edited.contains(notesKey) ? Colors.white : theme.textSecondary;
                               
                               return SwipeableSetRowNew(
                                 set: set,
@@ -599,10 +599,10 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                                (widget.set.notes != null && widget.set.notes!.isNotEmpty));
         
         // Minimal design färger
-        Color containerColor = Colors.grey.shade900;
+        Color containerColor = theme.card;
         if (hasPlaceholders && swipeProgress > 0.1) {
           containerColor = Color.lerp(
-            Colors.grey.shade900,
+            theme.card,
             Colors.white.withOpacity(0.05),
             swipeProgress * 0.5,
           )!;
@@ -620,7 +620,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                 color: containerColor,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: Colors.grey.shade800.withOpacity(0.6),
+                  color: theme.textSecondary.withOpacity(0.2),
                   width: 0.5,
                 ),
               ),
@@ -667,7 +667,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                         Text(
                           widget.set.isWarmUp ? 'Warm-up' : 'Working',
                           style: TextStyle(
-                            color: widget.set.isWarmUp ? Colors.orange : Colors.grey.shade400,
+                            color: widget.set.isWarmUp ? Colors.orange : theme.textSecondary,
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
                             letterSpacing: 0.5,
@@ -678,7 +678,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                             ? 'Set ${widget.setIndex + 1}'
                             : 'Set ${widget.setIndex - widget.warmUpSets + 1}',
                           style: TextStyle(
-                            color: widget.set.isWarmUp ? Colors.orange.shade300 : Colors.grey.shade500,
+                            color: widget.set.isWarmUp ? Colors.orange.shade300 : theme.textSecondary,
                             fontSize: 9,
                             fontWeight: FontWeight.w400,
                           ),
@@ -799,7 +799,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey.shade500,
+            color: theme.textSecondary,
             fontSize: 11,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.5,
@@ -816,7 +816,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           decoration: InputDecoration(
             hintText: hintText.isEmpty ? null : hintText,
             hintStyle: TextStyle(
-              color: Colors.grey.shade600,
+              color: theme.textSecondary,
               fontSize: 15,
               fontWeight: FontWeight.w400,
             ),

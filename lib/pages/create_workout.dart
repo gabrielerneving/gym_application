@@ -120,6 +120,7 @@ void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
 
 // METOD 2: Visar en dialog för att ändra antal sets
 Future<void> _showEditSetsDialog(Exercise exercise) async {
+  final theme = ref.watch(themeProvider);
   final workingSetsController = TextEditingController(text: exercise.workingSets.toString());
   final warmUpSetsController = TextEditingController(text: exercise.warmUpSets.toString());
 
@@ -152,7 +153,7 @@ Future<void> _showEditSetsDialog(Exercise exercise) async {
             const SizedBox(height: 8),
             Text(
               'Total: ${(int.tryParse(workingSetsController.text) ?? 0) + (int.tryParse(warmUpSetsController.text) ?? 0)} sets',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              style: TextStyle(color: theme.textSecondary, fontSize: 12),
             ),
           ],
         ),
@@ -162,7 +163,7 @@ Future<void> _showEditSetsDialog(Exercise exercise) async {
             onPressed: () => Navigator.of(context).pop(),
           ),
           ElevatedButton(
-            child: const Text('Save'),
+            child: Text('Save', style: TextStyle(color: theme.text)),
             onPressed: () {
               setState(() {
                 final workingSets = int.tryParse(workingSetsController.text) ?? 0;
@@ -271,6 +272,9 @@ Future<void> _navigateAndAddExercise() async {
         _exercises.clear();
       });
 
+        // Stäng tangentbordet först
+        FocusManager.instance.primaryFocus?.unfocus();
+        
         // Gå till Home tab (index 0) istället för att bara poppa
         if (widget.onWorkoutSaved != null) {
           widget.onWorkoutSaved!(0); // 0 = Home tab
@@ -338,7 +342,7 @@ Widget build(BuildContext context) {
                     style: ElevatedButton.styleFrom(backgroundColor: theme.primary),
                     child: _isLoading
                         ? const CircularProgressIndicator()
-                        : Text('Save', style: TextStyle(color: theme.text)),
+                        : Text('Save', style: TextStyle(color: Colors.white)),
                   ),
               ],
             ),
@@ -419,6 +423,7 @@ Widget build(BuildContext context) {
                   },
                   width: MediaQuery.of(context).size.width * 0.8,
                   height: 55,
+                  borderRadius: 20,
                   textStyle: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

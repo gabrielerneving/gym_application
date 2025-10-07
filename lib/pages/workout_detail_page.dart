@@ -111,10 +111,10 @@ class WorkoutDetailPage extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: theme.card,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.grey.shade800.withOpacity(0.6),
+                    color: theme.textSecondary.withOpacity(0.2),
                     width: 0.5,
                   ),
                 ),
@@ -146,8 +146,8 @@ class WorkoutDetailPage extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             exercise.name,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: theme.text,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -167,7 +167,7 @@ class WorkoutDetailPage extends ConsumerWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: theme.surface,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -195,7 +195,7 @@ class WorkoutDetailPage extends ConsumerWidget {
                                   : Text(
                                       '${setIndex + 1}',
                                       style: TextStyle(
-                                        color: Colors.grey.shade400,
+                                        color: theme.textSecondary,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -213,15 +213,15 @@ class WorkoutDetailPage extends ConsumerWidget {
                                   Text(
                                     'Weight',
                                     style: TextStyle(
-                                      color: Colors.grey.shade500,
+                                      color: theme.textSecondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                   Text(
                                     set.weight > 0 ? '${set.weight} kg' : '-',
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: theme.text,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -238,15 +238,15 @@ class WorkoutDetailPage extends ConsumerWidget {
                                   Text(
                                     'Reps',
                                     style: TextStyle(
-                                      color: Colors.grey.shade500,
+                                      color: theme.textSecondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                   Text(
                                     set.reps > 0 ? '${set.reps}' : '-',
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: theme.text,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -265,15 +265,15 @@ class WorkoutDetailPage extends ConsumerWidget {
                                     Text(
                                       'Notes',
                                       style: TextStyle(
-                                        color: Colors.grey.shade500,
+                                        color: theme.textSecondary,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                     Text(
                                       set.notes!,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: theme.text,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w400,
                                       ),

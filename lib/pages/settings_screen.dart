@@ -166,11 +166,11 @@ class SettingsScreen extends ConsumerWidget {
                         await AuthService().signOut();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: currentTheme.error,
+                        backgroundColor: currentTheme.primaryLight,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                       ),
                       child: const Row(

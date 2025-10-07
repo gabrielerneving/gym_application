@@ -373,7 +373,7 @@ Widget build(BuildContext context) {
                               child: Icon(
                                   _selectedIndex == index ? _activeIcons[index] : _icons[index],
                                   color: _selectedIndex == index
-                                      ? theme.text
+                                      ? Colors.white
                                       : theme.textSecondary,
                                   size: _selectedIndex == index 
                                       ? (index == 1 ? 32 : 26)  

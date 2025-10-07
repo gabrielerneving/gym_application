@@ -54,10 +54,10 @@ class ProgramDetailPage extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF18181B),
+                color: theme.card,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF2A2A2A),
+                  color: theme.textSecondary.withOpacity(0.2),
                   width: 0.5,
                 ),
               ),
@@ -66,7 +66,7 @@ class ProgramDetailPage extends ConsumerWidget {
                   Text(
                     'Program Overview',
                     style: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: theme.textSecondary,
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
                     ),
@@ -79,16 +79,19 @@ class ProgramDetailPage extends ConsumerWidget {
                         icon: Icons.fitness_center,
                         label: 'Exercises',
                         value: '${program.exercises.length}',
+                        theme: theme,
                       ),
                       _buildStatItem(
                         icon: Icons.repeat,
                         label: 'Total Sets',
                         value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.sets)}',
+                        theme: theme,
                       ),
                        _buildStatItem(
                         icon: Icons.repeat,
                         label: 'Working Sets',
                         value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.workingSets)}',
+                        theme: theme,
                       ),
                     ],
                   ),
@@ -99,8 +102,8 @@ class ProgramDetailPage extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               'Exercises',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: theme.text,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
               ),
@@ -115,10 +118,10 @@ class ProgramDetailPage extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: theme.card,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.grey.shade800.withOpacity(0.6),
+                    color: theme.textSecondary.withOpacity(0.2),
                     width: 0.5,
                   ),
                 ),
@@ -153,8 +156,8 @@ class ProgramDetailPage extends ConsumerWidget {
                             children: [
                               Text(
                                 exercise.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: theme.text,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -165,7 +168,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   ? '${exercise.workingSets} working + ${exercise.warmUpSets} warm-up sets'
                                   : '${exercise.sets} sets planned',
                                 style: TextStyle(
-                                  color: Colors.grey.shade400,
+                                  color: theme.textSecondary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w400,
                                 ),
@@ -184,7 +187,7 @@ class ProgramDetailPage extends ConsumerWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: theme.surface,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -212,7 +215,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   : Text(
                                       '${setIndex - exercise.warmUpSets + 1}',
                                       style: TextStyle(
-                                        color: Colors.grey.shade400,
+                                        color: theme.textSecondary,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -231,7 +234,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     setIndex < exercise.warmUpSets ? 'Warm-up' : 'Working',
                                     style: TextStyle(
-                                      color: setIndex < exercise.warmUpSets ? Colors.orange : Colors.grey.shade500,
+                                      color: setIndex < exercise.warmUpSets ? Colors.orange : theme.textSecondary,
                                       fontSize: 9,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -241,7 +244,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                       ? 'Set ${setIndex + 1}'
                                       : 'Set ${setIndex - exercise.warmUpSets + 1}',
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: theme.textSecondary,
                                       fontSize: 8,
                                     ),
                                   ),
@@ -259,7 +262,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     'Weight',
                                     style: TextStyle(
-                                      color: Colors.grey.shade500,
+                                      color: theme.textSecondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -267,7 +270,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     '—',
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: theme.textSecondary,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -283,7 +286,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     'Reps',
                                     style: TextStyle(
-                                      color: Colors.grey.shade500,
+                                      color: theme.textSecondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -291,7 +294,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     '—',
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: theme.textSecondary,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -308,7 +311,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     'Notes',
                                     style: TextStyle(
-                                      color: Colors.grey.shade500,
+                                      color: theme.textSecondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -316,7 +319,7 @@ class ProgramDetailPage extends ConsumerWidget {
                                   Text(
                                     '—',
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: theme.textSecondary,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -342,19 +345,20 @@ class ProgramDetailPage extends ConsumerWidget {
     required IconData icon,
     required String label,
     required String value,
+    required dynamic theme,
   }) {
     return Column(
       children: [
         Icon(
           icon,
-          color: Colors.white,
+          color: theme.text,
           size: 26,
         ),
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.text,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
@@ -363,7 +367,7 @@ class ProgramDetailPage extends ConsumerWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey.shade500,
+            color: theme.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),

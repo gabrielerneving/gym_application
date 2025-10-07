@@ -13,6 +13,9 @@ class WorkoutHistoryWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
+    final themeIndex = ref.watch(themeIndexProvider);
+    final isPinkMode = themeIndex == 1; // Pink theme is at index 1
+    
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -32,6 +35,14 @@ class WorkoutHistoryWidget extends ConsumerWidget {
             color: Colors.grey.withOpacity(0.2),
             width: 1,
           ),
+          boxShadow: isPinkMode ? [
+            BoxShadow(
+              color: const Color(0xFFFCE7F3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ] : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,8 +59,8 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                     children: [
                       Text(
                         session.programTitle,
-                        style: const TextStyle(
-                          color: Colors.white, // Tillbaka till vit för titel
+                        style: TextStyle(
+                          color: theme.text,
                           fontSize: 19,
                           fontWeight: FontWeight.w700,
                         ),
@@ -58,7 +69,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                       Text(
                         DateFormat('MMM d, yyyy').format(session.date),
                         style: TextStyle(
-                          color: Colors.grey.shade500,
+                          color: theme.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w400,
                         ),
@@ -83,13 +94,13 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                           Icon(
                             Icons.timer,
                             size: 14,
-                            color: Colors.grey.shade400,
+                            color: theme.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${session.durationInMinutes}m',
                             style: TextStyle(
-                              color: Colors.grey.shade300,
+                              color: theme.textSecondary,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -109,7 +120,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                       child: Text(
                         '${session.completedExercises.length}',
                         style: TextStyle(
-                          color: Colors.grey.shade300,
+                          color: theme.textSecondary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -119,7 +130,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Icon(
                       Icons.arrow_forward_ios,
-                      color: Colors.grey.shade600,
+                      color: theme.textSecondary,
                       size: 16,
                     ),
                   ],
@@ -133,7 +144,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
             Text(
               session.completedExercises.take(3).map((e) => e.name).join(' • '),
               style: TextStyle(
-                color: Colors.grey.shade400,
+                color: theme.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
               ),
@@ -147,7 +158,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                 child: Text(
                   '+${session.completedExercises.length - 3} more',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: theme.textSecondary,
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
                   ),

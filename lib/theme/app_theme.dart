@@ -66,7 +66,7 @@ class AppColors {
 
 /// Predefined app themes
 class AppTheme {
-  // Dark Red theme (default - your current colors)
+  // Dark Red theme (default)
   static const darkRedTheme = AppColors(
     primary: Color(0xFFDC2626),
     primaryLight: Color(0xFFEF4444),
@@ -82,7 +82,7 @@ class AppTheme {
     error: Color(0xFFEF4444),
   );
 
-  // Pink/White theme - from gradient image (EC4898 -> F43F5F)
+  // Pink/White theme (EC4898 -> F43F5F)
   static const pinkTheme = AppColors(
     primary: Color(0xFFEC4898),        // Pink from gradient (0%)
     primaryLight: Color(0xFFF43F5F),   // Red from gradient (100%)

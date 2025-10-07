@@ -55,16 +55,17 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create exercise'),
-        backgroundColor: Colors.black,
+        title: Text('Create exercise', style: TextStyle(color: theme.text)),
+        backgroundColor: theme.background,
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _saveExercise,
             child: _isLoading
                 ? const CircularProgressIndicator()
-                : const Text('Save', style: TextStyle(color: Colors.red, fontSize: 16)),
+                : Text('Save', style: TextStyle(color: theme.primary, fontSize: 16)),
           ),
         ],
       ),
