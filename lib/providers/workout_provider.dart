@@ -321,11 +321,28 @@ Future<void> startWorkout(WorkoutProgram program) async {
 // DEL 3: PROVIDERN
 // Detta är den globala variabeln som låter vårt UI komma åt "hjärnan".
 // ====================================================================
+
+// Family provider - skapar en unik WorkoutStateNotifier för varje user ID
+// Detta är NYCKELN till att hålla användares data separerade!
+// När user ID ändras kommer Riverpod automatiskt att skapa en NY instans
+final workoutProviderFamily = StateNotifierProvider.family<WorkoutStateNotifier, ActiveWorkoutState, String>((ref, uid) {
+  return WorkoutStateNotifier(DatabaseService(uid: uid));
+});
+
+// Huvudprovidern som delegerar till family provider baserat på inloggad användare
+// OBS: Denna måste användas tillsammans med Consumer/ConsumerWidget för att fungera korrekt
 final workoutProvider = StateNotifierProvider<WorkoutStateNotifier, ActiveWorkoutState>((ref) {
+  // Hämta nuvarande användare direkt från Firebase
+  // Detta kommer att vara null första gången, men AuthGate garanterar att användaren är inloggad
+  // när MainScreen visas
   final uid = FirebaseAuth.instance.currentUser?.uid;
+  
   if (uid == null) {
     throw Exception("User not logged in, cannot create workout provider.");
   }
+  
+  // Skapa en NY WorkoutStateNotifier för denna användare
+  // Observera: Riverpod kommer att cacha denna instans, vilket är problemet!
   return WorkoutStateNotifier(DatabaseService(uid: uid));
 });
 
