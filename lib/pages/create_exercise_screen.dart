@@ -61,6 +61,11 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
       appBar: AppBar(
         title: Text('Create exercise', style: TextStyle(color: theme.text)),
         backgroundColor: theme.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: theme.text, size: 24),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _saveExercise,

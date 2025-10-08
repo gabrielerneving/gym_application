@@ -3,6 +3,7 @@ import '../models/workout_model.dart';
 import '../models/master_exercise_model.dart';
 import '../models/exercise_model.dart';
 import '../models/workout_session_model.dart';
+import '../models/standard_workout_template.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DatabaseService {
@@ -639,6 +640,119 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     
     return percentages;
   }
+
+  // Save standard workout as user's own workout
+  Future<void> saveStandardWorkoutAsOwn(StandardWorkoutTemplate template) async {
+    final workoutProgram = template.toWorkoutProgram();
+    // Generate new ID for user's copy
+    workoutProgram.id = _db.collection('users').doc(uid).collection('workout_programs').doc().id;
+    
+    // Save the workout program
+    await saveWorkoutProgram(workoutProgram);
+    
+    // Also add all exercises to user's master exercises
+    await _addExercisesToMasterExercises(workoutProgram.exercises);
+  }
+
+  // Helper method to add exercises to master exercises collection
+  Future<void> _addExercisesToMasterExercises(List<Exercise> exercises) async {
+    try {
+      // Get existing master exercises to avoid duplicates
+      final existingExercisesSnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('master_exercises')
+          .get();
+      
+      final existingExerciseNames = existingExercisesSnapshot.docs
+          .map((doc) => doc.data()['name'] as String)
+          .toSet();
+
+      // Add new exercises that don't already exist
+      for (final exercise in exercises) {
+        if (!existingExerciseNames.contains(exercise.name)) {
+          final masterExercise = MasterExercise(
+            id: exercise.id,
+            name: exercise.name,
+            category: _getCategoryForExercise(exercise.name), // Helper to determine category
+          );
+          
+          await saveMasterExercise(masterExercise);
+        }
+      }
+    } catch (e) {
+      print('Error adding exercises to master exercises: $e');
+      // Don't throw error here - we still want the workout to be saved even if this fails
+    }
+  }
+
+  // Helper method to determine category based on exercise name
+  String _getCategoryForExercise(String exerciseName) {
+    final name = exerciseName.toLowerCase();
+    
+    // Special cases first (before general rules)
+    if (name.contains('reverse') && name.contains('pec')) {
+      return 'Shoulders';
+    }
+    
+    // Chest exercises
+    if (name.contains('press') && (name.contains('chest') || name.contains('bench') || name.contains('incline'))) {
+      return 'Chest';
+    }
+    if (name.contains('fly') || name.contains('pec')) {
+      return 'Chest';
+    }
+    if (name.contains('push') && name.contains('up')) {
+      return 'Chest';
+    }
+    
+    // Back exercises
+    if (name.contains('pull') || name.contains('row') || name.contains('lat')) {
+      return 'Back';
+    }
+    if (name.contains('deadlift')) {
+      return 'Back';
+    }
+    
+    // Leg exercises
+    if (name.contains('squat') || name.contains('leg') || name.contains('calf')) {
+      return 'Legs';
+    }
+    if (name.contains('lunge') || name.contains('thrust')) {
+      return 'Legs';
+    }
+    
+    // Shoulder exercises
+    if (name.contains('lateral') || name.contains('shoulder') || name.contains('overhead')) {
+      return 'Shoulders';
+    }
+    
+    // Arm exercises
+    if (name.contains('curl') || name.contains('bicep')) {
+      return 'Arms';
+    }
+    if (name.contains('tricep') || name.contains('extension') || name.contains('jm press')) {
+      return 'Arms';
+    }
+    if (name.contains('dip')) {
+      return 'Arms';
+    }
+    
+    // Core exercises
+    if (name.contains('plank') || name.contains('crunch') || name.contains('twist')) {
+      return 'Core';
+    }
+    
+    // Cardio exercises
+    if (name.contains('burpee') || name.contains('mountain') || name.contains('jump') || name.contains('knee')) {
+      return 'Cardio';
+    }
+    
+    // Default to Full Body if can't determine
+    return 'Full Body';
+  }
+
+
 }
 
 // Dataklasser för progression
@@ -688,5 +802,35 @@ class MuscleGroupStat {
     required this.muscleGroup,
     required this.setCount,
   });
+}
+
+// Static methods for standard workout templates (no uid needed)
+class StandardWorkoutService {
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  // Get all standard workout templates
+  static Stream<List<StandardWorkoutTemplate>> getStandardWorkouts() {
+    return _db
+        .collection('standard_workouts')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return StandardWorkoutTemplate.fromMap(doc.data());
+      }).toList();
+    });
+  }
+
+  // Admin method to add standard workout (you would use this to populate data)
+  static Future<void> addStandardWorkout(StandardWorkoutTemplate template) async {
+    try {
+      await _db
+          .collection('standard_workouts')
+          .doc(template.id)
+          .set(template.toMap());
+    } catch (e) {
+      print('Error adding standard workout: $e');
+      rethrow;
+    }
+  }
 }
 

@@ -10,7 +10,9 @@ import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../pages/program_detail_page.dart';
 import '../widgets/gradient_text.dart';
+import '../config/admin_config.dart';
 import 'create_workout.dart';
+import 'admin_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   final VoidCallback? onSwitchToProfileTab;
@@ -155,13 +157,33 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GradientText(
-                  text: 'My workouts',
-                  style: const TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  currentThemeIndex: ref.watch(themeIndexProvider),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GradientText(
+                      text: 'My workouts',
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      currentThemeIndex: ref.watch(themeIndexProvider),
+                    ),
+                    // Admin Button - Only for specific users
+                    if (_isAdminUser())
+                      IconButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const AdminScreen()),
+                          );
+                        },
+                        icon: Icon(
+                          Icons.admin_panel_settings,
+                          color: theme.textSecondary,
+                        ),
+                        tooltip: 'Admin Panel (Add Templates)',
+                      ),
+                  ],
                 ),
                 // Visar det faktiska antalet sparade pass
                 Text(
@@ -246,5 +268,14 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
         ],
       ),
     );
+  }
+
+  // Check if current user has admin privileges
+  bool _isAdminUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    
+    // Använd säker config-fil för admin emails
+    return AdminConfig.isAdminEmail(user.email ?? '');
   }
 }

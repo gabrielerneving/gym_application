@@ -529,7 +529,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
   void _handlePanUpdate(DragUpdateDetails details) {
     setState(() {
       _swipeOffset += details.delta.dx;
-      _swipeOffset = _swipeOffset.clamp(-60.0, 60.0); 
+      _swipeOffset = _swipeOffset.clamp(-80.0, 80.0); // Öka range för bättre feedback
     });
   }
 
@@ -537,8 +537,8 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     final horizontalVelocity = details.velocity.pixelsPerSecond.dx.abs();
     final verticalVelocity = details.velocity.pixelsPerSecond.dy.abs();
     final isHorizontalSwipe = horizontalVelocity > verticalVelocity;
-    final hasEnoughVelocity = horizontalVelocity > 200; // Lägre tröskel
-    final hasEnoughDistance = _swipeOffset.abs() > 20; // Alternativ: tillräcklig distans
+    final hasEnoughVelocity = horizontalVelocity > 100; // Mycket lägre tröskel för lättare trigga
+    final hasEnoughDistance = _swipeOffset.abs() > 15; // Lägre distans krävs
     
     if (isHorizontalSwipe && (hasEnoughVelocity || hasEnoughDistance)) {
       // Läs placeholders från provider (förra passets värden)
@@ -546,18 +546,21 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       final wKey = 'w_${widget.exerciseIndex}_${widget.setIndex}';
       final rKey = 'r_${widget.exerciseIndex}_${widget.setIndex}';
       final nKey = 'n_${widget.exerciseIndex}_${widget.setIndex}';
+      final rirKey = 'rir_${widget.exerciseIndex}_${widget.setIndex}';
 
       final hasPlaceholders = ((ph[wKey] is num && (ph[wKey] as num) > 0) ||
           (ph[rKey] is num && (ph[rKey] as num) > 0) ||
-          (ph[nKey] is String && (ph[nKey] as String).isNotEmpty));
+          (ph[nKey] is String && (ph[nKey] as String).isNotEmpty) ||
+          (ph[rirKey] is num && (ph[rirKey] as num) > 0));
 
       if (hasPlaceholders) {
-        // haptic feedback
-        HapticFeedback.lightImpact();
+        // Enhanced haptic feedback
+        HapticFeedback.mediumImpact(); // Starkare feedback för bättre känsla
         
         double? w;
         int? r;
         String? n;
+        int? rir;
         if (ph[wKey] is num && (ph[wKey] as num) > 0) {
           w = (ph[wKey] as num).toDouble();
           widget.controllers[widget.weightKey]?.text = w.toString();
@@ -573,6 +576,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           widget.controllers[widget.notesKey]?.text = n;
           widget.onFieldEdited(widget.notesKey);
         }
+        if (ph[rirKey] is num && (ph[rirKey] as num) > 0) {
+          rir = (ph[rirKey] as num).toInt();
+          widget.controllers[widget.rirKey]?.text = rir.toString();
+          widget.onFieldEdited(widget.rirKey);
+        }
 
         // Update session data med dessa värden
         ref.read(workoutProvider.notifier).updateSetData(
@@ -581,6 +589,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           weight: w,
           reps: r,
           notes: n,
+          rir: rir,
         );
       }
     }
@@ -610,19 +619,37 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       builder: (context, child) {
         final offset = _animationController.isAnimating ? _offsetAnimation.value : _swipeOffset;
         
-        // Clean swipe animation
-        final swipeProgress = (offset.abs() / 60.0).clamp(0.0, 1.0);
-        final hasPlaceholders = (widget.set.weight > 0 || widget.set.reps > 0 || 
-                               (widget.set.notes != null && widget.set.notes!.isNotEmpty));
+        // Enhanced swipe animation med bättre feedback
+        final swipeProgress = (offset.abs() / 80.0).clamp(0.0, 1.0); // Anpassad till ny range
+        final ph = ref.watch(workoutProvider).placeholders;
+        final wKey = 'w_${widget.exerciseIndex}_${widget.setIndex}';
+        final rKey = 'r_${widget.exerciseIndex}_${widget.setIndex}';
+        final nKey = 'n_${widget.exerciseIndex}_${widget.setIndex}';
+        final rirKey = 'rir_${widget.exerciseIndex}_${widget.setIndex}';
         
-        // Minimal design färger
+        final hasPlaceholders = ((ph[wKey] is num && (ph[wKey] as num) > 0) ||
+            (ph[rKey] is num && (ph[rKey] as num) > 0) ||
+            (ph[nKey] is String && (ph[nKey] as String).isNotEmpty) ||
+            (ph[rirKey] is num && (ph[rirKey] as num) > 0));
+        
+        // Enhanced visual feedback
         Color containerColor = theme.card;
-        if (hasPlaceholders && swipeProgress > 0.1) {
+        Color? borderColor;
+        double borderWidth = 0.5;
+        
+        if (hasPlaceholders && swipeProgress > 0.05) {
+          // Gradvis färgändring för bättre feedback
           containerColor = Color.lerp(
             theme.card,
-            Colors.white.withOpacity(0.05),
-            swipeProgress * 0.5,
+            theme.primary.withOpacity(0.1),
+            swipeProgress * 0.8,
           )!;
+          
+          // Border effect när swipe är tillräckligt stark
+          if (swipeProgress > 0.3) {
+            borderColor = theme.primary.withOpacity(swipeProgress);
+            borderWidth = 1.0 + (swipeProgress * 1.0);
+          }
         }
         
         return Transform.translate(
@@ -637,9 +664,17 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                 color: containerColor,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: theme.textSecondary.withOpacity(0.2),
-                  width: 0.5,
+                  color: borderColor ?? theme.textSecondary.withOpacity(0.2),
+                  width: borderWidth,
                 ),
+                // Subtle glow effect när det finns data att fylla i
+                boxShadow: hasPlaceholders && swipeProgress > 0.1 ? [
+                  BoxShadow(
+                    color: theme.primary.withOpacity(0.1 * swipeProgress),
+                    blurRadius: 8.0 * swipeProgress,
+                    spreadRadius: 2.0 * swipeProgress,
+                  ),
+                ] : null,
               ),
               child: Column(
                 children: [

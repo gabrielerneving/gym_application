@@ -10,7 +10,8 @@ import '../widgets/exercise_list_item.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/gradient_text.dart';
 import 'choose_category_screen.dart'; 
-import '../models/master_exercise_model.dart'; 
+import '../models/master_exercise_model.dart';
+import '../models/standard_workout_template.dart'; 
 
 
 
@@ -301,141 +302,430 @@ Future<void> _navigateAndAddExercise() async {
 @override
 Widget build(BuildContext context) {
   final theme = ref.watch(themeProvider);
-  return GestureDetector(
-    onTap: () {
-      FocusScope.of(context).unfocus();
-    },
-    child: Scaffold(
-      resizeToAvoidBottomInset: false,
-      backgroundColor: theme.background, 
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  return DefaultTabController(
+    length: 2,
+    child: GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        backgroundColor: theme.background,
+        appBar: AppBar(
+          backgroundColor: theme.background,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: GradientText(
+            text: 'Create Workout',
+            style: const TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.bold,
+            ),
+            currentThemeIndex: ref.watch(themeIndexProvider),
+          ),
+          bottom: TabBar(
+            labelColor: theme.text,
+            unselectedLabelColor: theme.textSecondary,
+            indicatorColor: theme.primary,
+            tabs: const [
+              Tab(
+                text: 'Create',
+                icon: Icon(Icons.add_circle_outline),
+              ),
+              Tab(
+                text: 'Templates',
+                icon: Icon(Icons.star_outline),
+              ),
+            ],
+          ),
+        ),
+        body: TabBarView(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                GradientText(
-                  text: widget.workoutToEdit == null ? 'Create Workout' : 'Edit Workout',
-                  style: const TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  currentThemeIndex: ref.watch(themeIndexProvider),
-                ),
-                // Om vi är i omordningsläge, visa en "Done"-knapp.
-                // Annars, visa den vanliga "Save"-knappen.
-                if (_isReordering)
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _isReordering = false; // Gå tillbaka till normalläge
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: theme.success),
-                    child: Text('Done', style: TextStyle(color: theme.text)),
-                  )
-                else
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _saveWorkout,
-                    style: ElevatedButton.styleFrom(backgroundColor: theme.primary),
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : Text('Save', style: TextStyle(color: Colors.white)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _workoutNameController,
-              focusNode: _focusNode,
-              style: TextStyle(color: theme.text),
-              decoration: InputDecoration(
-                labelText: 'Name',
-                labelStyle: TextStyle(color: theme.text),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), 
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), 
-                  borderSide: BorderSide(color: theme.textSecondary),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), 
-                  borderSide: BorderSide(color: theme.primary),
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
-            Center(
-              child: SizedBox(
-                width: 330, 
-                child: Divider(
-                  color: theme.primary,
-                  thickness: 1,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ReorderableListView(
-                // Denna funktion är centrala delen i ReorderableListView.
-                // Den anropas när användaren har dragit ett objekt och släppt det på en ny plats.
-                onReorder: (int oldIndex, int newIndex) {
-                  setState(() {
-                    // Justeringen här är viktig: om man flyttar ett objekt neråt i listan,
-                    // förskjuts indexen på ett annat sätt än om man flyttar det uppåt.
-                    if (oldIndex < newIndex) {
-                      newIndex -= 1;
-                    }
-                    // Ta bort objektet från sin gamla plats...
-                    final Exercise item = _exercises.removeAt(oldIndex);
-                    // ...och sätt in det på sin nya plats.
-                    _exercises.insert(newIndex, item);
-                  });
-                },
-                // Bygger varje objekt i listan.
-                children: _exercises.map((exercise) {
-                  return Container(
-                    // VIKTIGT: Varje barn i en ReorderableListView måste ha en unik Key.
-                    key: Key(exercise.id),
-                    child: ExerciseListItem(
-                      exercise: exercise,
-                      isReordering: _isReordering, // Skicka med det aktuella läget
-                      onMenuPressed: () {
-                        // Hitta index för den specifika övningen för att kunna ta bort den
-                        final index = _exercises.indexOf(exercise);
-                        _showExerciseOptions(context, exercise, index);
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Visibility(
-              visible: !_focusNode.hasFocus,
-              child: Center(
-                child: GradientButton(
-                  text: 'Add exercise',
-                  onPressed: () {
-                    _navigateAndAddExercise();
-                  },
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  height: 55,
-                  borderRadius: 20,
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40),
+            _buildCreateTab(theme),
+            _buildTemplatesTab(theme),
           ],
         ),
       ),
     ),
   );
 }
+
+  Widget _buildCreateTab(theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: GradientText(
+                  text: widget.workoutToEdit == null ? 'Create New Workout' : 'Edit Workout',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  currentThemeIndex: ref.watch(themeIndexProvider),
+                ),
+              ),
+              // Om vi är i omordningsläge, visa en "Done"-knapp.
+              // Annars, visa den vanliga "Save"-knappen.
+              if (_isReordering)
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isReordering = false; // Gå tillbaka till normalläge
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: theme.success),
+                  child: Text('Done', style: TextStyle(color: theme.text)),
+                )
+              else
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _saveWorkout,
+                  style: ElevatedButton.styleFrom(backgroundColor: theme.primary),
+                  child: _isLoading
+                      ? const CircularProgressIndicator()
+                      : Text('Save', style: TextStyle(color: Colors.white)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _workoutNameController,
+            focusNode: _focusNode,
+            style: TextStyle(color: theme.text),
+            decoration: InputDecoration(
+              labelText: 'Name',
+              labelStyle: TextStyle(color: theme.text),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: theme.textSecondary),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: theme.primary),
+              ),
+            ),
+          ),
+          const SizedBox(height: 30),
+          Center(
+            child: SizedBox(
+              width: 330,
+              child: Divider(
+                color: theme.primary,
+                thickness: 1,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ReorderableListView(
+              // Denna funktion är centrala delen i ReorderableListView.
+              // Den anropas när användaren har dragit ett objekt och släppt det på en ny plats.
+              onReorder: (int oldIndex, int newIndex) {
+                setState(() {
+                  // Justeringen här är viktig: om man flyttar ett objekt neråt i listan,
+                  // förskjuts indexen på ett annat sätt än om man flyttar det uppåt.
+                  if (oldIndex < newIndex) {
+                    newIndex -= 1;
+                  }
+                  // Ta bort objektet från sin gamla plats...
+                  final Exercise item = _exercises.removeAt(oldIndex);
+                  // ...och sätt in det på sin nya plats.
+                  _exercises.insert(newIndex, item);
+                });
+              },
+              // Bygger varje objekt i listan.
+              children: _exercises.map((exercise) {
+                return Container(
+                  // VIKTIGT: Varje barn i en ReorderableListView måste ha en unik Key.
+                  key: Key(exercise.id),
+                  child: ExerciseListItem(
+                    exercise: exercise,
+                    isReordering: _isReordering, // Skicka med det aktuella läget
+                    onMenuPressed: () {
+                      // Hitta index för den specifika övningen för att kunna ta bort den
+                      final index = _exercises.indexOf(exercise);
+                      _showExerciseOptions(context, exercise, index);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Visibility(
+            visible: !_focusNode.hasFocus,
+            child: Center(
+              child: GradientButton(
+                text: 'Add exercise',
+                onPressed: () {
+                  _navigateAndAddExercise();
+                },
+                width: MediaQuery.of(context).size.width * 0.8,
+                height: 55,
+                borderRadius: 20,
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplatesTab(theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GradientText(
+            text: 'Standard Templates',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+            currentThemeIndex: ref.watch(themeIndexProvider),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose from our curated workout templates',
+            style: TextStyle(
+              fontSize: 16,
+              color: theme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: StreamBuilder<List<StandardWorkoutTemplate>>(
+              stream: StandardWorkoutService.getStandardWorkouts(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                final templates = snapshot.data ?? [];
+
+                if (templates.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.star_border,
+                          size: 64,
+                          color: theme.textSecondary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No templates available yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: theme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Check back later for new workout templates',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: theme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: templates.length,
+                  itemBuilder: (context, index) {
+                    final template = templates[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: theme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: theme.textSecondary.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: theme.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.star,
+                                  color: theme.primary,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      template.title,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.text,
+                                      ),
+                                    ),
+                                    Text(
+                                      template.category,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.primary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            template.description,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: theme.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              _buildTemplateInfoChip(
+                                theme,
+                                Icons.fitness_center,
+                                '${template.exercises.length} exercises',
+                              ),
+                              const SizedBox(width: 8),
+                              _buildTemplateInfoChip(
+                                theme,
+                                Icons.schedule,
+                                '${template.estimatedDurationMinutes} min',
+                              ),
+                              const SizedBox(width: 8),
+                              _buildTemplateInfoChip(
+                                theme,
+                                Icons.category,
+                                template.type,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                try {
+                                  final user = FirebaseAuth.instance.currentUser;
+                                  if (user == null) return;
+                                  
+                                  final dbService = DatabaseService(uid: user.uid);
+                                  await dbService.saveStandardWorkoutAsOwn(template);
+                                  
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Added "${template.title}" to your workouts'),
+                                      backgroundColor: theme.success,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error adding workout: $e'),
+                                      backgroundColor: theme.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: theme.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add, size: 20),
+                              label: const Text(
+                                'Add to My Workouts',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplateInfoChip(theme, IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: theme.textSecondary.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: theme.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 10,
+              color: theme.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
