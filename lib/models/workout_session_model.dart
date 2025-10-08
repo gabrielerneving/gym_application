@@ -5,22 +5,25 @@ class CompletedSet {
   final double weight;
   final int reps;
   final String? notes; 
-  final bool isWarmUp; 
+  final bool isWarmUp;
+  final int? rir; // Reps in Reserve - optional field
 
   CompletedSet({
     required this.weight, 
     required this.reps, 
     this.notes,
     this.isWarmUp = false, // Default är working set
+    this.rir, // Optional RIR value
   });
 
   // copyWith metod för att skapa uppdaterade kopior, användbar för immutability vilket innebär att objekt inte ändras direkt utan en ny kopia skapas med ändringar
-  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp}) {
+  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp, int? rir}) {
     return CompletedSet(
       weight: weight ?? this.weight,
       reps: reps ?? this.reps,
       notes: notes ?? this.notes,
       isWarmUp: isWarmUp ?? this.isWarmUp,
+      rir: rir ?? this.rir,
     );
   }
 
@@ -31,6 +34,7 @@ class CompletedSet {
       'reps': reps, 
       'notes': notes,
       'isWarmUp': isWarmUp,
+      'rir': rir, // Include RIR in save
     };
   }
 
@@ -39,7 +43,8 @@ class CompletedSet {
       weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
       reps: data['reps'] ?? 0,
       notes: data['notes'], 
-      isWarmUp: data['isWarmUp'] ?? false, 
+      isWarmUp: data['isWarmUp'] ?? false,
+      rir: data['rir'], // Load RIR if available
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../models/workout_session_model.dart';
 import '../providers/theme_provider.dart';
+import '../providers/workout_settings_provider.dart';
 
 class WorkoutDetailPage extends ConsumerWidget {
   final WorkoutSession session;
@@ -254,6 +255,32 @@ class WorkoutDetailPage extends ConsumerWidget {
                                 ],
                               ),
                             ),
+                            
+                            // RIR (conditionally shown)
+                            if (ref.watch(workoutSettingsProvider).showRIR && set.rir != null && set.rir! > 0)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'RIR',
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${set.rir}',
+                                      style: TextStyle(
+                                        color: theme.text,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             
                             // Notes
                             if (set.notes != null && set.notes!.isNotEmpty)

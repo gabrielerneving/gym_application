@@ -110,6 +110,9 @@ Future<void> startWorkout(WorkoutProgram program) async {
           if (lastSet.notes != null && lastSet.notes!.isNotEmpty) {
             placeholders['n_${exIndex}_$setIndex'] = lastSet.notes;
           }
+          if (lastSet.rir != null && lastSet.rir! > 0) {
+            placeholders['rir_${exIndex}_$setIndex'] = lastSet.rir;
+          }
         }
       }
     }
@@ -127,7 +130,7 @@ Future<void> startWorkout(WorkoutProgram program) async {
   _startTimer();
 }
 
-  void updateSetData(int exerciseIndex, int setIndex, {double? weight, int? reps, String? notes}) {
+  void updateSetData(int exerciseIndex, int setIndex, {double? weight, int? reps, String? notes, int? rir}) {
   if (!state.isRunning || state.session == null) return;
   
   // Använd copyWith för en mycket renare och säkrare uppdatering
@@ -141,6 +144,7 @@ Future<void> startWorkout(WorkoutProgram program) async {
     weight: weight,
     reps: reps,
     notes: notes,
+    rir: rir,
   );
   
   updatedExercises[exerciseIndex] = exerciseToUpdate.copyWith(sets: updatedSets);

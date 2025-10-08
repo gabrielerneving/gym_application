@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/workout_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/workout_settings_provider.dart';
 import '../widgets/gradient_button.dart'; 
 
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
@@ -72,6 +73,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         final weightKey = 'w_${exIndex}_$setIndex';
         final repsKey = 'r_${exIndex}_$setIndex';
         final notesKey = 'n_${exIndex}_$setIndex';
+        final rirKey = 'rir_${exIndex}_$setIndex';
 
         // Skapa/uppdatera controllers baserat på om användaren redigerat fältet
         // Logik: Bara redigerade fält ska ha text i controller
@@ -80,10 +82,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         final isWeightEdited = providerEdited.contains(weightKey);
         final isRepsEdited = providerEdited.contains(repsKey);
         final isNotesEdited = providerEdited.contains(notesKey);
+        final isRirEdited = providerEdited.contains(rirKey);
 
         String weightText = '';
         String repsText = '';
         String notesText = '';
+        String rirText = '';
 
         if (isWeightEdited && set.weight > 0) {
           weightText = set.weight.toString();
@@ -94,13 +98,18 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         if (isNotesEdited && set.notes != null && set.notes!.isNotEmpty) {
           notesText = set.notes!;
         }
+        if (isRirEdited && set.rir != null && set.rir! > 0) {
+          rirText = set.rir.toString();
+        }
 
         _controllers[weightKey]?.dispose();
         _controllers[repsKey]?.dispose();
         _controllers[notesKey]?.dispose();
+        _controllers[rirKey]?.dispose();
         _controllers[weightKey] = TextEditingController(text: weightText);
         _controllers[repsKey] = TextEditingController(text: repsText);
         _controllers[notesKey] = TextEditingController(text: notesText);
+        _controllers[rirKey] = TextEditingController(text: rirText);
       }
     }
     
@@ -370,6 +379,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                               final weightKey = 'w_${exerciseIndex}_$setIndex';
                               final repsKey = 'r_${exerciseIndex}_$setIndex';
                               final notesKey = 'n_${exerciseIndex}_$setIndex';
+                              final rirKey = 'rir_${exerciseIndex}_$setIndex';
 
                               // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
                               final providerState = ref.watch(workoutProvider);
@@ -377,6 +387,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                               final weightColor = edited.contains(weightKey) ? theme.text : theme.textSecondary;
                               final repsColor = edited.contains(repsKey) ? theme.text : theme.textSecondary;
                               final notesColor = edited.contains(notesKey) ? theme.text : theme.textSecondary;
+                              final rirColor = edited.contains(rirKey) ? theme.text : theme.textSecondary;
                               
                               return SwipeableSetRowNew(
                                 set: set,
@@ -386,6 +397,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 weightKey: weightKey,
                                 repsKey: repsKey,
                                 notesKey: notesKey,
+                                rirKey: rirKey,
                                 controllers: _controllers,
                                 editedFields: ref.watch(workoutProvider).editedFields,
                                 onFieldEdited: (fieldKey) {
@@ -397,6 +409,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 weightColor: weightColor,
                                 repsColor: repsColor,
                                 notesColor: notesColor,
+                                rirColor: rirColor,
                               );
                             }).toList(),
                           ),
@@ -453,12 +466,14 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
   final String weightKey;
   final String repsKey;
   final String notesKey;
+  final String rirKey;
   final Map<String, TextEditingController> controllers;
   final Set<String> editedFields;
   final Function(String) onFieldEdited;
   final Color weightColor;
   final Color repsColor;
   final Color notesColor;
+  final Color rirColor;
 
   const SwipeableSetRowNew({
     Key? key,
@@ -469,12 +484,14 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
     required this.weightKey,
     required this.repsKey,
     required this.notesKey,
+    required this.rirKey,
     required this.controllers,
     required this.editedFields,
     required this.onFieldEdited,
     required this.weightColor,
     required this.repsColor,
     required this.notesColor,
+    required this.rirColor,
   }) : super(key: key);
 
   @override
@@ -624,156 +641,203 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                   width: 0.5,
                 ),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  // Set nummer - different design for warm-up vs working sets
-                  Container(
-                    width: 24, 
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: widget.set.isWarmUp 
-                        ? Colors.orange.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                      border: widget.set.isWarmUp 
-                        ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
-                        : null,
-                    ),
-                    child: Center(
-                      child: widget.set.isWarmUp
-                        ? Icon(
-                            Icons.local_fire_department,
-                            color: Colors.orange,
-                            size: 14,
-                          )
-                        : Text(
-                            '${widget.setIndex - widget.warmUpSets + 1}',
-                            style: TextStyle(
-                              color: theme.text,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                          ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  // Set type label
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.set.isWarmUp ? 'Warm-up' : 'Working',
-                          style: TextStyle(
-                            color: widget.set.isWarmUp ? Colors.orange : theme.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
+                  // Header row with set info and progression
+                  Row(
+                    children: [
+                      // Set nummer - different design for warm-up vs working sets
+                      Container(
+                        width: 28, 
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: widget.set.isWarmUp 
+                            ? Colors.orange.withOpacity(0.2)
+                            : Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: widget.set.isWarmUp 
+                            ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
+                            : null,
                         ),
-                        Text(
-                          widget.set.isWarmUp 
-                            ? 'Set ${widget.setIndex + 1}'
-                            : 'Set ${widget.setIndex - widget.warmUpSets + 1}',
-                          style: TextStyle(
-                            color: widget.set.isWarmUp ? Colors.orange.shade300 : theme.textSecondary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w400,
+                        child: Center(
+                          child: widget.set.isWarmUp
+                            ? Icon(
+                                Icons.local_fire_department,
+                                color: Colors.orange,
+                                size: 16,
+                              )
+                            : Text(
+                                '${widget.setIndex - widget.warmUpSets + 1}',
+                                style: TextStyle(
+                                  color: theme.text,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      
+                      // Set type label
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.set.isWarmUp ? 'Warm-up' : 'Working Set',
+                              style: TextStyle(
+                                color: widget.set.isWarmUp ? Colors.orange : theme.text,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            Text(
+                              widget.set.isWarmUp 
+                                ? 'Set ${widget.setIndex + 1}'
+                                : 'Set ${widget.setIndex - widget.warmUpSets + 1}',
+                              style: TextStyle(
+                                color: theme.textSecondary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Progression indicator (conditionally shown)
+                      if (_buildProgressionIndicator(ref) != null) 
+                        _buildProgressionIndicator(ref)!,
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Input fields row
+                  Row(
+                    children: [
+                      // Weight input - clean design
+                      Expanded(
+                        flex: 3,
+                        child: _buildInputField(
+                          label: 'kg',
+                          controller: widget.controllers[widget.weightKey],
+                          textColor: widget.weightColor,
+                          hintText: (() {
+                            final ph = ref.watch(workoutProvider).placeholders;
+                            final v = ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
+                            if (v is num && v > 0) return v.toString();
+                            return '';
+                          })(),
+                          keyboardType: TextInputType.number,
+                          theme: theme,
+                          onChanged: (value) {
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
+                            } else {
+                              widget.onFieldEdited(widget.weightKey);
+                            }
+                            final weight = double.tryParse(value) ?? 0.0;
+                            ref.read(workoutProvider.notifier).updateSetData(
+                              widget.exerciseIndex, widget.setIndex, weight: weight, reps: widget.set.reps
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      
+                      // Reps input
+                      Expanded(
+                        flex: 3,
+                        child: _buildInputField(
+                          label: 'reps',
+                          controller: widget.controllers[widget.repsKey],
+                          textColor: widget.repsColor,
+                          hintText: (() {
+                            final ph = ref.watch(workoutProvider).placeholders;
+                            final v = ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
+                            if (v is num && v > 0) return v.toString();
+                            return '';
+                          })(),
+                          keyboardType: TextInputType.number,
+                          theme: theme,
+                          onChanged: (value) {
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
+                            } else {
+                              widget.onFieldEdited(widget.repsKey);
+                            }
+                            final reps = int.tryParse(value) ?? 0;
+                            ref.read(workoutProvider.notifier).updateSetData(
+                              widget.exerciseIndex, widget.setIndex, weight: widget.set.weight, reps: reps
+                            );
+                          },
+                        ),
+                      ),
+                      
+                      // RIR input (conditionally shown)
+                      if (ref.watch(workoutSettingsProvider).showRIR) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: _buildInputField(
+                            label: 'RIR',
+                            controller: widget.controllers[widget.rirKey],
+                            textColor: widget.rirColor,
+                            hintText: (() {
+                              final ph = ref.watch(workoutProvider).placeholders;
+                              final v = ph['rir_${widget.exerciseIndex}_${widget.setIndex}'];
+                              if (v is num && v > 0) return v.toString();
+                              return '';
+                            })(),
+                            keyboardType: TextInputType.number,
+                            theme: theme,
+                            onChanged: (value) {
+                              if (value.isEmpty) {
+                                ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.rirKey);
+                              } else {
+                                widget.onFieldEdited(widget.rirKey);
+                              }
+                              final rir = int.tryParse(value) ?? 0;
+                              ref.read(workoutProvider.notifier).updateSetData(
+                                widget.exerciseIndex, widget.setIndex, rir: rir
+                              );
+                            },
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  // Weight input - clean design
-                  Expanded(
-                    child: _buildInputField(
-                      label: 'kg',
-                      controller: widget.controllers[widget.weightKey],
-                      textColor: widget.weightColor,
-                      hintText: (() {
-                        final ph = ref.watch(workoutProvider).placeholders;
-                        final v = ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
-                        if (v is num && v > 0) return v.toString();
-                        return '';
-                      })(),
-                      keyboardType: TextInputType.number,
-                      theme: theme,
-                      onChanged: (value) {
-                        if (value.isEmpty) {
-                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.weightKey);
-                        } else {
-                          widget.onFieldEdited(widget.weightKey);
-                        }
-                        final weight = double.tryParse(value) ?? 0.0;
-                        ref.read(workoutProvider.notifier).updateSetData(
-                          widget.exerciseIndex, widget.setIndex, weight: weight, reps: widget.set.reps
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  // Reps input
-                  Expanded(
-                    child: _buildInputField(
-                      label: 'reps',
-                      controller: widget.controllers[widget.repsKey],
-                      textColor: widget.repsColor,
-                      hintText: (() {
-                        final ph = ref.watch(workoutProvider).placeholders;
-                        final v = ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
-                        if (v is num && v > 0) return v.toString();
-                        return '';
-                      })(),
-                      keyboardType: TextInputType.number,
-                      theme: theme,
-                      onChanged: (value) {
-                        if (value.isEmpty) {
-                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.repsKey);
-                        } else {
-                          widget.onFieldEdited(widget.repsKey);
-                        }
-                        final reps = int.tryParse(value) ?? 0;
-                        ref.read(workoutProvider.notifier).updateSetData(
-                          widget.exerciseIndex, widget.setIndex, weight: widget.set.weight, reps: reps
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  // Notes input
-                  Expanded(
-                    flex: 2,
-                    child: _buildInputField(
-                      label: 'notes',
-                      controller: widget.controllers[widget.notesKey],
-                      textColor: widget.notesColor,
-                      hintText: (() {
-                        final ph = ref.watch(workoutProvider).placeholders;
-                        final v = ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
-                        if (v is String && v.isNotEmpty) return v;
-                        return '';
-                      })(),
-                      keyboardType: TextInputType.text,
-                      theme: theme,
-                      onChanged: (value) {
-                        if (value.isEmpty) {
-                          ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
-                        } else {
-                          widget.onFieldEdited(widget.notesKey);
-                        }
-                        ref.read(workoutProvider.notifier).updateSetData(
-                          widget.exerciseIndex,
-                          widget.setIndex,
-                          notes: value,
-                        );
-                      },
-                    ),
+                      const SizedBox(width: 12),
+                      
+                      // Notes input
+                      Expanded(
+                        flex: 4,
+                        child: _buildInputField(
+                          label: 'notes',
+                          controller: widget.controllers[widget.notesKey],
+                          textColor: widget.notesColor,
+                          hintText: (() {
+                            final ph = ref.watch(workoutProvider).placeholders;
+                            final v = ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
+                            if (v is String && v.isNotEmpty) return v;
+                            return '';
+                          })(),
+                          keyboardType: TextInputType.text,
+                          theme: theme,
+                          onChanged: (value) {
+                            if (value.isEmpty) {
+                              ref.read(workoutProvider.notifier).unmarkFieldEdited(widget.notesKey);
+                            } else {
+                              widget.onFieldEdited(widget.notesKey);
+                            }
+                            ref.read(workoutProvider.notifier).updateSetData(
+                              widget.exerciseIndex,
+                              widget.setIndex,
+                              notes: value,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -781,6 +845,58 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           ),
         );
       },
+    );
+  }
+
+  Widget? _buildProgressionIndicator(WidgetRef ref) {
+    // Only show if progression is enabled and not warm-up set
+    if (!ref.watch(workoutSettingsProvider).showProgression || widget.set.isWarmUp) {
+      return null;
+    }
+
+    final placeholders = ref.watch(workoutProvider).placeholders;
+    final previousWeight = placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
+    final previousReps = placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
+    
+    // Only show progression if we have previous data and weights match
+    if (previousWeight == null || previousReps == null) return null;
+    
+    final currentWeight = widget.set.weight;
+    final currentReps = widget.set.reps;
+    
+    // Only show indicator if weight is the same (comparing progression in reps)
+    if (currentWeight != previousWeight || currentReps == 0) return null;
+    
+    final repsDifference = currentReps - (previousReps as int);
+    if (repsDifference == 0) return null;
+    
+    final isPositive = repsDifference > 0;
+    final color = isPositive ? Colors.green : Colors.red;
+    final icon = isPositive ? Icons.trending_up : Icons.trending_down;
+    final text = isPositive ? '+$repsDifference' : '$repsDifference';
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

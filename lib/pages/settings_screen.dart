@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_service.dart';
 import '../widgets/theme_selector.dart';
 import '../providers/theme_provider.dart';
+import '../providers/workout_settings_provider.dart';
 
 Future<void> _showLogoutConfirmation(BuildContext context, WidgetRef ref) async {
   final theme = ref.watch(themeProvider);
@@ -82,6 +83,36 @@ class SettingsScreen extends ConsumerWidget {
 
           // Theme Section
           const ThemeSelector(),
+
+          const SizedBox(height: 32),
+
+          // Workout Features Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Workout Features',
+              style: TextStyle(
+                color: currentTheme.text,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          _WorkoutFeatureToggle(
+            icon: Icons.fitness_center,
+            title: 'Show RIR (Reps in Reserve)',
+            subtitle: 'Track how many reps you have left in the tank',
+            settingKey: 'rir',
+          ),
+
+          _WorkoutFeatureToggle(
+            icon: Icons.trending_up,
+            title: 'Show Progression Indicators',
+            subtitle: 'See +/- rep changes compared to last workout',
+            settingKey: 'progression',
+          ),
 
           const SizedBox(height: 32),
 
@@ -204,6 +235,68 @@ class _SettingsTile extends ConsumerWidget {
         ),
         trailing: trailing,
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _WorkoutFeatureToggle extends ConsumerWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String settingKey;
+
+  const _WorkoutFeatureToggle({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.settingKey,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentTheme = ref.watch(themeProvider);
+    final workoutSettings = ref.watch(workoutSettingsProvider);
+    
+    final bool currentValue = settingKey == 'rir' 
+        ? workoutSettings.showRIR 
+        : workoutSettings.showProgression;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      decoration: BoxDecoration(
+        color: currentTheme.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: SwitchListTile(
+        secondary: Icon(
+          icon,
+          color: currentTheme.primary,
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: currentTheme.text,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            color: currentTheme.textSecondary,
+            fontSize: 13,
+          ),
+        ),
+        value: currentValue,
+        activeColor: currentTheme.primary,
+        onChanged: (bool value) {
+          if (settingKey == 'rir') {
+            ref.read(workoutSettingsProvider.notifier).toggleShowRIR(value);
+          } else {
+            ref.read(workoutSettingsProvider.notifier).toggleShowProgression(value);
+          }
+        },
       ),
     );
   }
