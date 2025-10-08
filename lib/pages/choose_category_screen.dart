@@ -33,11 +33,16 @@ class ChooseCategoryScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: Icon(Icons.add, color: theme.primary, size: 30),
-            onPressed: () {
-              // Navigera till skärmen för att skapa en ny övning 
-              Navigator.of(context).push(
+            onPressed: () async {
+              // Navigera till skärmen för att skapa en ny övning och vänta på resultatet
+              final result = await Navigator.of(context).push(
                 MaterialPageRoute(builder: (context) => const CreateExerciseScreen()),
               );
+              
+              // Om en övning skapades, returnera den direkt till create_workout
+              if (result != null && context.mounted) {
+                Navigator.of(context).pop(result);
+              }
             },
           ),
         ],

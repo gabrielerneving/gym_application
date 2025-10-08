@@ -39,9 +39,10 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Exercise saved!')),
+            const SnackBar(content: Text('Exercise saved and added to workout!')),
           );
-          Navigator.of(context).pop();
+          // Return the created exercise back to the previous screen
+          Navigator.of(context).pop(newExercise);
         }
       } catch (e) {
         // Error handling kan läggas till här
