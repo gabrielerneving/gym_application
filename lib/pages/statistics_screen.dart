@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/popular_workouts_card.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/gradient_text.dart';
-import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../providers/theme_provider.dart';
 import 'progression_screen.dart';
@@ -81,56 +80,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     }
   }
 
-  Future<void> _showLogoutConfirmation(BuildContext context) async {
-    final theme = ref.watch(themeProvider);
-    
-    final bool? shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: theme.card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Sign Out',
-            style: TextStyle(
-              color: theme.text,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Text(
-            'Are you sure you want to sign out?',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: TextButton.styleFrom(
-                foregroundColor: theme.primary,
-              ),
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldLogout == true) {
-      await AuthService().signOut();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
@@ -173,14 +122,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             ),
                           );
                         },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: IconButton(
-                        icon: Icon(Icons.logout, color: theme.text),
-                        tooltip: 'Log out',
-                        onPressed: () => _showLogoutConfirmation(context),
                       ),
                     ),
                   ],

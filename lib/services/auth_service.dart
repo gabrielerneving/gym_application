@@ -51,6 +51,31 @@ class AuthService {
     await _auth.signOut();
   }
 
+  // METOD FÖR ATT RADERA KONTO
+  /// Raderar det aktuella användarens Firebase Auth-konto
+  /// OBS: Detta är irreversibelt!
+  Future<void> deleteAccount() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.delete();
+        print('User account deleted successfully');
+      } else {
+        throw Exception('No user is currently logged in');
+      }
+    } on FirebaseAuthException catch (e) {
+      print('Firebase Auth Exception during account deletion: ${e.message}');
+      // Re-authentication might be needed for recent sign-in requirement
+      if (e.code == 'requires-recent-login') {
+        throw Exception('Account deletion requires recent authentication. Please log in again and try again.');
+      }
+      rethrow;
+    } catch (e) {
+      print('An unknown error occurred during account deletion: $e');
+      rethrow;
+    }
+  }
+
   // STREAM FÖR ATT LYSSNA PÅ AUTH-ÄNDRINGAR
   // Denna är superviktig! Den talar om för appen om en användare är inloggad eller inte.
   Stream<User?> get user {

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
 import '../widgets/theme_selector.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_settings_provider.dart';
+import '../auth_screen.dart';
 
 Future<void> _showLogoutConfirmation(BuildContext context, WidgetRef ref) async {
   final theme = ref.watch(themeProvider);
@@ -55,6 +58,137 @@ Future<void> _showLogoutConfirmation(BuildContext context, WidgetRef ref) async 
   }
 }
 
+Future<void> _showDeleteAccountConfirmation(BuildContext context, WidgetRef ref) async {
+  final theme = ref.watch(themeProvider);
+  
+  final bool? shouldDelete = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        backgroundColor: theme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Delete Account',
+          style: TextStyle(color: theme.text, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete your account?',
+              style: TextStyle(color: theme.text, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '⚠️ This action is IRREVERSIBLE and will:',
+              style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '• Delete all your workout data\n• Delete all your exercise history\n• Delete your account permanently\n• Cannot be undone!',
+              style: TextStyle(color: theme.textSecondary, fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: theme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text(
+              'Delete Forever',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (shouldDelete == true) {
+    await _performAccountDeletion(context, ref);
+  }
+}
+
+Future<void> _performAccountDeletion(BuildContext context, WidgetRef ref) async {
+  final theme = ref.watch(themeProvider);
+  
+  // Show loading dialog
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      backgroundColor: theme.card,
+      content: Row(
+        children: [
+          CircularProgressIndicator(color: theme.primary),
+          const SizedBox(width: 20),
+          Text('Deleting account...', style: TextStyle(color: theme.text)),
+        ],
+      ),
+    ),
+  );
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Step 1: Delete user data from Firestore
+      final dbService = DatabaseService(uid: user.uid);
+      await dbService.deleteAllUserData();
+      
+      // Step 2: Delete Firebase Auth account
+      await AuthService().deleteAccount();
+      
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        
+        // Navigate to auth screen manually to ensure immediate transition
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthScreen()),
+          (route) => false,
+        );
+      }
+    }
+  } catch (e) {
+    // Close loading dialog
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: theme.card,
+          title: Text('Error', style: TextStyle(color: theme.text)),
+          content: Text(
+            'Failed to delete account: ${e.toString()}',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK', style: TextStyle(color: theme.primary)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+}
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -76,13 +210,14 @@ class SettingsScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(color: currentTheme.text),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 20),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
 
-          // Theme Section
-          const ThemeSelector(),
+            // Theme Section
+            const ThemeSelector(),
 
           const SizedBox(height: 32),
 
@@ -191,8 +326,44 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
 
+                const SizedBox(height: 16),
+
+                // Delete Account Button
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _showDeleteAccountConfirmation(context, ref),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.delete_forever),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete Account',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
           const SizedBox(height: 40),
-        ],
+          ],
+        ),
       ),
     );
   }

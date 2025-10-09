@@ -4,7 +4,6 @@ import '../models/master_exercise_model.dart';
 import '../models/exercise_model.dart';
 import '../models/workout_session_model.dart';
 import '../models/standard_workout_template.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -752,6 +751,67 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     return 'Full Body';
   }
 
+  // ACCOUNT DELETION METHODS
+
+  /// Raderar all användardata från Firestore
+  /// Detta inkluderar workout programs, sessions, master exercises, etc.
+  Future<void> deleteAllUserData() async {
+    try {
+      final batch = _db.batch();
+      
+      // Radera workout programs
+      final workoutPrograms = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_programs')
+          .get();
+      for (final doc in workoutPrograms.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Radera workout sessions
+      final workoutSessions = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .get();
+      for (final doc in workoutSessions.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Radera master exercises
+      final masterExercises = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('master_exercises')
+          .get();
+      for (final doc in masterExercises.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Radera active session data
+      final activeSession = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('active_session')
+          .get();
+      for (final doc in activeSession.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Radera användarens huvud-dokument
+      final userDoc = _db.collection('users').doc(uid);
+      batch.delete(userDoc);
+      
+      // Utför alla raderingar i en batch
+      await batch.commit();
+      
+      print('All user data deleted successfully');
+    } catch (e) {
+      print('Error deleting user data: $e');
+      rethrow;
+    }
+  }
 
 }
 
@@ -832,5 +892,7 @@ class StandardWorkoutService {
       rethrow;
     }
   }
+
+
 }
 
