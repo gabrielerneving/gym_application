@@ -8,6 +8,10 @@
 .build/
 .buildlog/
 .history
+
+# Android signing keys - NEVER commit these!
+android/key.properties
+*.keystore
 .svn/
 .swiftpm/
 migrate_working_dir/
