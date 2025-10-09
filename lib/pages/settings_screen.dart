@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../widgets/theme_selector.dart';
@@ -189,6 +190,13 @@ Future<void> _performAccountDeletion(BuildContext context, WidgetRef ref) async 
   }
 }
 
+Future<void> _openPrivacyPolicy() async {
+  const url = 'https://gabrielerneving.github.io/gym_application/policy.md';
+  if (await canLaunchUrl(Uri.parse(url))) {
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+}
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -286,9 +294,7 @@ class SettingsScreen extends ConsumerWidget {
                     color: currentTheme.textSecondary,
                     size: 16,
                   ),
-                  onTap: () {
-                    // TODO: Open privacy policy
-                  },
+                  onTap: () => _openPrivacyPolicy(),
                 ),
 
                 const SizedBox(height: 32),
