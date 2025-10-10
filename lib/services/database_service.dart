@@ -713,42 +713,57 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       return 'Back';
     }
     
-    // Leg exercises
-    if (name.contains('squat') || name.contains('leg') || name.contains('calf')) {
-      return 'Legs';
-    }
-    if (name.contains('lunge') || name.contains('thrust')) {
-      return 'Legs';
-    }
-    
     // Shoulder exercises
     if (name.contains('lateral') || name.contains('shoulder') || name.contains('overhead')) {
       return 'Shoulders';
     }
     
-    // Arm exercises
+    // Biceps exercises
     if (name.contains('curl') || name.contains('bicep')) {
-      return 'Arms';
+      return 'Biceps';
     }
+    
+    // Triceps exercises
     if (name.contains('tricep') || name.contains('extension') || name.contains('jm press')) {
-      return 'Arms';
+      return 'Triceps';
     }
     if (name.contains('dip')) {
-      return 'Arms';
+      return 'Triceps';
     }
     
-    // Core exercises
-    if (name.contains('plank') || name.contains('crunch') || name.contains('twist')) {
-      return 'Core';
+    // Quads exercises
+    if (name.contains('squat') || name.contains('leg press') || name.contains('extension')) {
+      return 'Quads';
+    }
+    if (name.contains('lunge') && !name.contains('reverse')) {
+      return 'Quads';
     }
     
-    // Cardio exercises
-    if (name.contains('burpee') || name.contains('mountain') || name.contains('jump') || name.contains('knee')) {
-      return 'Cardio';
+    // Hamstrings exercises
+    if (name.contains('deadlift') || name.contains('curl') && name.contains('leg')) {
+      return 'Hamstrings';
+    }
+    if (name.contains('reverse') && name.contains('lunge')) {
+      return 'Hamstrings';
     }
     
-    // Default to Full Body if can't determine
-    return 'Full Body';
+    // Glutes exercises
+    if (name.contains('thrust') || name.contains('glute') || name.contains('hip')) {
+      return 'Glutes';
+    }
+    
+    // Calf exercises
+    if (name.contains('calf') || name.contains('raise') && (name.contains('standing') || name.contains('seated'))) {
+      return 'Calf';
+    }
+    
+    // Abs exercises
+    if (name.contains('plank') || name.contains('crunch') || name.contains('twist') || name.contains('abs')) {
+      return 'Abs';
+    }
+    
+    // Default to Chest if can't determine (most common in templates)
+    return 'Chest';
   }
 
   // ACCOUNT DELETION METHODS
