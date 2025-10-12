@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.7.2
@@ -43,6 +43,7 @@ dependencies:
   fl_chart: ^0.69.0
   shared_preferences: ^2.3.3
   url_launcher: ^6.3.1
+  dynamic_color: ^1.7.0
 
 dev_dependencies:
   flutter_test:
@@ -102,14 +103,19 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/app_icon.png"
+  image_path: "assets/icons/logga2.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
+  # Adaptive icon support (Material You + Dynamic theming)
+  adaptive_icon_background: "#FF6B35" # Din app's primary färg för Material You
+  adaptive_icon_foreground: "assets/icons/logga5.png"
+  # Enable adaptive icons for Android 8.1+
+  android_adaptive_icon: true
   web:
     generate: true
-    image_path: "assets/icons/app_icon.png"
-    background_color: "#hexcode"
-    theme_color: "#hexcode"
+    image_path: "assets/icons/logga2.png"
+    background_color: "#FF6B35"
+    theme_color: "#FF6B35"
   windows:
     generate: true
-    image_path: "assets/icons/app_icon.png"
+    image_path: "assets/icons/logga2.png"
     icon_size: 48 # min:48, max:256, default: 48

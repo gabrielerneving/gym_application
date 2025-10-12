@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
 import 'providers/theme_provider.dart';
@@ -26,10 +27,13 @@ class MyApp extends ConsumerWidget {
     // Watch theme provider for dynamic theme switching
     final appTheme = ref.watch(themeProvider);
     
-    return MaterialApp(
-      title: 'Workouts App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        // Use system colors if available (Material You), otherwise use custom theme
+        return MaterialApp(
+          title: 'Repicore',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: appTheme.background,
         primarySwatch: appTheme.toMaterialColor(),
@@ -47,10 +51,12 @@ class MyApp extends ConsumerWidget {
         cardColor: appTheme.card,
       ),
         
-      supportedLocales: const [
-        Locale('en'), 
-      ],
-      home: const AuthGate(),
+          supportedLocales: const [
+            Locale('en'), 
+          ],
+          home: const AuthGate(),
+        );
+      },
     );
   }
 }
