@@ -122,7 +122,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
                 Expanded(
                   child: isLoading 
                     ? Center(
