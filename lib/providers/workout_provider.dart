@@ -202,6 +202,13 @@ Future<void> startWorkout(WorkoutProgram program) async {
     }
   }
 
+  // Force-spara current state (anropas t.ex. när användaren lämnar skärmen)
+  void saveCurrentState() {
+    if (state.isRunning) {
+      _saveStateToFirestore();
+    }
+  }
+
   Future<void> loadInitialState() async {
     final session = await dbService.loadActiveWorkoutState();
     final edited = await dbService.loadActiveEditedKeys();
@@ -300,7 +307,8 @@ Future<void> startWorkout(WorkoutProgram program) async {
           return;
         }
         
-        if (newElapsedSeconds % 15 == 0) {
+        // Spara oftare (var 5:e sekund istället för 15:e) för bättre persistens
+        if (newElapsedSeconds % 5 == 0) {
           _saveStateToFirestore();
         }
       } else {

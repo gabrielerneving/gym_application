@@ -4,6 +4,7 @@ import '../models/master_exercise_model.dart';
 import '../models/exercise_model.dart';
 import '../models/workout_session_model.dart';
 import '../models/standard_workout_template.dart';
+import '../utils/one_rm_calculator.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -373,10 +374,12 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .firstOrNull;
       
       if (exercise != null && exercise.sets.isNotEmpty) {
-        // Hitta det tyngsta setet för denna övning i denna session (exklusive warm-up sets)
-        final workingSets = exercise.sets.where((set) => !set.isWarmUp);
-        if (workingSets.isNotEmpty) {
-          final maxWeight = workingSets
+        // Hitta det tyngsta setet för denna övning i denna session (exklusive warm-up sets och tomma sets)
+        final completedWorkingSets = exercise.sets
+            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0);
+        
+        if (completedWorkingSets.isNotEmpty) {
+          final maxWeight = completedWorkingSets
               .map((set) => set.weight)
               .reduce((a, b) => a > b ? a : b);
         
@@ -408,27 +411,114 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .firstOrNull;
       
       if (exercise != null && exercise.sets.isNotEmpty) {
-        // Beräkna total volym för denna övning i denna session (exklusive warm-up sets)
+        // Beräkna total volym för denna övning i denna session (bara genomförda working sets)
         double totalVolume = 0;
         for (final set in exercise.sets) {
-          // Räkna bara working sets, inte warm-up sets
-          if (!set.isWarmUp) {
+          // Räkna bara genomförda working sets med faktisk data
+          if (!set.isWarmUp && set.weight > 0 && set.reps > 0) {
             totalVolume += set.weight * set.reps;
           }
         }
         
-        volumeData.add(
-          VolumeDataPoint(
-            date: session.date,
-            volume: totalVolume,
-            sessionId: session.id,
-          ),
-        );
+        // Lägg bara till om det finns faktisk volym
+        if (totalVolume > 0) {
+          volumeData.add(
+            VolumeDataPoint(
+              date: session.date,
+              volume: totalVolume,
+              sessionId: session.id,
+            ),
+          );
+        }
       }
     }
     
     volumeData.sort((a, b) => a.date.compareTo(b.date));
     return volumeData;
+  }
+
+  // 1RM METODER
+  
+  // Hämta 1RM progression för en specifik övning
+  Future<List<OneRMDataPoint>> getOneRMProgression(
+    String exerciseName, 
+    {OneRMFormula formula = OneRMFormula.epley}
+  ) async {
+    final sessions = await getAllWorkoutSessions();
+    final oneRMData = <OneRMDataPoint>[];
+    
+    for (final session in sessions) {
+      final exercise = session.completedExercises
+          .where((ex) => ex.name == exerciseName)
+          .firstOrNull;
+      
+      if (exercise != null && exercise.sets.isNotEmpty) {
+        // Hitta det bästa setet för 1RM beräkning (exklusive warm-up och tomma sets)
+        final validSets = exercise.sets
+            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0 && set.reps <= 12);
+        
+        if (validSets.isNotEmpty) {
+          // Beräkna 1RM för alla sets och ta högsta
+          double maxOneRM = 0;
+          double bestWeight = 0;
+          int bestReps = 0;
+          
+          for (final set in validSets) {
+            final calculatedOneRM = OneRMCalculator.calculate(
+              set.weight, 
+              set.reps, 
+              formula
+            );
+            if (calculatedOneRM > maxOneRM) {
+              maxOneRM = calculatedOneRM;
+              bestWeight = set.weight;
+              bestReps = set.reps;
+            }
+          }
+          
+          oneRMData.add(
+            OneRMDataPoint(
+              date: session.date,
+              oneRM: maxOneRM,
+              weight: bestWeight,
+              reps: bestReps,
+              sessionId: session.id,
+              formula: formula.displayName,
+            ),
+          );
+        }
+      }
+    }
+    
+    oneRMData.sort((a, b) => a.date.compareTo(b.date));
+    return oneRMData;
+  }
+
+  // Hämta nuvarande estimated 1RM för en övning
+  Future<double?> getCurrentOneRM(
+    String exerciseName,
+    {OneRMFormula formula = OneRMFormula.epley}
+  ) async {
+    final progression = await getOneRMProgression(exerciseName, formula: formula);
+    if (progression.isEmpty) return null;
+    return progression.last.oneRM;
+  }
+
+  // Hämta alla övningars nuvarande 1RM
+  Future<Map<String, double>> getAllCurrentOneRMs({
+    OneRMFormula formula = OneRMFormula.epley
+  }) async {
+    final exerciseNames = await getAllExerciseNames();
+    final oneRMs = <String, double>{};
+    
+    for (final exerciseName in exerciseNames) {
+      final oneRM = await getCurrentOneRM(exerciseName, formula: formula);
+      if (oneRM != null) {
+        oneRMs[exerciseName] = oneRM;
+      }
+    }
+    
+    return oneRMs;
   }
 
   // Hämta personliga rekord för alla övningar
@@ -880,6 +970,25 @@ class MuscleGroupStat {
   MuscleGroupStat({
     required this.muscleGroup,
     required this.setCount,
+  });
+}
+
+// 1RM (One Rep Max) data point
+class OneRMDataPoint {
+  final DateTime date;
+  final double oneRM;
+  final double weight;
+  final int reps;
+  final String sessionId;
+  final String formula; // Vilken formel som användes
+
+  OneRMDataPoint({
+    required this.date,
+    required this.oneRM,
+    required this.weight,
+    required this.reps,
+    required this.sessionId,
+    required this.formula,
   });
 }
 

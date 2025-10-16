@@ -122,6 +122,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   @override
   void dispose() {
+    // Spara workout state innan skärmen stängs
+    ref.read(workoutProvider.notifier).saveCurrentState();
+    
     // Mycket viktigt att rensa upp alla controllers för att undvika minnesläckor!
     for (var controller in _controllers.values) {
       controller.dispose();
@@ -893,14 +896,19 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     final previousWeight = placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
     final previousReps = placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
     
-    // Only show progression if we have previous data and weights match
-    if (previousWeight == null || previousReps == null) return null;
+    // Only show progression if we have previous data
+    if (previousWeight == null || previousReps == null) {
+      return null;
+    }
     
     final currentWeight = widget.set.weight;
     final currentReps = widget.set.reps;
     
+    // Don't show if current set is empty (not yet filled in)
+    if (currentWeight == 0 || currentReps == 0) return null;
+    
     // Only show indicator if weight is the same (comparing progression in reps)
-    if (currentWeight != previousWeight || currentReps == 0) return null;
+    if (currentWeight != previousWeight) return null;
     
     final repsDifference = currentReps - (previousReps as int);
     if (repsDifference == 0) return null;

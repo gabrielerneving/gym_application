@@ -8,6 +8,7 @@ import '../services/database_service.dart';
 import '../providers/theme_provider.dart';
 import 'progression_screen.dart';
 import 'muscle_groups_screen.dart';
+import 'one_rm_screen.dart';
 import 'settings_screen.dart';
 
 class StatisticsScreen extends ConsumerStatefulWidget {
@@ -195,6 +196,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                           const SizedBox(height: 24),
                           _buildProgressionButton(theme),
                           const SizedBox(height: 16),
+                          _buildOneRMButton(theme),
+                          const SizedBox(height: 16),
                           _buildMuscleGroupsButton(theme),
                           const SizedBox(height: 24),
                           PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
@@ -326,6 +329,77 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'View weight progression charts',
+                    style: TextStyle(
+                      color: theme.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: theme.textSecondary,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOneRMButton(theme) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OneRMScreen(),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.textSecondary.withOpacity(0.2),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: theme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.trending_up,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '1RM Tracker',
+                    style: TextStyle(
+                      color: theme.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Track your estimated one-rep max',
                     style: TextStyle(
                       color: theme.textSecondary,
                       fontSize: 14,
