@@ -160,11 +160,15 @@ Future<void> _showEditSetsDialog(Exercise exercise) async {
         ),
         actions: <Widget>[
           TextButton(
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
             onPressed: () => Navigator.of(context).pop(),
           ),
           ElevatedButton(
-            child: Text('Save', style: TextStyle(color: theme.text)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
             onPressed: () {
               setState(() {
                 final workingSets = int.tryParse(workingSetsController.text) ?? 0;

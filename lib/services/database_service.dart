@@ -363,6 +363,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   }
 
   // Hämta viktprogression för en specifik övning över tid
+  // Visar både max vikt och max volym för varje träningspass
   Future<List<ProgressionDataPoint>> getExerciseProgression(String exerciseName) async {
     final sessions = await getAllWorkoutSessions();
     final progressionData = <ProgressionDataPoint>[];
@@ -374,19 +375,39 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .firstOrNull;
       
       if (exercise != null && exercise.sets.isNotEmpty) {
-        // Hitta det tyngsta setet för denna övning i denna session (exklusive warm-up sets och tomma sets)
+        // Filtrera bort warm-up sets och tomma sets
         final completedWorkingSets = exercise.sets
-            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0);
+            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
+            .toList();
         
         if (completedWorkingSets.isNotEmpty) {
-          final maxWeight = completedWorkingSets
-              .map((set) => set.weight)
-              .reduce((a, b) => a > b ? a : b);
+          // Hitta setet med högst vikt
+          var maxWeightSet = completedWorkingSets.first;
+          for (final set in completedWorkingSets) {
+            if (set.weight > maxWeightSet.weight) {
+              maxWeightSet = set;
+            }
+          }
+          
+          // Hitta setet med högst volym (vikt × reps)
+          var maxVolumeSet = completedWorkingSets.first;
+          var maxVol = maxVolumeSet.weight * maxVolumeSet.reps;
+          for (final set in completedWorkingSets) {
+            final volume = set.weight * set.reps;
+            if (volume > maxVol) {
+              maxVol = volume;
+              maxVolumeSet = set;
+            }
+          }
         
           progressionData.add(
             ProgressionDataPoint(
               date: session.date,
-              weight: maxWeight,
+              maxWeight: maxWeightSet.weight,
+              maxWeightReps: maxWeightSet.reps,
+              maxVolume: maxVolumeSet.weight * maxVolumeSet.reps,
+              maxVolumeWeight: maxVolumeSet.weight,
+              maxVolumeReps: maxVolumeSet.reps,
               sessionId: session.id,
             ),
           );
@@ -531,11 +552,11 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       if (progression.isNotEmpty) {
         // Hitta det tyngsta lyftet för denna övning
         final maxWeightPoint = progression
-            .reduce((a, b) => a.weight > b.weight ? a : b);
+            .reduce((a, b) => a.maxWeight > b.maxWeight ? a : b);
         
         personalRecords[exerciseName] = PersonalRecord(
           exerciseName: exerciseName,
-          weight: maxWeightPoint.weight,
+          weight: maxWeightPoint.maxWeight,
           date: maxWeightPoint.date,
           sessionId: maxWeightPoint.sessionId,
         );
@@ -927,12 +948,20 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
 // Dataklasser för progression
 class ProgressionDataPoint {
   final DateTime date;
-  final double weight;
+  final double maxWeight; // Högsta vikten oavsett reps
+  final int maxWeightReps; // Reps för högsta vikten
+  final double maxVolume; // Högsta volym (vikt × reps)
+  final double maxVolumeWeight; // Vikten för högsta volymen
+  final int maxVolumeReps; // Reps för högsta volymen
   final String sessionId;
 
   ProgressionDataPoint({
     required this.date,
-    required this.weight,
+    required this.maxWeight,
+    required this.maxWeightReps,
+    required this.maxVolume,
+    required this.maxVolumeWeight,
+    required this.maxVolumeReps,
     required this.sessionId,
   });
 }

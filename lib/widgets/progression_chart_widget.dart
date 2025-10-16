@@ -108,23 +108,37 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
       );
     }
 
-    // Skapa FlSpot-punkter från progressionData
-    final spots = progressionData.asMap().entries.map((entry) {
+    // Skapa två sets av punkter - en för max vikt och en för max volym
+    final weightSpots = progressionData.asMap().entries.map((entry) {
       final index = entry.key;
       final dataPoint = entry.value;
-      return FlSpot(index.toDouble(), dataPoint.weight);
+      return FlSpot(index.toDouble(), dataPoint.maxWeight);
+    }).toList();
+    
+    final volumeSpots = progressionData.asMap().entries.map((entry) {
+      final index = entry.key;
+      final dataPoint = entry.value;
+      return FlSpot(index.toDouble(), dataPoint.maxVolume);
     }).toList();
 
-    // Hitta min och max värden för y-axeln
-    final weights = progressionData.map((p) => p.weight).toList();
+    // Hitta min och max värden för y-axeln (behöver täcka både vikt och volym)
+    final weights = progressionData.map((p) => p.maxWeight).toList();
+    final volumes = progressionData.map((p) => p.maxVolume).toList();
+    
     final minWeight = weights.reduce((a, b) => a < b ? a : b);
     final maxWeight = weights.reduce((a, b) => a > b ? a : b);
+    final minVolume = volumes.reduce((a, b) => a < b ? a : b);
+    final maxVolume = volumes.reduce((a, b) => a > b ? a : b);
     
-    // Lägg till lite marginal, hantera fall där alla vikter är samma
-    final weightRange = maxWeight - minWeight;
-    final margin = weightRange > 0 ? weightRange * 0.1 : (maxWeight > 0 ? maxWeight * 0.1 : 1.0);
-    final yMin = (minWeight - margin).clamp(0.0, double.infinity);
-    final yMax = maxWeight + margin;
+    // Använd den största skalan för att båda linjerna syns bra
+    final minValue = minWeight < minVolume ? minWeight : minVolume;
+    final maxValue = maxWeight > maxVolume ? maxWeight : maxVolume;
+    
+    // Lägg till lite marginal
+    final valueRange = maxValue - minValue;
+    final margin = valueRange > 0 ? valueRange * 0.1 : (maxValue > 0 ? maxValue * 0.1 : 1.0);
+    final yMin = (minValue - margin).clamp(0.0, double.infinity);
+    final yMax = maxValue + margin;
     
     // Säkerställ att horizontalInterval aldrig är 0
     final yRange = yMax - yMin;
@@ -176,10 +190,10 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
             sideTitles: SideTitles(
               showTitles: true,
               interval: (yMax - yMin) / 4,
-              reservedSize: 40,
+              reservedSize: 45,
               getTitlesWidget: (double value, TitleMeta meta) {
                 return Text(
-                  '${value.toStringAsFixed(0)}kg',
+                  '${value.toStringAsFixed(0)}',
                   style: TextStyle(
                     color: theme.textSecondary,
                     fontSize: 10,
@@ -197,8 +211,9 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         minY: yMin,
         maxY: yMax,
         lineBarsData: [
+          // Linje för max vikt
           LineChartBarData(
-            spots: spots,
+            spots: weightSpots,
             gradient: LinearGradient(
               colors: [
                 theme.primary,
@@ -219,11 +234,37 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
               },
             ),
             belowBarData: BarAreaData(
+              show: false,
+            ),
+          ),
+          // Linje för max volym
+          LineChartBarData(
+            spots: volumeSpots,
+            gradient: LinearGradient(
+              colors: [
+                theme.accent,
+                theme.accent.withOpacity(0.7),
+              ],
+            ),
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 4,
+                  color: theme.accent,
+                  strokeWidth: 2,
+                  strokeColor: theme.background,
+                );
+              },
+            ),
+            belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  theme.primary.withOpacity(0.1),
-                  theme.primary.withOpacity(0.02),
+                  theme.accent.withOpacity(0.1),
+                  theme.accent.withOpacity(0.02),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -240,14 +281,27 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
                 final index = barSpot.x.toInt();
                 if (index >= 0 && index < progressionData.length) {
                   final dataPoint = progressionData[index];
-                  return LineTooltipItem(
-                    '${dataPoint.weight.toStringAsFixed(1)} kg\n${_formatDate(dataPoint.date)}',
-                    TextStyle(
-                      color: theme.text,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  );
+                  final isWeightLine = barSpot.barIndex == 0;
+                  
+                  if (isWeightLine) {
+                    return LineTooltipItem(
+                      'Max Weight: ${dataPoint.maxWeight.toStringAsFixed(1)}kg × ${dataPoint.maxWeightReps}\n${_formatDate(dataPoint.date)}',
+                      TextStyle(
+                        color: theme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    );
+                  } else {
+                    return LineTooltipItem(
+                      'Max Volume: ${dataPoint.maxVolume.toStringAsFixed(0)}\n(${dataPoint.maxVolumeWeight.toStringAsFixed(1)}kg × ${dataPoint.maxVolumeReps})\n${_formatDate(dataPoint.date)}',
+                      TextStyle(
+                        color: theme.accent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    );
+                  }
                 }
                 return null;
               }).toList();

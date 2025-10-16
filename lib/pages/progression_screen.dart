@@ -257,7 +257,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
 
   Widget _buildProgressionChart(AppColors theme) {
     return Container(
-      height: 300,
+      height: 350,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.card,
@@ -270,15 +270,68 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Weight Progression',
-            style: TextStyle(
-              color: theme.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Text(
+                'Progression',
+                style: TextStyle(
+                  color: theme.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Shows both max weight and max volume from each workout',
+                child: Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: theme.textSecondary,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Legend for max weight
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: theme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Max Weight',
+                style: TextStyle(
+                  color: theme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Legend for max volume
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: theme.accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Max Volume (weight × reps)',
+                style: TextStyle(
+                  color: theme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Expanded(
             child: ProgressionChartWidget(
               exerciseName: selectedExercise!,
