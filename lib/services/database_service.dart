@@ -552,10 +552,12 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           final muscleGroup = exerciseToMuscleGroup[exerciseName];
           
           if (muscleGroup != null) {
-            // Räkna bara working sets, inte warm-up sets
-            final workingSetsCount = completedExercise.sets.where((set) => !set.isWarmUp).length;
+            // Räkna bara genomförda working sets (med weight > 0 och reps > 0)
+            final completedWorkingSetsCount = completedExercise.sets
+                .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
+                .length;
             muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + workingSetsCount;
+                (muscleGroupCounts[muscleGroup] ?? 0) + completedWorkingSetsCount;
           }
         }
       }
@@ -592,10 +594,12 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           final muscleGroup = exerciseToMuscleGroup[exerciseName];
           
           if (muscleGroup != null) {
-            // Räkna bara working sets, inte warm-up sets
-            final workingSetsCount = completedExercise.sets.where((set) => !set.isWarmUp).length;
+            // Räkna bara genomförda working sets (med weight > 0 och reps > 0)
+            final completedWorkingSetsCount = completedExercise.sets
+                .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
+                .length;
             muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + workingSetsCount;
+                (muscleGroupCounts[muscleGroup] ?? 0) + completedWorkingSetsCount;
           }
         }
       }

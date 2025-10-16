@@ -111,10 +111,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: 8, right: 4),
                       child: IconButton(
                         icon: Icon(Icons.settings, color: theme.text),
                         tooltip: 'Settings',
+                        iconSize: 28,
+                        padding: const EdgeInsets.all(12),
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(

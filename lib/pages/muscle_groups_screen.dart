@@ -295,7 +295,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
                   'This month',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: selectedPeriod == TimePeriod.thisMonth ? theme.text : theme.textSecondary,
+                    color: selectedPeriod == TimePeriod.thisMonth ? Colors.white : theme.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
