@@ -91,122 +91,115 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       backgroundColor: theme.background,
       body: Stack(
         children: [
-          Column(
-            children: [
-              Container(
-                height: 80,
-                padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
-                child: Row(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: GradientText(
-                          text: 'Statistics',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 34,
-                          ),
-                          currentThemeIndex: themeIndex,
-                        ),
+                    GradientText(
+                      text: 'Statistics',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 34,
                       ),
+                      currentThemeIndex: themeIndex,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8, right: 4),
-                      child: IconButton(
-                        icon: Icon(Icons.settings, color: theme.text),
-                        tooltip: 'Settings',
-                        iconSize: 28,
-                        padding: const EdgeInsets.all(12),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const SettingsScreen(),
-                            ),
-                          );
-                        },
-                      ),
+                    IconButton(
+                      icon: Icon(Icons.settings, color: theme.text),
+                      tooltip: 'Settings',
+                      iconSize: 28,
+                      padding: const EdgeInsets.all(12),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsScreen(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
-              ),
-              Expanded(
-                child: isLoading 
-                  ? Center(
-                      child: CircularProgressIndicator(
+                const SizedBox(height: 4),
+                Expanded(
+                  child: isLoading 
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: theme.primary,
+                        ),
+                      )
+                    : RefreshIndicator(
                         color: theme.primary,
-                      ),
-                    )
-                  : RefreshIndicator(
-                      color: theme.primary,
-                      backgroundColor: theme.card,
-                      onRefresh: () async {
-                        await _loadStatistics();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Statistics refreshed', style: TextStyle(color: theme.text),),
-                              backgroundColor: theme.primary,
-                              duration: const Duration(seconds: 2),
+                        backgroundColor: theme.card,
+                        onRefresh: () async {
+                          await _loadStatistics();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Statistics refreshed', style: TextStyle(color: theme.text),),
+                                backgroundColor: theme.primary,
+                                duration: const Duration(seconds: 2),
                             ),
                           );
                         }
                       },
                       child: SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100),
                         child: Column(
-                        children: [
-                          // 2x2 statistik-kort
-                          GridView.count(
-                            crossAxisCount: 2,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 1.1,
-                            children: [
-                              StatCard(
-                                title: 'This month',
-                                value: workoutsThisMonth.toString(),
-                                unit: 'Workouts',
-                                icon: Icons.calendar_today,
-                                backgroundColor: const Color(0xFFDC2626),
-                              ),
-                              StatCard(
-                                title: 'Total workouts',
-                                value: totalWorkouts.toString(),
-                                unit: 'Sessions',
-                                icon: Icons.trending_up,
-                              ),
-                              StatCard(
-                                title: 'Total time',
-                                value: totalHours.toStringAsFixed(1),
-                                unit: 'Hours',
-                                icon: Icons.timer_outlined,
-                              ),
-                              StatCard(
-                                title: 'Average workout',
-                                value: averageWorkoutDuration.toStringAsFixed(0),
-                                unit: 'Minutes',
-                                icon: Icons.bar_chart,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          _buildProgressionButton(theme),
-                          const SizedBox(height: 16),
-                          _buildOneRMButton(theme),
-                          const SizedBox(height: 16),
-                          _buildMuscleGroupsButton(theme),
-                          const SizedBox(height: 24),
-                          PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
-                        ],
+                          children: [
+                            // 2x2 statistik-kort
+                            GridView.count(
+                              crossAxisCount: 2,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 1.1,
+                              children: [
+                                StatCard(
+                                  title: 'This month',
+                                  value: workoutsThisMonth.toString(),
+                                  unit: 'Workouts',
+                                  icon: Icons.calendar_today,
+                                  backgroundColor: const Color(0xFFDC2626),
+                                ),
+                                StatCard(
+                                  title: 'Total workouts',
+                                  value: totalWorkouts.toString(),
+                                  unit: 'Sessions',
+                                  icon: Icons.trending_up,
+                                ),
+                                StatCard(
+                                  title: 'Total time',
+                                  value: totalHours.toStringAsFixed(1),
+                                  unit: 'Hours',
+                                  icon: Icons.timer_outlined,
+                                ),
+                                StatCard(
+                                  title: 'Average workout',
+                                  value: averageWorkoutDuration.toStringAsFixed(0),
+                                  unit: 'Minutes',
+                                  icon: Icons.bar_chart,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            _buildProgressionButton(theme),
+                            const SizedBox(height: 16),
+                            _buildOneRMButton(theme),
+                            const SizedBox(height: 16),
+                            _buildMuscleGroupsButton(theme),
+                            const SizedBox(height: 24),
+                            PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
+                          ],
                         ),
                       ),
                     ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),          // Flytande navbar
           Positioned(
             bottom: 20,

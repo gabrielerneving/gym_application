@@ -131,7 +131,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
     return Scaffold(
       backgroundColor: theme.background,
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 50, 16, 60), 
+        padding: const EdgeInsets.fromLTRB(16, 60, 16, 60), 
         // StreamBuilder för att hämta och visa data i realtid
         child: StreamBuilder<List<WorkoutProgram>>(
           stream: dbService.getWorkoutPrograms(),
@@ -163,7 +163,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
                     GradientText(
                       text: 'My workouts',
                       style: const TextStyle(
-                        fontSize: 36,
+                        fontSize: 34,
                         fontWeight: FontWeight.bold,
                       ),
                       currentThemeIndex: ref.watch(themeIndexProvider),

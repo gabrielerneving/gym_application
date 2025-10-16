@@ -34,57 +34,54 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
       backgroundColor: theme.background,
       body: Stack(
         children: [
-          Column(
-            children: [
-              Container(
-                height: 80,
-                padding: const EdgeInsets.fromLTRB(16, 40, 16, 0),
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: GradientText(
-                    text: 'Workout history',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 34,
-                    ),
-                    currentThemeIndex: ref.watch(themeIndexProvider),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 60),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GradientText(
+                  text: 'Workout history',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 34,
+                  ),
+                  currentThemeIndex: ref.watch(themeIndexProvider),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: StreamBuilder<List<WorkoutSession>>(
+                    stream: dbService.getWorkoutSessions(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text("Error: ${snapshot.error}"));
+                      }
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Center(
+                          child: Text(
+                            "Your workout history is empty.\nComplete a workout to see it here!",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: theme.textSecondary, fontSize: 16),
+                          ),
+                        );
+                      }
+
+                      final workoutHistory = snapshot.data!;
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 40), // Padding för innehållet
+                        itemCount: workoutHistory.length,
+                        itemBuilder: (context, index) {
+                          return WorkoutHistoryWidget(session: workoutHistory[index]);
+                        },
+                      );
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: StreamBuilder<List<WorkoutSession>>(
-                  stream: dbService.getWorkoutSessions(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(child: Text("Error: ${snapshot.error}"));
-                    }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return Center(
-                        child: Text(
-                          "Your workout history is empty.\nComplete a workout to see it here!",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: theme.textSecondary, fontSize: 16),
-                        ),
-                      );
-                    }
-
-                    final workoutHistory = snapshot.data!;
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 100), // Extra padding för navbar
-                      itemCount: workoutHistory.length,
-                      itemBuilder: (context, index) {
-                        return WorkoutHistoryWidget(session: workoutHistory[index]);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           Positioned(
             bottom: 20,
