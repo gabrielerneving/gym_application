@@ -122,9 +122,6 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   @override
   void dispose() {
-    // Spara workout state innan skärmen stängs
-    ref.read(workoutProvider.notifier).saveCurrentState();
-    
     // Mycket viktigt att rensa upp alla controllers för att undvika minnesläckor!
     for (var controller in _controllers.values) {
       controller.dispose();
@@ -243,6 +240,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     // Hantera tillbaka-knappen utan dialog
     return WillPopScope(
       onWillPop: () async {
+        // Spara workout state innan användaren lämnar skärmen
+        ref.read(workoutProvider.notifier).saveCurrentState();
         // Timer fortsätter att köra
         return true; 
       },

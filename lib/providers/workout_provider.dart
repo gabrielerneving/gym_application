@@ -11,6 +11,7 @@ class ActiveWorkoutState {
   final WorkoutSession? session;
   final bool isRunning;
   final int elapsedSeconds;
+  final DateTime? startTime; // Timestamp när träningen började
   final WorkoutSession? staleSession; // Gamla obesvarade pass
   final Set<String> editedFields; // Spårar redigerade fält
   final Map<String, dynamic> placeholders; // Basvärden från förra passet
@@ -19,6 +20,7 @@ class ActiveWorkoutState {
     this.session,
     this.isRunning = false,
     this.elapsedSeconds = 0,
+    this.startTime,
     this.staleSession,
     Set<String>? editedFields,
     Map<String, dynamic>? placeholders,
@@ -30,6 +32,7 @@ class ActiveWorkoutState {
     WorkoutSession? session,
     bool? isRunning,
     int? elapsedSeconds,
+    DateTime? startTime,
     WorkoutSession? staleSession,
     bool clearStaleSession = false, // Flagga för att nollställa staleSession
     Set<String>? editedFields,
@@ -39,6 +42,7 @@ class ActiveWorkoutState {
       session: session ?? this.session,
       isRunning: isRunning ?? this.isRunning,
       elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
+      startTime: startTime ?? this.startTime,
       staleSession: clearStaleSession ? null : staleSession ?? this.staleSession,
       editedFields: editedFields ?? this.editedFields,
       placeholders: placeholders ?? this.placeholders,
@@ -118,15 +122,19 @@ Future<void> startWorkout(WorkoutProgram program) async {
     }
   }
 
+  final startTime = DateTime.now();
+  
   state = ActiveWorkoutState(
     session: newSession,
     isRunning: true,
     elapsedSeconds: 0,
+    startTime: startTime,
     editedFields: <String>{},
     placeholders: placeholders,
   );
-  // Persistera även placeholders till Firestore så de överlever app-restart
+  // Persistera även placeholders och startTime till Firestore så de överlever app-restart
   unawaited(dbService.saveActivePlaceholders(placeholders));
+  unawaited(dbService.saveActiveStartTime(startTime));
   _startTimer();
 }
 
@@ -213,6 +221,7 @@ Future<void> startWorkout(WorkoutProgram program) async {
     final session = await dbService.loadActiveWorkoutState();
     final edited = await dbService.loadActiveEditedKeys();
     var placeholders = await dbService.loadActivePlaceholders();
+    final savedStartTime = await dbService.loadActiveStartTime();
     
     if (session != null) {
       // Om placeholders är tomma (kan hända vid app-restart), 
@@ -227,13 +236,16 @@ Future<void> startWorkout(WorkoutProgram program) async {
       }
       
       final now = DateTime.now();
-      final timeSinceLastUpdate = now.difference(session.date);
       
-      if (timeSinceLastUpdate.inHours >= 8) {
+      // Använd sparad startTime om den finns, annars fallback till session.date
+      final actualStartTime = savedStartTime ?? session.date;
+      final actualElapsedTime = now.difference(actualStartTime);
+      
+      if (actualElapsedTime.inHours >= 8) {
         state = state.copyWith(staleSession: session, editedFields: edited, placeholders: placeholders);
       } else {
         state = state.copyWith(editedFields: edited, placeholders: placeholders);
-        _resumeWorkout(session, timeSinceLastUpdate.inSeconds);
+        _resumeWorkout(session, actualElapsedTime.inSeconds, savedStartTime: actualStartTime);
       }
     }
   }
@@ -270,7 +282,7 @@ Future<void> startWorkout(WorkoutProgram program) async {
     return placeholders;
   }
 
-  void _resumeWorkout(WorkoutSession session, int secondsToAdd) {
+  void _resumeWorkout(WorkoutSession session, int secondsToAdd, {DateTime? savedStartTime}) {
       final savedDurationInSeconds = session.durationInMinutes * 60;
       final totalElapsedSeconds = savedDurationInSeconds + secondsToAdd;
       
@@ -283,10 +295,14 @@ Future<void> startWorkout(WorkoutProgram program) async {
         return;
       }
       
+      // Använd sparad startTime om den finns, annars beräkna den
+      final actualStartTime = savedStartTime ?? DateTime.now().subtract(Duration(seconds: totalElapsedSeconds));
+      
       state = ActiveWorkoutState(
         session: session,
         isRunning: true,
         elapsedSeconds: totalElapsedSeconds,
+        startTime: actualStartTime,
         staleSession: null,
         editedFields: state.editedFields.isNotEmpty ? state.editedFields : <String>{},
       );
@@ -297,19 +313,22 @@ Future<void> startWorkout(WorkoutProgram program) async {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if(mounted){
-        final newElapsedSeconds = state.elapsedSeconds + 1;
-        state = state.copyWith(elapsedSeconds: newElapsedSeconds);
-        
-        // Kontrollera om träningspasset har pågått för länge (8 timmar = 28800 sekunder)
-        if (newElapsedSeconds >= 28800) {
-          print('Workout has been running for 8 hours, auto-finishing...');
-          finishWorkout();
-          return;
-        }
-        
-        // Spara oftare (var 5:e sekund istället för 15:e) för bättre persistens
-        if (newElapsedSeconds % 5 == 0) {
-          _saveStateToFirestore();
+        // Beräkna faktisk tid baserat på timestamp istället för att räkna sekunder
+        if (state.startTime != null) {
+          final actualElapsedSeconds = DateTime.now().difference(state.startTime!).inSeconds;
+          state = state.copyWith(elapsedSeconds: actualElapsedSeconds);
+          
+          // Kontrollera om träningspasset har pågått för länge (8 timmar = 28800 sekunder)
+          if (actualElapsedSeconds >= 28800) {
+            print('Workout has been running for 8 hours, auto-finishing...');
+            finishWorkout();
+            return;
+          }
+          
+          // Spara oftare (var 5:e sekund istället för 15:e) för bättre persistens
+          if (actualElapsedSeconds % 5 == 0) {
+            _saveStateToFirestore();
+          }
         }
       } else {
         timer.cancel();

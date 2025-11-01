@@ -180,10 +180,35 @@ Future<Map<String, dynamic>> loadActivePlaceholders() async {
   if (!snapshot.exists) return <String, dynamic>{};
   final data = snapshot.data();
   if (data == null) return <String, dynamic>{};
-  final ph = data['placeholders'];
-  if (ph is Map<String, dynamic>) return ph;
-  if (ph is Map) return Map<String, dynamic>.from(ph);
+  final placeholders = data['placeholders'];
+  if (placeholders is Map) {
+    return Map<String, dynamic>.from(placeholders);
+  }
   return <String, dynamic>{};
+}
+
+// Spara starttid för träningspass
+Future<void> saveActiveStartTime(DateTime startTime) async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  await docRef.set({'startTime': startTime.toIso8601String()}, SetOptions(merge: true));
+}
+
+// Ladda starttid för träningspass
+Future<DateTime?> loadActiveStartTime() async {
+  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
+  final snapshot = await docRef.get();
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  final startTimeStr = data['startTime'];
+  if (startTimeStr is String) {
+    try {
+      return DateTime.parse(startTimeStr);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 }
 
  // Metod för att ta bort det temporära "pågående pass"-dokumentet
