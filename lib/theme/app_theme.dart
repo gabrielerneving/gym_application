@@ -146,6 +146,22 @@ class AppTheme {
     error: Color(0xFFEF4444),
   );
 
+  // Purple Dream theme - Dark theme with vibrant purple gradients
+  static const purpleDreamTheme = AppColors(
+    primary: Color(0xFF9542EC),        // Vibrant purple
+    primaryLight: Color(0xFFD946EF),   // Bright magenta-purple
+    background: Color(0xFF1B1C20),     // Very dark blue-gray
+    backgroundDark: Color(0xFF000000), // Pure black
+    card: Color(0xFF2C2C2E),           // Dark gray cards
+    surface: Color(0xFF1C1C1E),        // Slightly lighter dark
+    accent: Color(0xFFD946EF),         // Bright magenta accent
+    text: Color(0xFFFFFFFF),           // Pure white text
+    textSecondary: Color(0xFFB3B3B3),  // Light gray secondary
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    error: Color(0xFFEF4444),
+  );
+
   // List of all available themes
   static const List<AppColors> allThemes = [
     darkRedTheme,
@@ -153,6 +169,7 @@ class AppTheme {
     oceanBlueTheme,
     forestGreenTheme,
     lavenderDreamsTheme,
+    purpleDreamTheme,
   ];
 
   // Theme names
@@ -162,6 +179,7 @@ class AppTheme {
     'Ocean Blue',
     'Forest Green',
     'Lavender Dreams',
+    'Purple Dream',
   ];
 
   /// Get theme by index
