@@ -131,7 +131,7 @@ void _showWorkoutOptions(BuildContext context, WorkoutProgram program, DatabaseS
     return Scaffold(
       backgroundColor: theme.background,
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 60, 16, 60), 
+        padding: const EdgeInsets.fromLTRB(16, 60, 16, 100), 
         // StreamBuilder för att hämta och visa data i realtid
         child: StreamBuilder<List<WorkoutProgram>>(
           stream: dbService.getWorkoutPrograms(),

@@ -524,7 +524,7 @@ Widget build(BuildContext context) {
 
   Widget _buildTemplatesTab(theme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -595,13 +595,14 @@ Widget build(BuildContext context) {
                   itemBuilder: (context, index) {
                     final template = templates[index];
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.symmetric(vertical: 8),
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: theme.surface,
-                        borderRadius: BorderRadius.circular(16),
+                        color: theme.card,
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: theme.textSecondary.withOpacity(0.2),
+                          color: Colors.grey.withOpacity(0.2),
+                          width: 1,
                         ),
                       ),
                       child: Column(

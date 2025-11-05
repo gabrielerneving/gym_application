@@ -203,7 +203,9 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       // Stats chips under datumet
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           // Timer chip
                           Container(
@@ -232,7 +234,6 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 6),
                           // Exercises count
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -260,6 +261,9 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                               ],
                             ),
                           ),
+                          // Progression chips direkt efter
+                          if (ref.watch(workoutSettingsProvider).showProgression && _hasProgression())
+                            ..._buildProgressionIndicators(theme),
                         ],
                       ),
                     ],
@@ -305,17 +309,6 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
                   ),
-                ),
-              ),
-            
-            // Visa progressionsindikatorer om det finns några och inställningen är på
-            if (ref.watch(workoutSettingsProvider).showProgression && _hasProgression())
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: _buildProgressionIndicators(theme),
                 ),
               ),
           ],
