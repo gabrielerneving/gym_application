@@ -414,15 +414,10 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
             }
           }
           
-          // Hitta setet med högst volym (vikt × reps)
-          var maxVolumeSet = completedWorkingSets.first;
-          var maxVol = maxVolumeSet.weight * maxVolumeSet.reps;
+          // Beräkna total volym (summa av vikt × reps för alla arbetssets)
+          double totalVolume = 0;
           for (final set in completedWorkingSets) {
-            final volume = set.weight * set.reps;
-            if (volume > maxVol) {
-              maxVol = volume;
-              maxVolumeSet = set;
-            }
+            totalVolume += set.weight * set.reps;
           }
         
           progressionData.add(
@@ -430,9 +425,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
               date: session.date,
               maxWeight: maxWeightSet.weight,
               maxWeightReps: maxWeightSet.reps,
-              maxVolume: maxVolumeSet.weight * maxVolumeSet.reps,
-              maxVolumeWeight: maxVolumeSet.weight,
-              maxVolumeReps: maxVolumeSet.reps,
+              totalVolume: totalVolume,
               sessionId: session.id,
             ),
           );
@@ -975,18 +968,14 @@ class ProgressionDataPoint {
   final DateTime date;
   final double maxWeight; // Högsta vikten oavsett reps
   final int maxWeightReps; // Reps för högsta vikten
-  final double maxVolume; // Högsta volym (vikt × reps)
-  final double maxVolumeWeight; // Vikten för högsta volymen
-  final int maxVolumeReps; // Reps för högsta volymen
+  final double totalVolume; // Total volym för alla arbetssets (summa av vikt × reps)
   final String sessionId;
 
   ProgressionDataPoint({
     required this.date,
     required this.maxWeight,
     required this.maxWeightReps,
-    required this.maxVolume,
-    required this.maxVolumeWeight,
-    required this.maxVolumeReps,
+    required this.totalVolume,
     required this.sessionId,
   });
 }

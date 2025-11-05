@@ -109,7 +109,10 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
                         _buildPersonalRecordCard(theme),
                       const SizedBox(height: 24),
                       if (selectedExercise != null)
-                        _buildProgressionChart(theme),
+                        _buildWeightProgressionChart(theme),
+                      const SizedBox(height: 24),
+                      if (selectedExercise != null)
+                        _buildVolumeProgressionChart(theme),
                     ],
                   ),
                 ),
@@ -255,7 +258,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
     );
   }
 
-  Widget _buildProgressionChart(AppColors theme) {
+  Widget _buildWeightProgressionChart(AppColors theme) {
     return Container(
       height: 350,
       padding: const EdgeInsets.all(16),
@@ -273,7 +276,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
           Row(
             children: [
               Text(
-                'Progression',
+                'Max Weight Progression',
                 style: TextStyle(
                   color: theme.text,
                   fontSize: 16,
@@ -282,7 +285,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
               ),
               const SizedBox(width: 8),
               Tooltip(
-                message: 'Shows both max weight and max volume from each workout',
+                message: 'Shows the heaviest weight lifted in each workout',
                 child: Icon(
                   Icons.info_outline,
                   size: 18,
@@ -294,7 +297,6 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              // Legend for max weight
               Container(
                 width: 12,
                 height: 3,
@@ -305,25 +307,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
               ),
               const SizedBox(width: 6),
               Text(
-                'Max Weight',
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Legend for max volume
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: theme.accent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Max Volume (weight × reps)',
+                'Max Weight (kg)',
                 style: TextStyle(
                   color: theme.textSecondary,
                   fontSize: 11,
@@ -336,6 +320,77 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
             child: ProgressionChartWidget(
               exerciseName: selectedExercise!,
               dbService: _dbService!,
+              showWeight: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVolumeProgressionChart(AppColors theme) {
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.textSecondary.withOpacity(0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Total Volume Progression',
+                style: TextStyle(
+                  color: theme.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Shows total volume (sum of weight × reps for all sets) in each workout',
+                child: Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: theme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: theme.accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Total Volume (kg)',
+                style: TextStyle(
+                  color: theme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ProgressionChartWidget(
+              exerciseName: selectedExercise!,
+              dbService: _dbService!,
+              showWeight: false,
             ),
           ),
         ],

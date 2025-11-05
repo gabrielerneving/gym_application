@@ -7,11 +7,13 @@ import '../providers/theme_provider.dart';
 class ProgressionChartWidget extends ConsumerStatefulWidget {
   final String exerciseName;
   final DatabaseService dbService;
+  final bool showWeight; // true = visa vikt, false = visa volym
 
   const ProgressionChartWidget({
     Key? key,
     required this.exerciseName,
     required this.dbService,
+    this.showWeight = true,
   }) : super(key: key);
 
   @override
@@ -108,31 +110,19 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
       );
     }
 
-    // Skapa två sets av punkter - en för max vikt och en för max volym
-    final weightSpots = progressionData.asMap().entries.map((entry) {
+    // Skapa punkter baserat på vilken typ av data vi vill visa
+    final spots = progressionData.asMap().entries.map((entry) {
       final index = entry.key;
       final dataPoint = entry.value;
-      return FlSpot(index.toDouble(), dataPoint.maxWeight);
-    }).toList();
-    
-    final volumeSpots = progressionData.asMap().entries.map((entry) {
-      final index = entry.key;
-      final dataPoint = entry.value;
-      return FlSpot(index.toDouble(), dataPoint.maxVolume);
+      final value = widget.showWeight ? dataPoint.maxWeight : dataPoint.totalVolume;
+      return FlSpot(index.toDouble(), value);
     }).toList();
 
-    // Hitta min och max värden för y-axeln (behöver täcka både vikt och volym)
-    final weights = progressionData.map((p) => p.maxWeight).toList();
-    final volumes = progressionData.map((p) => p.maxVolume).toList();
+    // Hitta min och max värden för y-axeln
+    final values = progressionData.map((p) => widget.showWeight ? p.maxWeight : p.totalVolume).toList();
     
-    final minWeight = weights.reduce((a, b) => a < b ? a : b);
-    final maxWeight = weights.reduce((a, b) => a > b ? a : b);
-    final minVolume = volumes.reduce((a, b) => a < b ? a : b);
-    final maxVolume = volumes.reduce((a, b) => a > b ? a : b);
-    
-    // Använd den största skalan för att båda linjerna syns bra
-    final minValue = minWeight < minVolume ? minWeight : minVolume;
-    final maxValue = maxWeight > maxVolume ? maxWeight : maxVolume;
+    final minValue = values.reduce((a, b) => a < b ? a : b);
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
     
     // Lägg till lite marginal
     final valueRange = maxValue - minValue;
@@ -211,14 +201,12 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         minY: yMin,
         maxY: yMax,
         lineBarsData: [
-          // Linje för max vikt
           LineChartBarData(
-            spots: weightSpots,
+            spots: spots,
             gradient: LinearGradient(
-              colors: [
-                theme.primary,
-                theme.primaryLight,
-              ],
+              colors: widget.showWeight
+                  ? [theme.primary, theme.primaryLight]
+                  : [theme.accent, theme.accent.withOpacity(0.7)],
             ),
             barWidth: 3,
             isStrokeCapRound: true,
@@ -227,40 +215,14 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
               getDotPainter: (spot, percent, barData, index) {
                 return FlDotCirclePainter(
                   radius: 4,
-                  color: theme.primary,
+                  color: widget.showWeight ? theme.primary : theme.accent,
                   strokeWidth: 2,
                   strokeColor: theme.background,
                 );
               },
             ),
             belowBarData: BarAreaData(
-              show: false,
-            ),
-          ),
-          // Linje för max volym
-          LineChartBarData(
-            spots: volumeSpots,
-            gradient: LinearGradient(
-              colors: [
-                theme.accent,
-                theme.accent.withOpacity(0.7),
-              ],
-            ),
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) {
-                return FlDotCirclePainter(
-                  radius: 4,
-                  color: theme.accent,
-                  strokeWidth: 2,
-                  strokeColor: theme.background,
-                );
-              },
-            ),
-            belowBarData: BarAreaData(
-              show: true,
+              show: !widget.showWeight,
               gradient: LinearGradient(
                 colors: [
                   theme.accent.withOpacity(0.1),
@@ -281,9 +243,8 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
                 final index = barSpot.x.toInt();
                 if (index >= 0 && index < progressionData.length) {
                   final dataPoint = progressionData[index];
-                  final isWeightLine = barSpot.barIndex == 0;
                   
-                  if (isWeightLine) {
+                  if (widget.showWeight) {
                     return LineTooltipItem(
                       'Max Weight: ${dataPoint.maxWeight.toStringAsFixed(1)}kg × ${dataPoint.maxWeightReps}\n${_formatDate(dataPoint.date)}',
                       TextStyle(
@@ -294,7 +255,7 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
                     );
                   } else {
                     return LineTooltipItem(
-                      'Max Volume: ${dataPoint.maxVolume.toStringAsFixed(0)}\n(${dataPoint.maxVolumeWeight.toStringAsFixed(1)}kg × ${dataPoint.maxVolumeReps})\n${_formatDate(dataPoint.date)}',
+                      'Total Volume: ${dataPoint.totalVolume.toStringAsFixed(0)} kg\n${_formatDate(dataPoint.date)}',
                       TextStyle(
                         color: theme.accent,
                         fontWeight: FontWeight.bold,
@@ -310,16 +271,17 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
           handleBuiltInTouches: true,
           getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
             return spotIndexes.map((spotIndex) {
+              final color = widget.showWeight ? theme.primary : theme.accent;
               return TouchedSpotIndicatorData(
                 FlLine(
-                  color: theme.primary.withOpacity(0.5),
+                  color: color.withOpacity(0.5),
                   strokeWidth: 2,
                 ),
                 FlDotData(
                   getDotPainter: (spot, percent, barData, index) {
                     return FlDotCirclePainter(
                       radius: 6,
-                      color: theme.primary,
+                      color: color,
                       strokeWidth: 2,
                       strokeColor: theme.background,
                     );

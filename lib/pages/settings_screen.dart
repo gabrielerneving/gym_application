@@ -56,6 +56,11 @@ Future<void> _showLogoutConfirmation(BuildContext context, WidgetRef ref) async 
 
   if (shouldLogout == true) {
     await AuthService().signOut();
+    // Navigera tillbaka till föregående skärm efter utloggning
+    // AuthGate kommer automatiskt att visa AuthScreen när auth state ändras
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
   }
 }
 
@@ -192,8 +197,21 @@ Future<void> _performAccountDeletion(BuildContext context, WidgetRef ref) async 
 
 Future<void> _openPrivacyPolicy() async {
   const url = 'https://gabrielerneving.github.io/gym_application/policy.md';
-  if (await canLaunchUrl(Uri.parse(url))) {
-    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  final uri = Uri.parse(url);
+
+  try {
+    // För HTTPS-URL:er på Android fungerar canLaunchUrl ofta inte som förväntat
+    // Vi försöker öppna direkt istället
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (e) {
+    print('Could not open privacy policy: $e');
+    // Försök med in-app webview som fallback
+    try {
+      await launchUrl(uri, mode: LaunchMode.inAppWebView);
+    } catch (e2) {
+      print('Could not open in webview either: $e2');
+      // Här kan du visa en dialog till användaren
+    }
   }
 }
 
@@ -277,7 +295,7 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.info_outline,
                   title: 'Version',
                   trailing: Text(
-                    '1.0.4',
+                    '1.0.6',
                     style: TextStyle(
                       color: currentTheme.textSecondary,
                       fontSize: 14,

@@ -129,76 +129,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     super.dispose();
   }
 
-  void _showWorkoutOptionsDialog() {
-    final theme = ref.read(themeProvider);
-    final session = ref.read(workoutProvider).session;
-    if (session == null) return;
-    
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: theme.card,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.edit, color: theme.text),
-                title: Text('Edit Program', style: TextStyle(color: theme.text)),
-                subtitle: Text('Modify exercises and sets', style: TextStyle(color: theme.textSecondary)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _editCurrentProgram();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.info_outline, color: theme.text),
-                title: Text('Workout Info', style: TextStyle(color: theme.text)),
-                subtitle: Text('View program details', style: TextStyle(color: theme.textSecondary)),
-                onTap: () {
-                  Navigator.pop(context); 
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-  
-  void _editCurrentProgram() {
-    final theme = ref.read(themeProvider);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.card,
-        title: Text('Edit Active Workout?', style: TextStyle(color: theme.text)),
-        content: Text(
-          'Editing the program will pause your current workout. Your progress will be saved.',
-          style: TextStyle(color: theme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Implementera fullständig edit-funktionalitet för active workout
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Edit during active workout - Coming soon!'),
-                  backgroundColor: theme.primary,
-                ),
-              );
-            },
-            child: Text('Continue', style: TextStyle(color: theme.primary)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -266,10 +197,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 },
               ),
               actions: [
-                IconButton(
-                  icon: Icon(Icons.edit, color: theme.text, size: 20),
-                  onPressed: () => _showWorkoutOptionsDialog(),
-                ),
+                // Edit-knappen är borttagen för att förenkla gränssnittet under aktiv träning
               ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
