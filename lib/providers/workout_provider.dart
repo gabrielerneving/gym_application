@@ -192,10 +192,46 @@ Future<void> startWorkout(WorkoutProgram program) async {
     if (!state.isRunning || state.session == null) return;
     _timer?.cancel();
     
+    // Beräkna progression för varje set genom att jämföra med placeholders
+    final updatedExercises = <CompletedExercise>[];
+    for (int exerciseIndex = 0; exerciseIndex < state.session!.completedExercises.length; exerciseIndex++) {
+      final exercise = state.session!.completedExercises[exerciseIndex];
+      final updatedSets = <CompletedSet>[];
+      
+      for (int setIndex = 0; setIndex < exercise.sets.length; setIndex++) {
+        final set = exercise.sets[setIndex];
+        int? progression;
+        
+        // Beräkna progression om setet inte är ett warmup
+        if (!set.isWarmUp) {
+          final previousWeight = state.placeholders['w_${exerciseIndex}_$setIndex'];
+          final previousReps = state.placeholders['r_${exerciseIndex}_$setIndex'];
+          
+          if (previousWeight != null && previousReps != null) {
+            final currentWeight = set.weight;
+            final currentReps = set.reps;
+            
+            // Progression gäller bara om vikten är samma som förra gången
+            if (currentWeight == previousWeight && currentWeight > 0 && currentReps > 0) {
+              final repsDifference = currentReps - (previousReps as int);
+              if (repsDifference != 0) {
+                progression = repsDifference;
+              }
+            }
+          }
+        }
+        
+        updatedSets.add(set.copyWith(progression: progression));
+      }
+      
+      updatedExercises.add(exercise.copyWith(sets: updatedSets));
+    }
+    
     final finalSession = state.session!.copyWith(
       id: const Uuid().v4(), // Ge den ett nytt, unikt ID för historiken
       durationInMinutes: (state.elapsedSeconds / 60).ceil(),
-      date: DateTime.now()
+      date: DateTime.now(),
+      completedExercises: updatedExercises,
     );
 
     await dbService.saveWorkoutSession(finalSession);

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/theme_provider.dart';
+import '../providers/workout_settings_provider.dart';
 import '../models/workout_session_model.dart';
 import '../pages/workout_detail_page.dart';
 import '../services/database_service.dart';
@@ -87,6 +88,54 @@ class WorkoutHistoryWidget extends ConsumerWidget {
         );
       }
     }
+  }
+
+  bool _hasProgression() {
+    for (final exercise in session.completedExercises) {
+      for (final set in exercise.sets) {
+        if (set.progression != null && set.progression != 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  List<Widget> _buildProgressionIndicators(dynamic theme) {
+    final indicators = <Widget>[];
+    
+    for (final exercise in session.completedExercises) {
+      for (final set in exercise.sets) {
+        if (set.progression != null && set.progression != 0) {
+          final isPositive = set.progression! > 0;
+          indicators.add(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: isPositive 
+                  ? Colors.green.withOpacity(0.15) 
+                  : Colors.red.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isPositive ? Colors.green : Colors.red,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                '${isPositive ? '+' : ''}${set.progression} reps',
+                style: TextStyle(
+                  color: isPositive ? Colors.green : Colors.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+    
+    return indicators;
   }
 
   @override
@@ -256,6 +305,17 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
                   ),
+                ),
+              ),
+            
+            // Visa progressionsindikatorer om det finns några och inställningen är på
+            if (ref.watch(workoutSettingsProvider).showProgression && _hasProgression())
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _buildProgressionIndicators(theme),
                 ),
               ),
           ],

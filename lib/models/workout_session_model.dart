@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'exercise_model.dart'; 
 class CompletedSet {
   final double weight;
   final int reps;
   final String? notes; 
   final bool isWarmUp;
   final int? rir; // Reps in Reserve - optional field
+  final int? progression; // Progression jämfört med föregående pass (ex: +2 reps eller -1 reps)
 
   CompletedSet({
     required this.weight, 
@@ -14,16 +14,18 @@ class CompletedSet {
     this.notes,
     this.isWarmUp = false, // Default är working set
     this.rir, // Optional RIR value
+    this.progression, // Optional progression indicator
   });
 
   // copyWith metod för att skapa uppdaterade kopior, användbar för immutability vilket innebär att objekt inte ändras direkt utan en ny kopia skapas med ändringar
-  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp, int? rir}) {
+  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp, int? rir, int? progression}) {
     return CompletedSet(
       weight: weight ?? this.weight,
       reps: reps ?? this.reps,
       notes: notes ?? this.notes,
       isWarmUp: isWarmUp ?? this.isWarmUp,
       rir: rir ?? this.rir,
+      progression: progression ?? this.progression,
     );
   }
 
@@ -35,6 +37,7 @@ class CompletedSet {
       'notes': notes,
       'isWarmUp': isWarmUp,
       'rir': rir, // Include RIR in save
+      'progression': progression, // Include progression in save
     };
   }
 
@@ -45,6 +48,7 @@ class CompletedSet {
       notes: data['notes'], 
       isWarmUp: data['isWarmUp'] ?? false,
       rir: data['rir'], // Load RIR if available
+      progression: data['progression'], // Load progression if available
     );
   }
 }
