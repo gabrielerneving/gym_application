@@ -1,14 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/theme_provider.dart';
 import '../models/workout_session_model.dart';
 import '../pages/workout_detail_page.dart';
+import '../services/database_service.dart';
 
 class WorkoutHistoryWidget extends ConsumerWidget {
   final WorkoutSession session;
 
   const WorkoutHistoryWidget({Key? key, required this.session}) : super(key: key);
+
+  void _showDeleteDialog(BuildContext context, WidgetRef ref, dynamic theme) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: theme.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Delete Workout',
+            style: TextStyle(color: theme.text, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'Are you sure you want to delete this workout? This action cannot be undone.',
+            style: TextStyle(color: theme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: theme.textSecondary),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _deleteWorkout(context);
+              },
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteWorkout(BuildContext context) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final dbService = DatabaseService(uid: uid);
+      await dbService.deleteWorkoutSession(session.id);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Workout deleted successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting workout: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -78,7 +151,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                   ),
                 ),
                 
-                // Höger sida - kompakta stats
+                // Höger sida - kompakta stats och meny
                 Row(
                   children: [
                     // Timer chip - Subtle style
@@ -128,10 +201,17 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                     ),
                     
                     const SizedBox(width: 8),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      color: theme.textSecondary,
-                      size: 16,
+                    
+                    // Papperskorgs-ikon för att radera workout
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: theme.textSecondary,
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showDeleteDialog(context, ref, theme),
                     ),
                   ],
                 ),

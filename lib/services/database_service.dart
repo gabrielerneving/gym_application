@@ -226,6 +226,22 @@ Future<DateTime?> loadActiveStartTime() async {
     }
   }
 
+  // Metod för att radera ett träningspass från historiken
+  Future<void> deleteWorkoutSession(String sessionId) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workout_sessions')
+          .doc(sessionId)
+          .delete();
+      print('Workout session deleted successfully: $sessionId');
+    } catch (e) {
+      print('Error deleting workout session: $e');
+      rethrow;
+    }
+  }
+
   // Metod för att hitta den SENASTE sessionen som matchar en program-titel
 Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   try {
