@@ -11,8 +11,8 @@ class PopularWorkoutsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    // Hitta det högsta värdet för att kunna räkna ut progress-baren proportionerligt
-    final int maxCount = popularWorkouts.values.fold(0, (prev, element) => element > prev ? element : prev);
+    // Beräkna totalt antal workouts för att visa relativ andel
+    final int totalWorkouts = popularWorkouts.values.fold(0, (prev, element) => prev + element);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -37,7 +37,7 @@ class PopularWorkoutsCard extends ConsumerWidget {
             return _buildPopularWorkoutRow(
               title: entry.key,
               count: entry.value,
-              progress: maxCount > 0 ? entry.value / maxCount : 0.0,
+              progress: totalWorkouts > 0 ? entry.value / totalWorkouts : 0.0,
               theme: theme,
             );
           }).toList(),
