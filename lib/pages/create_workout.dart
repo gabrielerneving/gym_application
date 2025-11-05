@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart'; 
 import '../models/exercise_model.dart';
@@ -220,6 +221,8 @@ Future<void> _navigateAndAddExercise() async {
 
   // Metod som anropas när "Save" trycks
   Future<void> _saveWorkout() async {
+    HapticFeedback.mediumImpact(); // Haptic när workout sparas
+    
     // 1. Validera att fälten inte är tomma
     if (_workoutNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

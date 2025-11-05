@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import 'gradient_button.dart';
@@ -89,7 +90,12 @@ class WorkoutWidget extends ConsumerWidget {
           const SizedBox(height: 12),
           GradientButton(
             text: 'Start workout',
-            onPressed: onStartWorkout ?? () {},
+            onPressed: onStartWorkout != null 
+                ? () {
+                    HapticFeedback.mediumImpact();
+                    onStartWorkout!();
+                  }
+                : () {},
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 14),
             borderRadius: 20,

@@ -92,6 +92,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
   }
 
   void _onItemTapped(int index) {
+    HapticFeedback.selectionClick(); // Lätt haptic vid navigation
     FocusManager.instance.primaryFocus?.unfocus();
     
     setState(() {

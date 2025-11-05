@@ -363,6 +363,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     child: GradientButton(
                       text: 'Finish Workout',
                       onPressed: () async {
+                        HapticFeedback.mediumImpact(); // Haptic när workout avslutas
                         await ref.read(workoutProvider.notifier).finishWorkout();
                         if (context.mounted) {
                           Navigator.of(context).pop();

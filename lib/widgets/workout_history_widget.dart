@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
   const WorkoutHistoryWidget({Key? key, required this.session}) : super(key: key);
 
   void _showDeleteDialog(BuildContext context, WidgetRef ref, dynamic theme) {
+    HapticFeedback.mediumImpact(); // Haptic när dialogen öppnas
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -31,7 +33,10 @@ class WorkoutHistoryWidget extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                Navigator.of(dialogContext).pop();
+              },
               child: Text(
                 'Cancel',
                 style: TextStyle(color: theme.textSecondary),
@@ -39,6 +44,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
             ),
             TextButton(
               onPressed: () async {
+                HapticFeedback.heavyImpact(); // Starkare haptic för delete
                 Navigator.of(dialogContext).pop();
                 await _deleteWorkout(context);
               },
