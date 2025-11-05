@@ -306,6 +306,39 @@ Future<void> _navigateAndAddExercise() async {
 @override
 Widget build(BuildContext context) {
   final theme = ref.watch(themeProvider);
+  final isEditMode = widget.workoutToEdit != null;
+  
+  // Om vi är i edit-läge, visa bara Create-tabben
+  if (isEditMode) {
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        backgroundColor: theme.background,
+        appBar: AppBar(
+          backgroundColor: theme.background,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: GradientText(
+            text: 'Edit Workout',
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+            currentThemeIndex: ref.watch(themeIndexProvider),
+          ),
+        ),
+        body: _buildCreateTab(theme),
+      ),
+    );
+  }
+  
+  // Annars visa med tabs som vanligt
   return DefaultTabController(
     length: 2,
     child: GestureDetector(
