@@ -126,12 +126,11 @@ class WorkoutHistoryWidget extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row med titel och stats
+            // Header row med titel och delete-ikon
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Vänster sida - titel och datum
+                // Vänster sida - titel, datum och stats
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,73 +152,82 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                           fontWeight: FontWeight.w400,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                
-                // Höger sida - kompakta stats och meny
-                Row(
-                  children: [
-                    // Timer chip - Subtle style
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 8),
+                      // Stats chips under datumet
+                      Row(
                         children: [
-                          Icon(
-                            Icons.timer,
-                            size: 14,
-                            color: theme.textSecondary,
+                          // Timer chip
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.timer,
+                                  size: 12,
+                                  color: theme.textSecondary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${session.durationInMinutes}m',
+                                  style: TextStyle(
+                                    color: theme.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${session.durationInMinutes}m',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                          const SizedBox(width: 6),
+                          // Exercises count
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.fitness_center,
+                                  size: 12,
+                                  color: theme.textSecondary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${session.completedExercises.length}',
+                                  style: TextStyle(
+                                    color: theme.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    
-                    // Exercises count - Subtle style
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${session.completedExercises.length}',
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(width: 8),
-                    
-                    // Papperskorgs-ikon för att radera workout
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: theme.textSecondary,
-                        size: 20,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => _showDeleteDialog(context, ref, theme),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                
+                // Höger sida - bara delete-ikon
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: theme.textSecondary,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _showDeleteDialog(context, ref, theme),
                 ),
               ],
             ),
