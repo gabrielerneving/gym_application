@@ -192,6 +192,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             _buildMuscleGroupsButton(theme),
                             const SizedBox(height: 24),
                             PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
+                            // Extra utrymme så att "Most popular workouts" inte täcks av den flytande navbaren
+                            const SizedBox(height: 100),
                           ],
                         ),
                       ),

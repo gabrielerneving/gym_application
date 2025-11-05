@@ -351,11 +351,13 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           (programCounts[session.programTitle] ?? 0) + 1;
     }
     
-    // Sortera efter antal träningar
+    // Sortera efter antal träningar och ta bara top 5
     final sortedEntries = programCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     
-    return Map.fromEntries(sortedEntries);
+    // Returnera bara de första 5
+    final top5Entries = sortedEntries.take(5);
+    return Map.fromEntries(top5Entries);
   }
 
   // Beräkna genomsnittlig träningstid
