@@ -595,152 +595,7 @@ Widget build(BuildContext context) {
                   itemCount: templates.length,
                   itemBuilder: (context, index) {
                     final template = templates[index];
-                    return GestureDetector(
-                      onTap: () {
-                        // Navigate to template detail page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => TemplateDetailPage(template: template),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: theme.card,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.grey.withOpacity(0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: theme.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.star,
-                                    color: theme.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        template.title,
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: theme.text,
-                                        ),
-                                      ),
-                                      Text(
-                                        template.category,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: theme.primary,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          const SizedBox(height: 12),
-                          Text(
-                            template.description,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: theme.textSecondary,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              _buildTemplateInfoChip(
-                                theme,
-                                Icons.fitness_center,
-                                '${template.exercises.length} exercises',
-                              ),
-                              const SizedBox(width: 8),
-                              _buildTemplateInfoChip(
-                                theme,
-                                Icons.schedule,
-                                '${template.estimatedDurationMinutes} min',
-                              ),
-                              const SizedBox(width: 8),
-                              _buildTemplateInfoChip(
-                                theme,
-                                Icons.category,
-                                template.type,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                try {
-                                  final user = FirebaseAuth.instance.currentUser;
-                                  if (user == null) return;
-                                  
-                                  final dbService = DatabaseService(uid: user.uid);
-                                  await dbService.saveStandardWorkoutAsOwn(template);
-                                  
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Added "${template.title}" to your workouts'),
-                                      backgroundColor: theme.success,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error adding workout: $e'),
-                                      backgroundColor: theme.error,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: theme.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.add, size: 20),
-                              label: const Text(
-                                'Add to My Workouts',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    );
+                    return _TemplateCard(template: template);
                   },
                 );
               },
@@ -779,6 +634,379 @@ Widget build(BuildContext context) {
           ),
         ],
       ),
+    );
+  }
+}
+
+// Stateful template card to handle button state and animations
+class _TemplateCard extends StatefulWidget {
+  final StandardWorkoutTemplate template;
+
+  const _TemplateCard({required this.template});
+
+  @override
+  State<_TemplateCard> createState() => _TemplateCardState();
+}
+
+class _TemplateCardState extends State<_TemplateCard> {
+  bool _isAdding = false;
+
+  void _showSuccessOverlay(BuildContext context) {
+    final overlay = Overlay.of(context);
+    final overlayEntry = OverlayEntry(
+      builder: (context) => _SuccessOverlay(),
+    );
+
+    overlay.insert(overlayEntry);
+
+    // Remove after animation
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      overlayEntry.remove();
+    });
+  }
+
+  Future<void> _addToMyWorkouts(BuildContext context, dynamic theme) async {
+    if (_isAdding) return;
+
+    setState(() {
+      _isAdding = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() {
+          _isAdding = false;
+        });
+        return;
+      }
+
+      final dbService = DatabaseService(uid: user.uid);
+      await dbService.saveStandardWorkoutAsOwn(widget.template);
+
+      // Show success overlay
+      if (mounted) {
+        _showSuccessOverlay(context);
+      }
+
+      // Re-enable button after 3 seconds
+      await Future.delayed(const Duration(seconds: 3));
+      if (mounted) {
+        setState(() {
+          _isAdding = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding workout: $e'),
+            backgroundColor: theme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() {
+          _isAdding = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final theme = ref.watch(themeProvider);
+
+        return GestureDetector(
+          onTap: () {
+            // Navigate to template detail page
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TemplateDetailPage(template: widget.template),
+              ),
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.card,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.grey.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.star,
+                        color: theme.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.template.title,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: theme.text,
+                            ),
+                          ),
+                          Text(
+                            widget.template.category,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.template.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _buildTemplateInfoChip(
+                      theme,
+                      Icons.fitness_center,
+                      '${widget.template.exercises.length} exercises',
+                    ),
+                    const SizedBox(width: 8),
+                    _buildTemplateInfoChip(
+                      theme,
+                      Icons.schedule,
+                      '${widget.template.estimatedDurationMinutes} min',
+                    ),
+                    const SizedBox(width: 8),
+                    _buildTemplateInfoChip(
+                      theme,
+                      Icons.category,
+                      widget.template.type,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isAdding ? null : () => _addToMyWorkouts(context, theme),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isAdding 
+                          ? theme.textSecondary.withOpacity(0.3)
+                          : theme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      disabledBackgroundColor: theme.textSecondary.withOpacity(0.3),
+                      disabledForegroundColor: Colors.white.withOpacity(0.5),
+                    ),
+                    icon: _isAdding
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.add, size: 20),
+                    label: Text(
+                      _isAdding ? 'Adding...' : 'Add to My Workouts',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTemplateInfoChip(theme, IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: theme.textSecondary.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: theme.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 10,
+              color: theme.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Success overlay widget
+class _SuccessOverlay extends StatefulWidget {
+  @override
+  State<_SuccessOverlay> createState() => _SuccessOverlayState();
+}
+
+class _SuccessOverlayState extends State<_SuccessOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.3, curve: Curves.easeIn),
+      ),
+    );
+
+    _controller.forward();
+
+    // Start fade out after 1.2 seconds
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted) {
+        _controller.reverse();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final theme = ref.watch(themeProvider);
+        
+        return Material(
+          color: Colors.black.withOpacity(0.3),
+          child: Center(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _scaleAnimation.value,
+                  child: Opacity(
+                    opacity: _fadeAnimation.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                      decoration: BoxDecoration(
+                        color: theme.card,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: theme.success.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.check_circle,
+                              color: theme.success,
+                              size: 48,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Added!',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: theme.text,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Workout added to My Workouts',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: theme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

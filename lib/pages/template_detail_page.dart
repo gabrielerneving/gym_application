@@ -13,19 +13,27 @@ class TemplateDetailPage extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.8,
-        builder: (_, controller) => Container(
-          decoration: BoxDecoration(
-            color: theme.card,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
-            children: [
+      isDismissible: true,
+      enableDrag: true,
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Container(
+          color: Colors.transparent,
+          child: GestureDetector(
+            onTap: () {}, // Prevent closing when tapping on the sheet itself
+            child: DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              minChildSize: 0.4,
+              maxChildSize: 0.8,
+              builder: (_, controller) => Container(
+                decoration: BoxDecoration(
+                  color: theme.card,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: ListView(
+                  controller: controller,
+                  children: [
               // Handle
               Center(
                 child: Container(
@@ -163,6 +171,9 @@ class TemplateDetailPage extends ConsumerWidget {
               
               const SizedBox(height: 20),
             ],
+          ),
+        ),
+      ),
           ),
         ),
       ),
