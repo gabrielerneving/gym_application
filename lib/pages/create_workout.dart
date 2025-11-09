@@ -12,7 +12,8 @@ import '../widgets/gradient_button.dart';
 import '../widgets/gradient_text.dart';
 import 'choose_category_screen.dart'; 
 import '../models/master_exercise_model.dart';
-import '../models/standard_workout_template.dart'; 
+import '../models/standard_workout_template.dart';
+import 'template_detail_page.dart'; 
 
 
 
@@ -594,60 +595,70 @@ Widget build(BuildContext context) {
                   itemCount: templates.length,
                   itemBuilder: (context, index) {
                     final template = templates[index];
-                    return Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: theme.card,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.grey.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: theme.primary.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  Icons.star,
-                                  color: theme.primary,
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      template.title,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: theme.text,
-                                      ),
-                                    ),
-                                    Text(
-                                      template.category,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: theme.primary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                    return GestureDetector(
+                      onTap: () {
+                        // Navigate to template detail page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TemplateDetailPage(template: template),
                           ),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: theme.card,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: theme.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.star,
+                                    color: theme.primary,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        template.title,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.text,
+                                        ),
+                                      ),
+                                      Text(
+                                        template.category,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: theme.primary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           const SizedBox(height: 12),
                           Text(
                             template.description,
@@ -728,6 +739,7 @@ Widget build(BuildContext context) {
                           ),
                         ],
                       ),
+                    ),
                     );
                   },
                 );

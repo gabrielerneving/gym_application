@@ -20,6 +20,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Focus on keeping good form throughout the movement and find a comfortable range of motion to standardize your workout.',
+        imageUrl: 'https://v2.exercisedb.io/image/S3r5ti0Pk2awwO',
+        muscleGroups: ['Biceps', 'Forearms'],
       ),
       StandardExercise(
         name: 'Tricep extensions',
@@ -27,6 +29,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 3,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Focus on keeping good form throughout the movement and find a comfortable range of motion to standardize your workout. Dont let the back take over the movement.',
+        imageUrl: 'https://v2.exercisedb.io/image/gxOCt7pSmRY7W3',
+        muscleGroups: ['Triceps'],
       ),
       StandardExercise(
         name: 'Chest Press',
@@ -34,6 +38,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 2,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Focus on keeping good form throughout the movement and find a comfortable range of motion to standardize your workout. You do not have to lock out each time since it will be a lot of tricep work.',
+        imageUrl: 'https://v2.exercisedb.io/image/FjmlS7YQXi2G8G',
+        muscleGroups: ['Chest', 'Triceps', 'Shoulders'],
       ),
       StandardExercise(
         name: 'Lat Pulldown',
@@ -41,6 +47,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Find a good range of motion, for example bar to eyes or chin. Do not swing too much, keep it in the frontal plane.',
+        imageUrl: 'https://v2.exercisedb.io/image/wYrEIL2dAF7yW9',
+        muscleGroups: ['Lats', 'Back', 'Biceps'],
       ),
       StandardExercise(
         name: 'Lateral Raises',
@@ -48,6 +56,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 3,
         warmUpSets: 0,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Do not shrug so mucht that the traps take over.',
+        imageUrl: 'https://v2.exercisedb.io/image/MZr77FQcNzW1UL',
+        muscleGroups: ['Shoulders', 'Side Delts'],
       ),
       StandardExercise(
         name: 'Kelso Shrugs',
@@ -55,6 +65,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 1,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. The range of motion may be small, do not worry. Make sure to retract the scapula.',
+        imageUrl: 'https://v2.exercisedb.io/image/yf4PnxRNa0R3hL',
+        muscleGroups: ['Traps', 'Upper Back'],
       ),
     ],
   );
@@ -77,6 +89,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Focus on controlled movement and full range of motion. Keep your back pressed against the pad.',
+        imageUrl: 'https://v2.exercisedb.io/image/lVDwmXJ7KGxE0k',
+        muscleGroups: ['Quads', 'Legs'],
       ),
       StandardExercise(
         name: 'Leg Curls',
@@ -84,6 +98,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Control the negative portion and squeeze hamstrings at the top. Avoid using momentum.',
+        imageUrl: 'https://v2.exercisedb.io/image/yF0oGN5sSVdgCm',
+        muscleGroups: ['Hamstrings', 'Legs'],
       ),
       StandardExercise(
         name: 'Seated Leg Curls',
@@ -91,6 +107,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Adjust seat position for optimal range of motion. Focus on hamstring isolation.',
+        imageUrl: 'https://v2.exercisedb.io/image/x2tqHAq9N-fH5e',
+        muscleGroups: ['Hamstrings', 'Legs'],
       ),
       StandardExercise(
         name: 'Sissy Squat',
@@ -98,6 +116,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 3,
         warmUpSets: 0,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Advanced exercise - lean back while squatting, focus on quad stretch. Use support if needed.',
+        imageUrl: 'https://v2.exercisedb.io/image/9PGtc0dxSSeFPJ',
+        muscleGroups: ['Quads', 'Legs'],
       ),
       StandardExercise(
         name: 'Back Extension',
@@ -105,6 +125,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 2,
         warmUpSets: 1,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Focus on posterior chain activation. Control the movement and avoid hyperextension.',
+        imageUrl: 'https://v2.exercisedb.io/image/rMNqwrMkLNNBLC',
+        muscleGroups: ['Lower Back', 'Glutes', 'Hamstrings'],
       ),
       StandardExercise(
         name: 'Calf Raise',
@@ -112,6 +134,8 @@ Future<void> addSampleTemplates() async {
         workingSets: 3,
         warmUpSets: 0,
         notes: 'Aim for 4-9 reps, 2-3 min rest. Full range of motion - stretch at bottom, squeeze at top. Control the tempo.',
+        imageUrl: 'https://v2.exercisedb.io/image/8YxXRzPmeDL0DZ',
+        muscleGroups: ['Calves'],
       ),
     ],
   );

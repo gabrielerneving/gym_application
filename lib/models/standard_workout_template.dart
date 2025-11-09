@@ -67,6 +67,8 @@ class StandardExercise {
   final int workingSets;
   final int warmUpSets;
   final String? notes; // Optional training notes like "Focus on form"
+  final String? imageUrl; // URL to exercise demonstration image/gif
+  final List<String>? muscleGroups; // Target muscles like ["Chest", "Triceps"]
 
   StandardExercise({
     required this.name,
@@ -74,6 +76,8 @@ class StandardExercise {
     required this.workingSets,
     required this.warmUpSets,
     this.notes,
+    this.imageUrl,
+    this.muscleGroups,
   });
 
   Exercise toExercise() {
@@ -93,6 +97,8 @@ class StandardExercise {
       'workingSets': workingSets,
       'warmUpSets': warmUpSets,
       'notes': notes,
+      'imageUrl': imageUrl,
+      'muscleGroups': muscleGroups,
     };
   }
 
@@ -103,6 +109,10 @@ class StandardExercise {
       workingSets: map['workingSets'] ?? 1,
       warmUpSets: map['warmUpSets'] ?? 0,
       notes: map['notes'],
+      imageUrl: map['imageUrl'],
+      muscleGroups: map['muscleGroups'] != null 
+          ? List<String>.from(map['muscleGroups']) 
+          : null,
     );
   }
 }
