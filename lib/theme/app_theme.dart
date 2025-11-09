@@ -98,7 +98,21 @@ class AppTheme {
     error: Color(0xFFEF4444),
   );
 
-  // Ocean Blue theme - Deep blues with elegant gradients
+  // Light Cyan theme - Bright and fresh light mode
+  static const lightCyanTheme = AppColors(
+    primary: Color(0xFF21EAC3),        // Bright cyan primary
+    primaryLight: Color(0xFF67E8F9),   // Light cyan
+    background: Color(0xFFF8FFFE),     // Very light cyan-white background
+    backgroundDark: Color(0xFFFFFFFF), // Pure white
+    card: Color(0xFFFFFFFF),           // White cards
+    surface: Color(0xFFF0FDF9),        // Very light cyan surface
+    accent: Color(0xFF06B6D4),         // Medium cyan accent
+    text: Color(0xFF0F172A),           // Dark navy text for light backgrounds
+    textSecondary: Color(0xFF64748B),  // Medium gray for secondary content
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    error: Color(0xFFEF4444),
+  );
   static const oceanBlueTheme = AppColors(
     primary: Color(0xFF1E40AF),        // Deep ocean blue
     primaryLight: Color(0xFF3B82F6),   // Bright blue
@@ -166,6 +180,7 @@ class AppTheme {
   static const List<AppColors> allThemes = [
     darkRedTheme,
     pinkTheme,
+    lightCyanTheme,
     oceanBlueTheme,
     forestGreenTheme,
     lavenderDreamsTheme,
@@ -176,6 +191,7 @@ class AppTheme {
   static const List<String> themeNames = [
     'Dark Red',
     'Pink',
+    'Cyan Cascade',
     'Ocean Blue',
     'Forest Green',
     'Lavender Dreams',
