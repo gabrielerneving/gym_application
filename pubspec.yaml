@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+8
+version: 1.0.8+9
 
 environment:
   sdk: ^3.7.2
@@ -106,8 +106,9 @@ flutter_launcher_icons:
   image_path: "assets/icons/logga2.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
   # Adaptive icon support (Material You + Dynamic theming)
-  adaptive_icon_background: "#FF6B35" # Din app's primary färg för Material You
-  adaptive_icon_foreground: "assets/icons/logga5.png"
+  adaptive_icon_background: "#FFFFFF" # Vit bakgrund så logga2 syns bra
+  adaptive_icon_foreground: "assets/icons/logga2.png" # Använd logga2 som foreground
+  adaptive_icon_monochrome: "assets/icons/logga5.png"  # Monochrome för themed icons
   # Enable adaptive icons for Android 8.1+
   android_adaptive_icon: true
   web:

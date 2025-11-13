@@ -295,7 +295,7 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.info_outline,
                   title: 'Version',
                   trailing: Text(
-                    '1.0.7',
+                    '1.0.8',
                     style: TextStyle(
                       color: currentTheme.textSecondary,
                       fontSize: 14,
