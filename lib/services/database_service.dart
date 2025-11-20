@@ -405,10 +405,28 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     return exerciseNames.toList()..sort();
   }
 
+  // Hämta alla unika programtitlar från historiken
+  Future<List<String>> getAllProgramTitles() async {
+    final sessions = await getAllWorkoutSessions();
+    final programTitles = <String>{};
+    
+    for (final session in sessions) {
+      programTitles.add(session.programTitle);
+    }
+    
+    return programTitles.toList()..sort();
+  }
+
   // Hämta viktprogression för en specifik övning över tid
   // Visar både max vikt och max volym för varje träningspass
-  Future<List<ProgressionDataPoint>> getExerciseProgression(String exerciseName) async {
-    final sessions = await getAllWorkoutSessions();
+  Future<List<ProgressionDataPoint>> getExerciseProgression(String exerciseName, {String? programTitle}) async {
+    var sessions = await getAllWorkoutSessions();
+    
+    // Filter by program title if provided
+    if (programTitle != null) {
+      sessions = sessions.where((s) => s.programTitle == programTitle).toList();
+    }
+    
     final progressionData = <ProgressionDataPoint>[];
     
     for (final session in sessions) {
@@ -458,8 +476,14 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   }
 
   // Hämta volymprogression (weight * reps * sets) för en övning
-  Future<List<VolumeDataPoint>> getExerciseVolumeProgression(String exerciseName) async {
-    final sessions = await getAllWorkoutSessions();
+  Future<List<VolumeDataPoint>> getExerciseVolumeProgression(String exerciseName, {String? programTitle}) async {
+    var sessions = await getAllWorkoutSessions();
+    
+    // Filter by program title if provided
+    if (programTitle != null) {
+      sessions = sessions.where((s) => s.programTitle == programTitle).toList();
+    }
+    
     final volumeData = <VolumeDataPoint>[];
     
     for (final session in sessions) {

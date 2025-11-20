@@ -8,12 +8,14 @@ class ProgressionChartWidget extends ConsumerStatefulWidget {
   final String exerciseName;
   final DatabaseService dbService;
   final bool showWeight; // true = visa vikt, false = visa volym
+  final String? filterProgramTitle;
 
   const ProgressionChartWidget({
     Key? key,
     required this.exerciseName,
     required this.dbService,
     this.showWeight = true,
+    this.filterProgramTitle,
   }) : super(key: key);
 
   @override
@@ -33,7 +35,8 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
   @override
   void didUpdateWidget(ProgressionChartWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.exerciseName != widget.exerciseName) {
+    if (oldWidget.exerciseName != widget.exerciseName || 
+        oldWidget.filterProgramTitle != widget.filterProgramTitle) {
       _loadProgressionData();
     }
   }
@@ -44,7 +47,10 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
     });
 
     try {
-      final data = await widget.dbService.getExerciseProgression(widget.exerciseName);
+      final data = await widget.dbService.getExerciseProgression(
+        widget.exerciseName, 
+        programTitle: widget.filterProgramTitle
+      );
       if (mounted) {
         setState(() {
           progressionData = data;

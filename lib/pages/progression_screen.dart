@@ -16,8 +16,10 @@ class ProgressionScreen extends ConsumerStatefulWidget {
 class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
   DatabaseService? _dbService;
   List<String> exerciseNames = [];
+  List<String> programTitles = [];
   Map<String, PersonalRecord> personalRecords = {};
   String? selectedExercise;
+  String? selectedProgram; // Null means "All Workouts"
   bool isLoading = true;
 
   @override
@@ -45,12 +47,14 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
       final results = await Future.wait([
         _dbService!.getAllExerciseNames(),
         _dbService!.getAllPersonalRecords(),
+        _dbService!.getAllProgramTitles(),
       ]);
 
       if (mounted) {
         setState(() {
           exerciseNames = results[0] as List<String>;
           personalRecords = results[1] as Map<String, PersonalRecord>;
+          programTitles = results[2] as List<String>;
           // Välj första övningen som default
           if (exerciseNames.isNotEmpty) {
             selectedExercise = exerciseNames.first;
@@ -104,6 +108,8 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildExerciseSelector(theme),
+                      const SizedBox(height: 16),
+                      _buildProgramFilter(theme),
                       const SizedBox(height: 24),
                       if (selectedExercise != null && personalRecords.containsKey(selectedExercise))
                         _buildPersonalRecordCard(theme),
@@ -199,6 +205,72 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
                     selectedExercise = newValue;
                   });
                 }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgramFilter(AppColors theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.textSecondary.withOpacity(0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Filter by Workout',
+            style: TextStyle(
+              color: theme.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: selectedProgram,
+              isExpanded: true,
+              dropdownColor: theme.card,
+              icon: Icon(Icons.filter_list, color: theme.textSecondary),
+              style: TextStyle(
+                color: theme.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              hint: Text(
+                'All Workouts',
+                style: TextStyle(
+                  color: theme.text,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('All Workouts', style: TextStyle(color: theme.text)),
+                ),
+                ...programTitles.map((String title) {
+                  return DropdownMenuItem<String?>(
+                    value: title,
+                    child: Text(title, style: TextStyle(color: theme.text)),
+                  );
+                }).toList(),
+              ],
+              onChanged: (String? newValue) {
+                setState(() {
+                  selectedProgram = newValue;
+                });
               },
             ),
           ),
@@ -321,6 +393,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
               exerciseName: selectedExercise!,
               dbService: _dbService!,
               showWeight: true,
+              filterProgramTitle: selectedProgram,
             ),
           ),
         ],
@@ -391,6 +464,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
               exerciseName: selectedExercise!,
               dbService: _dbService!,
               showWeight: false,
+              filterProgramTitle: selectedProgram,
             ),
           ),
         ],
