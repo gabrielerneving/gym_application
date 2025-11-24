@@ -800,6 +800,29 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     return stats;
   }
 
+  // Heatmap Data
+  Future<Map<DateTime, int>> getWorkoutHeatmapData() async {
+    try {
+      final sessions = await getAllWorkoutSessions();
+      final Map<DateTime, int> heatmapData = {};
+
+      for (final session in sessions) {
+        // Normalize date to remove time
+        final dateKey = DateTime(session.date.year, session.date.month, session.date.day);
+        
+        if (heatmapData.containsKey(dateKey)) {
+          heatmapData[dateKey] = heatmapData[dateKey]! + 1;
+        } else {
+          heatmapData[dateKey] = 1;
+        }
+      }
+      return heatmapData;
+    } catch (e) {
+      print('Error fetching heatmap data: $e');
+      return {};
+    }
+  }
+
   // Beräkna muskelgrupp fördelning i procent
   Future<Map<String, double>> getMuscleGroupPercentages() async {
     final setCounts = await getMuscleGroupSetCounts();
