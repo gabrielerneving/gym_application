@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/workout_model.dart';
 import '../models/workout_session_model.dart';
+import '../models/exercise_model.dart';
 import '../services/database_service.dart';
 
 // State-objekt för aktivt träningspass (immutable)
@@ -58,148 +59,147 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
   WorkoutStateNotifier(this.dbService)
     : super(ActiveWorkoutState(editedFields: <String>{}, placeholders: <String, dynamic>{}));
 
-Future<void> startWorkout(WorkoutProgram program) async {
-  if (state.isRunning) return;
+  Future<void> startWorkout(WorkoutProgram program) async {
+    if (state.isRunning) return;
 
-  // STEG 1: Hitta senaste passet av denna typ
-  final lastSession = await dbService.findLastSessionOfProgram(program.title);
-  
-  // STEG 2: Skapa nytt pass med tomma värden
-  final initialExercises = program.exercises.map((currentExercise) {
-    return CompletedExercise(
-      name: currentExercise.name,
-      sets: List.generate(currentExercise.sets, (setIndex) {
-        // Första sets är warm-up
-        final isWarmUpSet = setIndex < currentExercise.warmUpSets;
-        return CompletedSet(
-          weight: 0, 
-          reps: 0, 
-          notes: null,
-          isWarmUp: isWarmUpSet,
-        );
-      }),
-    );
-  }).toList();
-
-  final newSession = WorkoutSession(
-    id: program.id,
-    programTitle: program.title,
-    date: DateTime.now(),
-    durationInMinutes: 0,
-    completedExercises: initialExercises,
-  );
-
-  // STEG 3: Bygg placeholders från förra passets värden (INTE nuvarande session)
-  final Map<String, dynamic> placeholders = <String, dynamic>{};
-  if (lastSession != null) {
-    for (int exIndex = 0; exIndex < program.exercises.length; exIndex++) {
-      final currentExercise = program.exercises[exIndex];
-      
-      // Försök hitta en matchande övning i det gamla passet
-      final lastExerciseData = lastSession.completedExercises.firstWhere(
-        (completedEx) => completedEx.name == currentExercise.name,
-        orElse: () => CompletedExercise(name: "", sets: []),
+    // STEG 1: Hitta senaste passet av denna typ
+    final lastSession = await dbService.findLastSessionOfProgram(program.title);
+    
+    // STEG 2: Skapa nytt pass med tomma värden
+    final initialExercises = program.exercises.map((currentExercise) {
+      return CompletedExercise(
+        name: currentExercise.name,
+        sets: List.generate(currentExercise.sets, (setIndex) {
+          // Första sets är warm-up
+          final isWarmUpSet = setIndex < currentExercise.warmUpSets;
+          return CompletedSet(
+            weight: 0, 
+            reps: 0, 
+            notes: null,
+            isWarmUp: isWarmUpSet,
+          );
+        }),
       );
+    }).toList();
 
-      // Skapa placeholders från förra passets data
-      for (int setIndex = 0; setIndex < currentExercise.sets; setIndex++) {
-        if (lastExerciseData.sets.isNotEmpty && setIndex < lastExerciseData.sets.length) {
-          final lastSet = lastExerciseData.sets[setIndex];
-          if (lastSet.weight > 0) {
-            placeholders['w_${exIndex}_$setIndex'] = lastSet.weight;
-          }
-          if (lastSet.reps > 0) {
-            placeholders['r_${exIndex}_$setIndex'] = lastSet.reps;
-          }
-          if (lastSet.notes != null && lastSet.notes!.isNotEmpty) {
-            placeholders['n_${exIndex}_$setIndex'] = lastSet.notes;
-          }
-          if (lastSet.rir != null && lastSet.rir! > 0) {
-            placeholders['rir_${exIndex}_$setIndex'] = lastSet.rir;
+    final newSession = WorkoutSession(
+      id: program.id,
+      programTitle: program.title,
+      date: DateTime.now(),
+      durationInMinutes: 0,
+      completedExercises: initialExercises,
+    );
+
+    // STEG 3: Bygg placeholders från förra passets värden (INTE nuvarande session)
+    final Map<String, dynamic> placeholders = <String, dynamic>{};
+    if (lastSession != null) {
+      for (int exIndex = 0; exIndex < program.exercises.length; exIndex++) {
+        final currentExercise = program.exercises[exIndex];
+        
+        // Försök hitta en matchande övning i det gamla passet
+        final lastExerciseData = lastSession.completedExercises.firstWhere(
+          (completedEx) => completedEx.name == currentExercise.name,
+          orElse: () => CompletedExercise(name: "", sets: []),
+        );
+
+        // Skapa placeholders från förra passets data
+        for (int setIndex = 0; setIndex < currentExercise.sets; setIndex++) {
+          if (lastExerciseData.sets.isNotEmpty && setIndex < lastExerciseData.sets.length) {
+            final lastSet = lastExerciseData.sets[setIndex];
+            if (lastSet.weight > 0) {
+              placeholders['w_${exIndex}_$setIndex'] = lastSet.weight;
+            }
+            if (lastSet.reps > 0) {
+              placeholders['r_${exIndex}_$setIndex'] = lastSet.reps;
+            }
+            if (lastSet.notes != null && lastSet.notes!.isNotEmpty) {
+              placeholders['n_${exIndex}_$setIndex'] = lastSet.notes;
+            }
+            if (lastSet.rir != null && lastSet.rir! > 0) {
+              placeholders['rir_${exIndex}_$setIndex'] = lastSet.rir;
+            }
           }
         }
       }
     }
-  }
 
-  final startTime = DateTime.now();
-  
-  state = ActiveWorkoutState(
-    session: newSession,
-    isRunning: true,
-    elapsedSeconds: 0,
-    startTime: startTime,
-    editedFields: <String>{},
-    placeholders: placeholders,
-  );
-  // Persistera även placeholders och startTime till Firestore så de överlever app-restart
-  unawaited(dbService.saveActivePlaceholders(placeholders));
-  unawaited(dbService.saveActiveStartTime(startTime));
-  _startTimer();
-}
+    final startTime = DateTime.now();
+    
+    state = ActiveWorkoutState(
+      session: newSession,
+      isRunning: true,
+      elapsedSeconds: 0,
+      startTime: startTime,
+      editedFields: <String>{},
+      placeholders: placeholders,
+    );
+    // Persistera även placeholders och startTime till Firestore så de överlever app-restart
+    unawaited(dbService.saveActivePlaceholders(placeholders));
+    unawaited(dbService.saveActiveStartTime(startTime));
+    _startTimer();
+  }
 
   void updateSetData(int exerciseIndex, int setIndex, {double? weight, int? reps, String? notes, int? rir}) {
-  if (!state.isRunning || state.session == null) return;
-  
-  // Använd copyWith för en mycket renare och säkrare uppdatering
-  final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
-  final exerciseToUpdate = updatedExercises[exerciseIndex];
-  final updatedSets = List<CompletedSet>.from(exerciseToUpdate.sets);
-  
-  // Hämta det nuvarande setet och skapa en uppdaterad version
-  final currentSet = updatedSets[setIndex];
-  
-  // Beräkna progression direkt när data uppdateras
-  int? repProgression;
-  double? weightProgression;
-  
-  if (!currentSet.isWarmUp) {
-    final previousWeight = state.placeholders['w_${exerciseIndex}_$setIndex'];
-    final previousReps = state.placeholders['r_${exerciseIndex}_$setIndex'];
+    if (!state.isRunning || state.session == null) return;
     
-    if (previousWeight != null && previousReps != null) {
-      final updatedWeight = weight ?? currentSet.weight;
-      final updatedReps = reps ?? currentSet.reps;
+    // Använd copyWith för en mycket renare och säkrare uppdatering
+    final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
+    final exerciseToUpdate = updatedExercises[exerciseIndex];
+    final updatedSets = List<CompletedSet>.from(exerciseToUpdate.sets);
+    
+    // Hämta det nuvarande setet och skapa en uppdaterad version
+    final currentSet = updatedSets[setIndex];
+    
+    // Beräkna progression direkt när data uppdateras
+    int? repProgression;
+    double? weightProgression;
+    
+    if (!currentSet.isWarmUp) {
+      final previousWeight = state.placeholders['w_${exerciseIndex}_$setIndex'];
+      final previousReps = state.placeholders['r_${exerciseIndex}_$setIndex'];
       
-      // Beräkna rep progression (endast om vikten är samma)
-      if (updatedWeight == previousWeight && updatedWeight > 0 && updatedReps > 0) {
-        final repsDifference = updatedReps - (previousReps as int);
-        if (repsDifference != 0) {
-          repProgression = repsDifference;
+      if (previousWeight != null && previousReps != null) {
+        final updatedWeight = weight ?? currentSet.weight;
+        final updatedReps = reps ?? currentSet.reps;
+        
+        // Beräkna rep progression (endast om vikten är samma)
+        if (updatedWeight == previousWeight && updatedWeight > 0 && updatedReps > 0) {
+          final repsDifference = updatedReps - (previousReps as int);
+          if (repsDifference != 0) {
+            repProgression = repsDifference;
+          }
         }
-      }
-      
-      // Beräkna vikt progression (endast om reps är samma eller fler)
-      if (updatedReps >= (previousReps as int) && updatedReps > 0 && updatedWeight > 0) {
-        final weightDifference = updatedWeight - (previousWeight as num).toDouble();
-        if (weightDifference != 0) {
-          weightProgression = weightDifference;
+        
+        // Beräkna vikt progression (endast om reps är samma eller fler)
+        if (updatedReps >= (previousReps as int) && updatedReps > 0 && updatedWeight > 0) {
+          final weightDifference = updatedWeight - (previousWeight as num).toDouble();
+          if (weightDifference != 0) {
+            weightProgression = weightDifference;
+          }
         }
       }
     }
-  }
-  
-  updatedSets[setIndex] = currentSet.copyWith(
-    weight: weight,
-    reps: reps,
-    notes: notes,
-    rir: rir,
-    progression: repProgression,
-    weightProgression: weightProgression,
-  );
-  
-  updatedExercises[exerciseIndex] = exerciseToUpdate.copyWith(sets: updatedSets);
-  
-  state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
-  _saveStateToFirestore();
-}
-
-  // Markera ett fält som redigerat (anropas från UI när användaren skriver eller swipar)
-  void markFieldEdited(String key) {
-    final updated = Set<String>.from(state.editedFields)..add(key);
-    state = state.copyWith(editedFields: updated);
-    // Persist to backend
-    unawaited(dbService.saveActiveEditedKeys(updated));
+    
+    updatedSets[setIndex] = currentSet.copyWith(
+      weight: weight,
+      reps: reps,
+      notes: notes,
+      rir: rir,
+      progression: repProgression,
+      weightProgression: weightProgression,
+    );
+    
+    updatedExercises[exerciseIndex] = exerciseToUpdate.copyWith(sets: updatedSets);
+    
+    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+    
+    // Markera fält som redigerade
+    if (weight != null) markFieldsEdited(['w_${exerciseIndex}_$setIndex']);
+    if (reps != null) markFieldsEdited(['r_${exerciseIndex}_$setIndex']);
+    if (notes != null) markFieldsEdited(['n_${exerciseIndex}_$setIndex']);
+    if (rir != null) markFieldsEdited(['rir_${exerciseIndex}_$setIndex']);
+    
+    _saveStateToFirestore();
   }
 
   void markFieldsEdited(Iterable<String> keys) {
@@ -421,15 +421,84 @@ Future<void> startWorkout(WorkoutProgram program) async {
       date: DateTime.now(),
     );
     dbService.saveActiveWorkoutState(sessionToSave);
-    // Persist edited fields as well
     dbService.saveActiveEditedKeys(state.editedFields);
   }
-}
 
-// ====================================================================
-// DEL 3: PROVIDERN
-// Detta är den globala variabeln som låter vårt UI komma åt "hjärnan".
-// ====================================================================
+  void addSet(int exerciseIndex) {
+    if (!state.isRunning || state.session == null) return;
+    
+    final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
+    final exercise = updatedExercises[exerciseIndex];
+    
+    final newSet = CompletedSet(
+      weight: 0,
+      reps: 0,
+      notes: null,
+      isWarmUp: false,
+    );
+    
+    final updatedSets = List<CompletedSet>.from(exercise.sets)..add(newSet);
+    updatedExercises[exerciseIndex] = exercise.copyWith(sets: updatedSets);
+    
+    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+    _saveStateToFirestore();
+  }
+
+  void removeSet(int exerciseIndex, int setIndex) {
+    if (!state.isRunning || state.session == null) return;
+    
+    final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises);
+    final exercise = updatedExercises[exerciseIndex];
+    
+    if (exercise.sets.length <= 1) return; 
+    
+    final updatedSets = List<CompletedSet>.from(exercise.sets)..removeAt(setIndex);
+    updatedExercises[exerciseIndex] = exercise.copyWith(sets: updatedSets);
+    
+    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+    _saveStateToFirestore();
+  }
+
+  Future<void> saveActiveWorkoutAsTemplate(String name, {bool overwrite = false}) async {
+    if (state.session == null) return;
+    
+    final session = state.session!;
+    
+    final exercises = session.completedExercises.map((e) {
+      final totalSets = e.sets.length;
+      final warmUpSets = e.sets.where((s) => s.isWarmUp).length;
+      final workingSets = totalSets - warmUpSets;
+      
+      return Exercise(
+        id: const Uuid().v4(),
+        name: e.name,
+        sets: totalSets,
+        workingSets: workingSets,
+        warmUpSets: warmUpSets,
+      );
+    }).toList();
+
+    String programId;
+    if (overwrite) {
+      final existingId = await dbService.getProgramIdByName(name);
+      programId = existingId ?? const Uuid().v4();
+    } else {
+      programId = const Uuid().v4();
+    }
+
+    final newProgram = WorkoutProgram(
+      id: programId,
+      title: name,
+      exercises: exercises,
+    );
+
+    if (overwrite) {
+        await dbService.updateWorkoutProgram(newProgram);
+    } else {
+        await dbService.saveWorkoutProgram(newProgram);
+    }
+  }
+}
 
 // Family provider - skapar en unik WorkoutStateNotifier för varje user ID
 // Detta är NYCKELN till att hålla användares data separerade!
@@ -454,8 +523,3 @@ final workoutProvider = StateNotifierProvider<WorkoutStateNotifier, ActiveWorkou
   // Observera: Riverpod kommer att cacha denna instans, vilket är problemet!
   return WorkoutStateNotifier(DatabaseService(uid: uid));
 });
-
-// GLÖM INTE: Lägg till denna copyWith-metod i din `WorkoutSession`-modellfil.
-/*
-
-*/

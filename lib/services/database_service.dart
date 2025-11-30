@@ -38,6 +38,17 @@ class DatabaseService {
       rethrow;
     }
   }
+  
+  // Hämta ID för ett program med en viss titel (för overwrite-check)
+  Future<String?> getProgramIdByName(String title) async {
+    final collectionRef = _db.collection('users').doc(uid).collection('workout_programs');
+    final querySnapshot = await collectionRef.where('title', isEqualTo: title).limit(1).get();
+    
+    if (querySnapshot.docs.isNotEmpty) {
+      return querySnapshot.docs.first.id;
+    }
+    return null;
+  }
 
 // Hämtar stream av träningsprogram (real-time updates)
 Stream<List<WorkoutProgram>> getWorkoutPrograms() {

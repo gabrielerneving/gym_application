@@ -129,7 +129,98 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     super.dispose();
   }
 
+  void _addSet(int exerciseIndex) {
+    ref.read(workoutProvider.notifier).addSet(exerciseIndex);
+  }
 
+  void _removeSet(int exerciseIndex, int setIndex) {
+    ref.read(workoutProvider.notifier).removeSet(exerciseIndex, setIndex);
+  }
+
+  Future<void> _showSaveAsWorkoutDialog() async {
+    final TextEditingController nameController = TextEditingController();
+    final theme = ref.read(themeProvider);
+    
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: theme.card,
+          title: Text('Save as Workout', style: TextStyle(color: theme.text)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Save the current session as a new workout template.',
+                style: TextStyle(color: theme.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                style: TextStyle(color: theme.text),
+                decoration: InputDecoration(
+                  labelText: 'Workout Name',
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.textSecondary)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.primary)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  final existingId = await ref.read(workoutProvider.notifier).dbService.getProgramIdByName(name);
+                  
+                  if (existingId != null) {
+                    if (context.mounted) {
+                      final shouldOverwrite = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: theme.card,
+                          title: Text('Overwrite?', style: TextStyle(color: theme.text)),
+                          content: Text(
+                            'A workout with this name already exists. Do you want to overwrite it?',
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              child: Text('Overwrite', style: TextStyle(color: theme.primary)),
+                            ),
+                          ],
+                        ),
+                      );
+                      
+                      if (shouldOverwrite == true) {
+                         await ref.read(workoutProvider.notifier).saveActiveWorkoutAsTemplate(name, overwrite: true);
+                         if (context.mounted) Navigator.of(context).pop();
+                         if (context.mounted) Navigator.of(context).pop(); // Close save dialog too
+                      }
+                    }
+                  } else {
+                    await ref.read(workoutProvider.notifier).saveActiveWorkoutAsTemplate(name);
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                }
+              },
+              child: Text('Save', style: TextStyle(color: theme.primary)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +288,26 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 },
               ),
               actions: [
-                // Edit-knappen är borttagen för att förenkla gränssnittet under aktiv träning
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: theme.text),
+                  onSelected: (value) {
+                    if (value == 'save_as_workout') {
+                      _showSaveAsWorkoutDialog();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'save_as_workout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.save, color: theme.text, size: 20),
+                          const SizedBox(width: 12),
+                          Text('Save as Workout', style: TextStyle(color: theme.text)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
@@ -295,6 +405,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                     ),
                                   ),
                                 ),
+                                // Add set button
+                                IconButton(
+                                  icon: Icon(Icons.add_circle_outline, color: theme.primary, size: 20),
+                                  onPressed: () => _addSet(exerciseIndex),
+                                  tooltip: 'Add set',
+                                ),
                               ],
                             ),
                           ),
@@ -331,11 +447,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 controllers: _controllers,
                                 editedFields: ref.watch(workoutProvider).editedFields,
                                 onFieldEdited: (fieldKey) {
-                                  ref.read(workoutProvider.notifier).markFieldEdited(fieldKey);
+                                  ref.read(workoutProvider.notifier).markFieldsEdited([fieldKey]);
                                   setState(() {
                                     _editedFields.add(fieldKey);
                                   });
                                 },
+                                onDeleteSet: exercise.sets.length > 1 
+                                  ? () => _removeSet(exerciseIndex, setIndex)
+                                  : null,
                                 weightColor: weightColor,
                                 repsColor: repsColor,
                                 notesColor: notesColor,
@@ -401,6 +520,7 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
   final Map<String, TextEditingController> controllers;
   final Set<String> editedFields;
   final Function(String) onFieldEdited;
+  final VoidCallback? onDeleteSet;
   final Color weightColor;
   final Color repsColor;
   final Color notesColor;
@@ -419,6 +539,7 @@ class SwipeableSetRowNew extends ConsumerStatefulWidget {
     required this.controllers,
     required this.editedFields,
     required this.onFieldEdited,
+    this.onDeleteSet,
     required this.weightColor,
     required this.repsColor,
     required this.notesColor,
@@ -675,6 +796,16 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                       // Progression indicator (conditionally shown)
                       if (_buildProgressionIndicator(ref) != null) 
                         _buildProgressionIndicator(ref)!,
+                      
+                      // Delete set button
+                      if (widget.onDeleteSet != null)
+                        IconButton(
+                          icon: Icon(Icons.remove_circle_outline, color: Colors.red.withOpacity(0.7), size: 20),
+                          onPressed: widget.onDeleteSet,
+                          tooltip: 'Remove set',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),
