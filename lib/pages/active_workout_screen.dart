@@ -51,7 +51,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     final session = ref.read(workoutProvider).session;
     if (session == null) return;
 
-    if (_currentSessionId == session.id && _controllers.isNotEmpty) {
+    // Calculate expected number of controllers based on current session structure
+    int expectedControllers = 0;
+    for (var ex in session.completedExercises) {
+      expectedControllers += ex.sets.length * 4; // 4 controllers per set (weight, reps, notes, rir)
+    }
+
+    // Only return early if session ID matches AND the structure hasn't changed (count matches)
+    if (_currentSessionId == session.id && _controllers.length == expectedControllers && _controllers.isNotEmpty) {
       final providerEdited = ref.read(workoutProvider).editedFields;
       _editedFields
         ..clear()

@@ -457,7 +457,42 @@ Future<void> startWorkout(WorkoutProgram program) async {
     final updatedSets = List<CompletedSet>.from(exercise.sets)..removeAt(setIndex);
     updatedExercises[exerciseIndex] = exercise.copyWith(sets: updatedSets);
     
-    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+    // DATA INTEGRITY FIX: Reorganize placeholders and editedFields after removing a set
+    final newPlaceholders = <String, dynamic>{};
+    final newEditedFields = <String>{};
+    
+    for (int exIdx = 0; exIdx < updatedExercises.length; exIdx++) {
+      final ex = updatedExercises[exIdx];
+      for (int setIdx = 0; setIdx < ex.sets.length; setIdx++) {
+        // Determine source indices for this set's data
+        int sourceSetIdx = setIdx;
+        
+        // If we're in the same exercise and past the removed set, shift source index
+        if (exIdx == exerciseIndex && setIdx >= setIndex) {
+          sourceSetIdx = setIdx + 1;
+        }
+        
+        // Copy placeholders with new keys
+        for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
+          final oldKey = '$prefix${exIdx}_$sourceSetIdx';
+          final newKey = '$prefix${exIdx}_$setIdx';
+          
+          if (state.placeholders.containsKey(oldKey)) {
+            newPlaceholders[newKey] = state.placeholders[oldKey];
+          }
+          
+          if (state.editedFields.contains(oldKey)) {
+            newEditedFields.add(newKey);
+          }
+        }
+      }
+    }
+    
+    state = state.copyWith(
+      session: state.session!.copyWith(completedExercises: updatedExercises),
+      placeholders: newPlaceholders,
+      editedFields: newEditedFields,
+    );
     _saveStateToFirestore();
   }
 
@@ -502,7 +537,41 @@ Future<void> startWorkout(WorkoutProgram program) async {
     
     final updatedExercises = List<CompletedExercise>.from(state.session!.completedExercises)..removeAt(exerciseIndex);
     
-    state = state.copyWith(session: state.session!.copyWith(completedExercises: updatedExercises));
+    // DATA INTEGRITY FIX: Reorganize placeholders and editedFields after removing an exercise
+    final newPlaceholders = <String, dynamic>{};
+    final newEditedFields = <String>{};
+    
+    for (int exIdx = 0; exIdx < updatedExercises.length; exIdx++) {
+      final ex = updatedExercises[exIdx];
+      
+      // Determine source exercise index
+      int sourceExIdx = exIdx;
+      if (exIdx >= exerciseIndex) {
+        sourceExIdx = exIdx + 1; // Shift from removed exercise
+      }
+      
+      for (int setIdx = 0; setIdx < ex.sets.length; setIdx++) {
+        // Copy placeholders with new keys
+        for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
+          final oldKey = '$prefix${sourceExIdx}_$setIdx';
+          final newKey = '$prefix${exIdx}_$setIdx';
+          
+          if (state.placeholders.containsKey(oldKey)) {
+            newPlaceholders[newKey] = state.placeholders[oldKey];
+          }
+          
+          if (state.editedFields.contains(oldKey)) {
+            newEditedFields.add(newKey);
+          }
+        }
+      }
+    }
+    
+    state = state.copyWith(
+      session: state.session!.copyWith(completedExercises: updatedExercises),
+      placeholders: newPlaceholders,
+      editedFields: newEditedFields,
+    );
     _saveStateToFirestore();
   }
 
