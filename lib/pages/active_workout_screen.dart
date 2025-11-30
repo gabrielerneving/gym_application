@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/workout_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_settings_provider.dart';
-import '../widgets/gradient_button.dart'; 
-
+import '../widgets/gradient_button.dart';
+import '../pages/choose_category_screen.dart';
+import '../models/master_exercise_model.dart';
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
   const ActiveWorkoutScreen({Key? key}) : super(key: key);
 
@@ -129,98 +130,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     super.dispose();
   }
 
-  void _addSet(int exerciseIndex) {
-    ref.read(workoutProvider.notifier).addSet(exerciseIndex);
-  }
 
-  void _removeSet(int exerciseIndex, int setIndex) {
-    ref.read(workoutProvider.notifier).removeSet(exerciseIndex, setIndex);
-  }
-
-  Future<void> _showSaveAsWorkoutDialog() async {
-    final TextEditingController nameController = TextEditingController();
-    final theme = ref.read(themeProvider);
-    
-    return showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: theme.card,
-          title: Text('Save as Workout', style: TextStyle(color: theme.text)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Save the current session as a new workout template.',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                style: TextStyle(color: theme.text),
-                decoration: InputDecoration(
-                  labelText: 'Workout Name',
-                  labelStyle: TextStyle(color: theme.textSecondary),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.textSecondary)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.primary)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isNotEmpty) {
-                  final existingId = await ref.read(workoutProvider.notifier).dbService.getProgramIdByName(name);
-                  
-                  if (existingId != null) {
-                    if (context.mounted) {
-                      final shouldOverwrite = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: theme.card,
-                          title: Text('Overwrite?', style: TextStyle(color: theme.text)),
-                          content: Text(
-                            'A workout with this name already exists. Do you want to overwrite it?',
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: Text('Overwrite', style: TextStyle(color: theme.primary)),
-                            ),
-                          ],
-                        ),
-                      );
-                      
-                      if (shouldOverwrite == true) {
-                         await ref.read(workoutProvider.notifier).saveActiveWorkoutAsTemplate(name, overwrite: true);
-                         if (context.mounted) Navigator.of(context).pop();
-                         if (context.mounted) Navigator.of(context).pop(); // Close save dialog too
-                      }
-                    }
-                  } else {
-                    await ref.read(workoutProvider.notifier).saveActiveWorkoutAsTemplate(name);
-                    if (context.mounted) Navigator.of(context).pop();
-                  }
-                }
-              },
-              child: Text('Save', style: TextStyle(color: theme.primary)),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -405,6 +315,16 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                     ),
                                   ),
                                 ),
+                                // Delete exercise button (only if more than 1 exercise)
+                                if (session.completedExercises.length > 1)
+                                  IconButton(
+                                    icon: Icon(Icons.delete_outline, color: Colors.red.withOpacity(0.7), size: 20),
+                                    onPressed: () => _removeExercise(exerciseIndex),
+                                    tooltip: 'Remove exercise',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                const SizedBox(width: 8),
                                 // Add set button
                                 IconButton(
                                   icon: Icon(Icons.add_circle_outline, color: theme.primary, size: 20),
@@ -447,7 +367,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                 controllers: _controllers,
                                 editedFields: ref.watch(workoutProvider).editedFields,
                                 onFieldEdited: (fieldKey) {
-                                  ref.read(workoutProvider.notifier).markFieldsEdited([fieldKey]);
+                                  ref.read(workoutProvider.notifier).markFieldEdited(fieldKey);
                                   setState(() {
                                     _editedFields.add(fieldKey);
                                   });
@@ -467,6 +387,26 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     );
                   },
                   childCount: session.completedExercises.length,
+                ),
+              ),
+            ),
+
+            // Add Exercise Button
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: OutlinedButton.icon(
+                  onPressed: _showAddExerciseDialog,
+                  icon: Icon(Icons.add_circle_outline, color: theme.primary),
+                  label: Text(
+                    'Add Exercise',
+                    style: TextStyle(color: theme.primary, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: BorderSide(color: theme.primary, width: 2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                 ),
               ),
             ),
@@ -503,6 +443,164 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           ],
         ),
         ),
+      ),
+    );
+  }
+  
+  void _addSet(int exerciseIndex) {
+    ref.read(workoutProvider.notifier).addSet(exerciseIndex);
+  }
+  
+  void _removeSet(int exerciseIndex, int setIndex) {
+    ref.read(workoutProvider.notifier).removeSet(exerciseIndex, setIndex);
+  }
+
+  void _removeExercise(int exerciseIndex) {
+    ref.read(workoutProvider.notifier).removeExercise(exerciseIndex);
+  }
+
+  Future<void> _showAddExerciseDialog() async {
+    // Navigate to ChooseCategoryScreen to select from master exercises
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ChooseCategoryScreen()),
+    );
+
+    // If user selected a master exercise, show dialog to configure sets
+    if (result != null && result is MasterExercise && mounted) {
+      _showConfigureSetsDialog(result.name);
+    }
+  }
+
+  Future<void> _showConfigureSetsDialog(String exerciseName) async {
+    final TextEditingController setsController = TextEditingController(text: '3');
+    final TextEditingController warmUpController = TextEditingController(text: '0');
+    final theme = ref.read(themeProvider);
+    
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: theme.card,
+          title: Text('Configure Sets', style: TextStyle(color: theme.text)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                exerciseName,
+                style: TextStyle(color: theme.text, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: setsController,
+                style: TextStyle(color: theme.text),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Working Sets',
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.textSecondary)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.primary)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: warmUpController,
+                style: TextStyle(color: theme.text),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Warm-up Sets',
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.textSecondary)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.primary)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () {
+                final sets = int.tryParse(setsController.text) ?? 3;
+                final warmUp = int.tryParse(warmUpController.text) ?? 0;
+                
+                ref.read(workoutProvider.notifier).addExercise(
+                  exerciseName,
+                  sets: sets,
+                  warmUpSets: warmUp,
+                );
+                Navigator.of(context).pop();
+              },
+              child: Text('Add', style: TextStyle(color: theme.primary)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  void _showSaveAsWorkoutDialog() async {
+    final theme = ref.read(themeProvider);
+    final TextEditingController nameController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.card,
+        title: Text(
+          'Save as Workout',
+          style: TextStyle(color: theme.text),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              style: TextStyle(color: theme.text),
+              decoration: InputDecoration(
+                labelText: 'Workout Name',
+                labelStyle: TextStyle(color: theme.textSecondary),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: theme.textSecondary.withOpacity(0.3)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: theme.primary),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Please enter a workout name')),
+                );
+                return;
+              }
+              
+              Navigator.of(context).pop();
+              
+              // Save the workout template
+              await ref.read(workoutProvider.notifier).saveActiveWorkoutAsTemplate(name, overwrite: false);
+              
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Workout saved as \"$name\"')),
+                );
+              }
+            },
+            child: Text('Save', style: TextStyle(color: theme.primary)),
+          ),
+        ],
       ),
     );
   }
@@ -1141,3 +1239,4 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     );
   }
 }
+
