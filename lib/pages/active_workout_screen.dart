@@ -315,21 +315,55 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                     ),
                                   ),
                                 ),
-                                // Delete exercise button (only if more than 1 exercise)
-                                if (session.completedExercises.length > 1)
-                                  IconButton(
-                                    icon: Icon(Icons.delete_outline, color: Colors.red.withOpacity(0.7), size: 20),
-                                    onPressed: () => _removeExercise(exerciseIndex),
-                                    tooltip: 'Remove exercise',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                const SizedBox(width: 8),
-                                // Add set button
-                                IconButton(
-                                  icon: Icon(Icons.add_circle_outline, color: theme.primary, size: 20),
-                                  onPressed: () => _addSet(exerciseIndex),
-                                  tooltip: 'Add set',
+                                // Exercise menu (three dots)
+                                PopupMenuButton<String>(
+                                  icon: Icon(Icons.more_vert, color: theme.text, size: 20),
+                                  onSelected: (value) {
+                                    if (value == 'add_set') {
+                                      _addSet(exerciseIndex);
+                                    } else if (value == 'remove_set') {
+                                      // Remove last set if more than 1
+                                      if (exercise.sets.length > 1) {
+                                        _removeSet(exerciseIndex, exercise.sets.length - 1);
+                                      }
+                                    } else if (value == 'remove_exercise') {
+                                      _removeExercise(exerciseIndex);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'add_set',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.add_circle_outline, color: theme.primary, size: 20),
+                                          const SizedBox(width: 12),
+                                          Text('Add Set', style: TextStyle(color: theme.text)),
+                                        ],
+                                      ),
+                                    ),
+                                    if (exercise.sets.length > 1)
+                                      PopupMenuItem(
+                                        value: 'remove_set',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.remove_circle_outline, color: Colors.orange.withOpacity(0.7), size: 20),
+                                            const SizedBox(width: 12),
+                                            Text('Remove Last Set', style: TextStyle(color: theme.text)),
+                                          ],
+                                        ),
+                                      ),
+                                    if (session.completedExercises.length > 1)
+                                      PopupMenuItem(
+                                        value: 'remove_exercise',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline, color: Colors.red.withOpacity(0.7), size: 20),
+                                            const SizedBox(width: 12),
+                                            Text('Remove Exercise', style: TextStyle(color: theme.text)),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
