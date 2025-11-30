@@ -203,16 +203,28 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                   onSelected: (value) {
                     if (value == 'save_as_workout') {
                       _showSaveAsWorkoutDialog();
+                    } else if (value == 'update_template') {
+                      _updateOriginalTemplate();
                     }
                   },
                   itemBuilder: (context) => [
                     PopupMenuItem(
+                      value: 'update_template',
+                      child: Row(
+                        children: [
+                          Icon(Icons.save, color: theme.primary, size: 20),
+                          const SizedBox(width: 12),
+                          Text('Save & Update Template', style: TextStyle(color: theme.text)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: 'save_as_workout',
                       child: Row(
                         children: [
-                          Icon(Icons.save, color: theme.text, size: 20),
+                          Icon(Icons.add_circle_outline, color: theme.text, size: 20),
                           const SizedBox(width: 12),
-                          Text('Save as Workout', style: TextStyle(color: theme.text)),
+                          Text('Save as New Workout', style: TextStyle(color: theme.text)),
                         ],
                       ),
                     ),
@@ -637,6 +649,45 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _updateOriginalTemplate() async {
+    final theme = ref.read(themeProvider);
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.card,
+        title: Text(
+          'Update Template',
+          style: TextStyle(color: theme.text),
+        ),
+        content: Text(
+          'This will update the original workout template with your current exercises and sets. Continue?',
+          style: TextStyle(color: theme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Update', style: TextStyle(color: theme.primary)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await ref.read(workoutProvider.notifier).updateOriginalTemplate();
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Workout template updated successfully')),
+        );
+      }
+    }
   }
 }
 

@@ -535,6 +535,37 @@ Future<void> startWorkout(WorkoutProgram program) async {
 
     await dbService.saveWorkoutProgram(newProgram);
   }
+
+  Future<void> updateOriginalTemplate() async {
+    if (state.session == null) return;
+    
+    final session = state.session!;
+    
+    // Convert current exercises to Exercise format
+    final exercises = session.completedExercises.map((e) {
+      final totalSets = e.sets.length;
+      final warmUpSets = e.sets.where((s) => s.isWarmUp).length;
+      final workingSets = totalSets - warmUpSets;
+      
+      return Exercise(
+        id: const Uuid().v4(),
+        name: e.name,
+        sets: totalSets,
+        workingSets: workingSets,
+        warmUpSets: warmUpSets,
+      );
+    }).toList();
+
+    // Use the original program ID from session
+    final updatedProgram = WorkoutProgram(
+      id: session.id, // Keep the same ID to overwrite
+      title: session.programTitle, // Keep the same title
+      exercises: exercises,
+    );
+
+    // Save will overwrite the existing program since we're using the same ID
+    await dbService.saveWorkoutProgram(updatedProgram);
+  }
 }
 
 // ====================================================================
