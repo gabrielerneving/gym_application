@@ -298,13 +298,15 @@ class _WorkoutDetailPageState extends ConsumerState<WorkoutDetailPage> {
                             ),
                             
                             // Andra raden: Progression och/eller Notes (om de finns)
-                            if ((ref.watch(workoutSettingsProvider).showProgression && set.progression != null && set.progression != 0) || 
+                            if ((ref.watch(workoutSettingsProvider).showProgression && 
+                                 ((set.progression != null && set.progression != 0) || 
+                                  (set.weightProgression != null && set.weightProgression != 0))) || 
                                 (set.notes != null && set.notes!.isNotEmpty))
                               Padding(
                                 padding: const EdgeInsets.only(left: 36, top: 8),
                                 child: Row(
                                   children: [
-                                    // Progression indicator
+                                    // Rep Progression indicator
                                     if (ref.watch(workoutSettingsProvider).showProgression && set.progression != null && set.progression != 0)
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -341,12 +343,55 @@ class _WorkoutDetailPageState extends ConsumerState<WorkoutDetailPage> {
                                         ),
                                       ),
                                     
+                                    // Weight Progression indicator
+                                    if (ref.watch(workoutSettingsProvider).showProgression && set.weightProgression != null && set.weightProgression != 0)
+                                      Padding(
+                                        padding: EdgeInsets.only(
+                                          left: (set.progression != null && set.progression != 0) ? 6 : 0,
+                                        ),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: set.weightProgression! > 0 
+                                              ? theme.primary.withOpacity(0.15) 
+                                              : Colors.orange.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                set.weightProgression! > 0 
+                                                  ? Icons.arrow_upward 
+                                                  : Icons.arrow_downward,
+                                                size: 14,
+                                                color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${set.weightProgression! > 0 ? '+' : ''}${set.weightProgression!.toStringAsFixed(1)} kg',
+                                                style: TextStyle(
+                                                  color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    
                                     // Notes - klickbar för att expandera
                                     if (set.notes != null && set.notes!.isNotEmpty)
                                       Expanded(
                                         child: Padding(
                                           padding: EdgeInsets.only(
-                                            left: (set.progression != null && set.progression != 0) ? 8 : 0,
+                                            left: ((set.progression != null && set.progression != 0) || 
+                                                   (set.weightProgression != null && set.weightProgression != 0)) ? 8 : 0,
                                           ),
                                           child: GestureDetector(
                                             onTap: () {

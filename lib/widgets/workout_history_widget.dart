@@ -93,7 +93,8 @@ class WorkoutHistoryWidget extends ConsumerWidget {
   bool _hasProgression() {
     for (final exercise in session.completedExercises) {
       for (final set in exercise.sets) {
-        if (set.progression != null && set.progression != 0) {
+        if ((set.progression != null && set.progression != 0) ||
+            (set.weightProgression != null && set.weightProgression != 0)) {
           return true;
         }
       }
@@ -106,6 +107,7 @@ class WorkoutHistoryWidget extends ConsumerWidget {
     
     for (final exercise in session.completedExercises) {
       for (final set in exercise.sets) {
+        // Rep progression indicator
         if (set.progression != null && set.progression != 0) {
           final isPositive = set.progression! > 0;
           indicators.add(
@@ -125,6 +127,33 @@ class WorkoutHistoryWidget extends ConsumerWidget {
                 '${isPositive ? '+' : ''}${set.progression} reps',
                 style: TextStyle(
                   color: isPositive ? Colors.green : Colors.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        }
+        
+        // Weight progression indicator
+        if (set.weightProgression != null && set.weightProgression != 0) {
+          final isPositive = set.weightProgression! > 0;
+          final color = isPositive ? theme.primary : Colors.orange;
+          indicators.add(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: color,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                '${isPositive ? '+' : ''}${set.weightProgression!.toStringAsFixed(1)} kg',
+                style: TextStyle(
+                  color: color,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

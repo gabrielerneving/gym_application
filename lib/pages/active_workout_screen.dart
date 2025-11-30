@@ -820,6 +820,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
       return null;
     }
 
+    final theme = ref.watch(themeProvider);
     final placeholders = ref.watch(workoutProvider).placeholders;
     final previousWeight = placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
     final previousReps = placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
@@ -835,39 +836,111 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     // Don't show if current set is empty (not yet filled in)
     if (currentWeight == 0 || currentReps == 0) return null;
     
-    // Only show indicator if weight is the same (comparing progression in reps)
-    if (currentWeight != previousWeight) return null;
+    // Use saved progressions or calculate dynamically
+    int? repProgression = widget.set.progression;
+    double? weightProgression = widget.set.weightProgression;
     
-    final repsDifference = currentReps - (previousReps as int);
-    if (repsDifference == 0) return null;
+    // Calculate rep progression if not saved (backwards compatibility)
+    if (repProgression == null && currentWeight == previousWeight) {
+      final repsDifference = currentReps - (previousReps as int);
+      if (repsDifference != 0) {
+        repProgression = repsDifference;
+      }
+    }
     
-    final isPositive = repsDifference > 0;
-    final color = isPositive ? Colors.green : Colors.red;
-    final icon = isPositive ? Icons.trending_up : Icons.trending_down;
-    final text = isPositive ? '+$repsDifference' : '$repsDifference';
+    // Calculate weight progression if not saved (backwards compatibility)
+    if (weightProgression == null && currentReps >= (previousReps as int)) {
+      final weightDifference = currentWeight - (previousWeight as num).toDouble();
+      if (weightDifference != 0) {
+        weightProgression = weightDifference;
+      }
+    }
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 14),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+    // Build indicators
+    final List<Widget> indicators = [];
+    
+    // Rep progression indicator (green/red)
+    if (repProgression != null && repProgression != 0) {
+      final isPositive = repProgression > 0;
+      final color = isPositive ? Colors.green : Colors.red;
+      final icon = isPositive ? Icons.trending_up : Icons.trending_down;
+      
+      indicators.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.5), width: 1),
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                '${isPositive ? '+' : ''}$repProgression reps',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Weight progression indicator (primary color/orange based on theme)
+    if (weightProgression != null && weightProgression != 0) {
+      final isPositive = weightProgression > 0;
+      // Use primary color for positive, orange for negative to differentiate from rep progression
+      final color = isPositive ? theme.primary : Colors.orange;
+      final icon = isPositive ? Icons.arrow_upward : Icons.arrow_downward;
+      
+      indicators.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.5), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                '${isPositive ? '+' : ''}${weightProgression.toStringAsFixed(1)} kg',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Return null if no indicators
+    if (indicators.isEmpty) return null;
+    
+    // Return single indicator or row of indicators
+    if (indicators.length == 1) {
+      return indicators.first;
+    }
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        indicators[0],
+        const SizedBox(width: 6),
+        indicators[1],
+      ],
     );
   }
 

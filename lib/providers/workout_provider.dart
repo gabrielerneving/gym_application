@@ -148,11 +148,44 @@ Future<void> startWorkout(WorkoutProgram program) async {
   
   // Hämta det nuvarande setet och skapa en uppdaterad version
   final currentSet = updatedSets[setIndex];
+  
+  // Beräkna progression direkt när data uppdateras
+  int? repProgression;
+  double? weightProgression;
+  
+  if (!currentSet.isWarmUp) {
+    final previousWeight = state.placeholders['w_${exerciseIndex}_$setIndex'];
+    final previousReps = state.placeholders['r_${exerciseIndex}_$setIndex'];
+    
+    if (previousWeight != null && previousReps != null) {
+      final updatedWeight = weight ?? currentSet.weight;
+      final updatedReps = reps ?? currentSet.reps;
+      
+      // Beräkna rep progression (endast om vikten är samma)
+      if (updatedWeight == previousWeight && updatedWeight > 0 && updatedReps > 0) {
+        final repsDifference = updatedReps - (previousReps as int);
+        if (repsDifference != 0) {
+          repProgression = repsDifference;
+        }
+      }
+      
+      // Beräkna vikt progression (endast om reps är samma eller fler)
+      if (updatedReps >= (previousReps as int) && updatedReps > 0 && updatedWeight > 0) {
+        final weightDifference = updatedWeight - (previousWeight as num).toDouble();
+        if (weightDifference != 0) {
+          weightProgression = weightDifference;
+        }
+      }
+    }
+  }
+  
   updatedSets[setIndex] = currentSet.copyWith(
     weight: weight,
     reps: reps,
     notes: notes,
     rir: rir,
+    progression: repProgression,
+    weightProgression: weightProgression,
   );
   
   updatedExercises[exerciseIndex] = exerciseToUpdate.copyWith(sets: updatedSets);
@@ -200,7 +233,8 @@ Future<void> startWorkout(WorkoutProgram program) async {
       
       for (int setIndex = 0; setIndex < exercise.sets.length; setIndex++) {
         final set = exercise.sets[setIndex];
-        int? progression;
+        int? repProgression;
+        double? weightProgression;
         
         // Beräkna progression om setet inte är ett warmup
         if (!set.isWarmUp) {
@@ -211,17 +245,25 @@ Future<void> startWorkout(WorkoutProgram program) async {
             final currentWeight = set.weight;
             final currentReps = set.reps;
             
-            // Progression gäller bara om vikten är samma som förra gången
+            // Beräkna rep progression (endast om vikten är samma)
             if (currentWeight == previousWeight && currentWeight > 0 && currentReps > 0) {
               final repsDifference = currentReps - (previousReps as int);
               if (repsDifference != 0) {
-                progression = repsDifference;
+                repProgression = repsDifference;
+              }
+            }
+            
+            // Beräkna vikt progression (endast om reps är samma eller fler)
+            if (currentReps >= (previousReps as int) && currentReps > 0 && currentWeight > 0) {
+              final weightDifference = currentWeight - (previousWeight as num).toDouble();
+              if (weightDifference != 0) {
+                weightProgression = weightDifference;
               }
             }
           }
         }
         
-        updatedSets.add(set.copyWith(progression: progression));
+        updatedSets.add(set.copyWith(progression: repProgression, weightProgression: weightProgression));
       }
       
       updatedExercises.add(exercise.copyWith(sets: updatedSets));
