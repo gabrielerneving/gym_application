@@ -438,6 +438,7 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
         savedStartTime ??
         DateTime.now().subtract(Duration(seconds: totalElapsedSeconds));
 
+    // VIKTIGT: Behåll placeholders från nuvarande state när vi skapar nytt state
     state = ActiveWorkoutState(
       session: session,
       isRunning: true,
@@ -446,6 +447,7 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
       staleSession: null,
       editedFields:
           state.editedFields.isNotEmpty ? state.editedFields : <String>{},
+      placeholders: state.placeholders, // BEHÅLL PLACEHOLDERS!
     );
     _startTimer();
   }

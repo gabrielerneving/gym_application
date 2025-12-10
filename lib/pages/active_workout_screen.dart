@@ -1188,13 +1188,20 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                               widget.onFieldEdited(widget.weightKey);
                             }
                             final weight = double.tryParse(value) ?? 0.0;
+                            // Läs reps från controller för att få aktuellt värde
+                            final currentReps =
+                                int.tryParse(
+                                  widget.controllers[widget.repsKey]?.text ??
+                                      '',
+                                ) ??
+                                widget.set.reps;
                             ref
                                 .read(workoutProvider.notifier)
                                 .updateSetData(
                                   widget.exerciseIndex,
                                   widget.setIndex,
                                   weight: weight,
-                                  reps: widget.set.reps,
+                                  reps: currentReps,
                                 );
                           },
                         ),
@@ -1228,12 +1235,19 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                               widget.onFieldEdited(widget.repsKey);
                             }
                             final reps = int.tryParse(value) ?? 0;
+                            // Läs weight från controller för att få aktuellt värde
+                            final currentWeight =
+                                double.tryParse(
+                                  widget.controllers[widget.weightKey]?.text ??
+                                      '',
+                                ) ??
+                                widget.set.weight;
                             ref
                                 .read(workoutProvider.notifier)
                                 .updateSetData(
                                   widget.exerciseIndex,
                                   widget.setIndex,
-                                  weight: widget.set.weight,
+                                  weight: currentWeight,
                                   reps: reps,
                                 );
                           },
@@ -1337,16 +1351,6 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     }
 
     final theme = ref.watch(themeProvider);
-    final placeholders = ref.watch(workoutProvider).placeholders;
-    final previousWeight =
-        placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
-    final previousReps =
-        placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
-
-    // Only show progression if we have previous data
-    if (previousWeight == null || previousReps == null) {
-      return null;
-    }
 
     final currentWeight = widget.set.weight;
     final currentReps = widget.set.reps;
@@ -1354,25 +1358,38 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     // Don't show if current set is empty (not yet filled in)
     if (currentWeight == 0 || currentReps == 0) return null;
 
-    // Use saved progressions or calculate dynamically
+    // PRIORITERA sparade progressionsvärden från sessionen
+    // Dessa överlever app-restart och är alltid korrekta
     int? repProgression = widget.set.progression;
     double? weightProgression = widget.set.weightProgression;
 
-    // Calculate rep progression if not saved (backwards compatibility)
-    if (repProgression == null && currentWeight == previousWeight) {
-      final repsDifference = currentReps - (previousReps as int);
-      if (repsDifference != 0) {
-        repProgression = repsDifference;
-      }
-    }
+    // Fallback till dynamisk beräkning endast om vi INTE har sparade värden
+    // OCH vi har placeholders att jämföra med
+    if (repProgression == null || weightProgression == null) {
+      final placeholders = ref.watch(workoutProvider).placeholders;
+      final previousWeight =
+          placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
+      final previousReps =
+          placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
 
-    // Calculate weight progression if not saved (backwards compatibility)
-    // Weight progression shows whenever weight changes, regardless of reps
-    if (weightProgression == null) {
-      final weightDifference =
-          currentWeight - (previousWeight as num).toDouble();
-      if (weightDifference != 0) {
-        weightProgression = weightDifference;
+      if (previousWeight != null && previousReps != null) {
+        // Calculate rep progression if not saved (backwards compatibility)
+        if (repProgression == null && currentWeight == previousWeight) {
+          final repsDifference = currentReps - (previousReps as int);
+          if (repsDifference != 0) {
+            repProgression = repsDifference;
+          }
+        }
+
+        // Calculate weight progression if not saved (backwards compatibility)
+        // Weight progression shows whenever weight changes, regardless of reps
+        if (weightProgression == null) {
+          final weightDifference =
+              currentWeight - (previousWeight as num).toDouble();
+          if (weightDifference != 0) {
+            weightProgression = weightDifference;
+          }
+        }
       }
     }
 
