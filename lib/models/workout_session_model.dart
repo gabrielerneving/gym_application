@@ -1,17 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Sentinel class to distinguish between "not provided" and "explicitly null"
+class _Unset {
+  const _Unset();
+}
+
 class CompletedSet {
   final double weight;
   final int reps;
-  final String? notes; 
+  final String? notes;
   final bool isWarmUp;
   final int? rir; // Reps in Reserve - optional field
-  final int? progression; // Rep progression jämfört med föregående pass (ex: +2 reps eller -1 reps)
-  final double? weightProgression; // Vikt progression jämfört med föregående pass (ex: +2.5 kg eller -5 kg)
+  final int?
+  progression; // Rep progression jämfört med föregående pass (ex: +2 reps eller -1 reps)
+  final double?
+  weightProgression; // Vikt progression jämfört med föregående pass (ex: +2.5 kg eller -5 kg)
 
   CompletedSet({
-    required this.weight, 
-    required this.reps, 
+    required this.weight,
+    required this.reps,
     this.notes,
     this.isWarmUp = false, // Default är working set
     this.rir, // Optional RIR value
@@ -19,29 +26,44 @@ class CompletedSet {
     this.weightProgression, // Optional weight progression indicator
   });
 
-  // copyWith metod för att skapa uppdaterade kopior, användbar för immutability vilket innebär att objekt inte ändras direkt utan en ny kopia skapas med ändringar
-  CompletedSet copyWith({double? weight, int? reps, String? notes, bool? isWarmUp, int? rir, int? progression, double? weightProgression}) {
+  // copyWith metod för att skapa uppdaterade kopior, användbar för immutability
+  // Använder Object? med _Unset sentinel för progression-fält för att kunna skilja mellan
+  // "inte angiven" (behåll gammalt värde) och "explicit null" (rensa värdet)
+  CompletedSet copyWith({
+    double? weight,
+    int? reps,
+    String? notes,
+    bool? isWarmUp,
+    int? rir,
+    Object? progression = const _Unset(),
+    Object? weightProgression = const _Unset(),
+  }) {
     return CompletedSet(
       weight: weight ?? this.weight,
       reps: reps ?? this.reps,
       notes: notes ?? this.notes,
       isWarmUp: isWarmUp ?? this.isWarmUp,
       rir: rir ?? this.rir,
-      progression: progression ?? this.progression,
-      weightProgression: weightProgression ?? this.weightProgression,
+      progression:
+          progression is _Unset ? this.progression : progression as int?,
+      weightProgression:
+          weightProgression is _Unset
+              ? this.weightProgression
+              : weightProgression as double?,
     );
   }
 
   // Metod för att konvertera till en Map för Firestore
   Map<String, dynamic> toMap() {
     return {
-      'weight': weight, 
-      'reps': reps, 
+      'weight': weight,
+      'reps': reps,
       'notes': notes,
       'isWarmUp': isWarmUp,
       'rir': rir, // Include RIR in save
       'progression': progression, // Include rep progression in save
-      'weightProgression': weightProgression, // Include weight progression in save
+      'weightProgression':
+          weightProgression, // Include weight progression in save
     };
   }
 
@@ -49,11 +71,14 @@ class CompletedSet {
     return CompletedSet(
       weight: data['weight'] != null ? (data['weight'] as num).toDouble() : 0.0,
       reps: data['reps'] ?? 0,
-      notes: data['notes'], 
+      notes: data['notes'],
       isWarmUp: data['isWarmUp'] ?? false,
       rir: data['rir'], // Load RIR if available
       progression: data['progression'], // Load rep progression if available
-      weightProgression: data['weightProgression'] != null ? (data['weightProgression'] as num).toDouble() : null, // Load weight progression if available
+      weightProgression:
+          data['weightProgression'] != null
+              ? (data['weightProgression'] as num).toDouble()
+              : null, // Load weight progression if available
     );
   }
 }
@@ -68,19 +93,19 @@ class CompletedExercise {
     return {'name': name, 'sets': sets.map((s) => s.toMap()).toList()};
   }
 
-   CompletedExercise copyWith({String? name, List<CompletedSet>? sets}) {
+  CompletedExercise copyWith({String? name, List<CompletedSet>? sets}) {
     return CompletedExercise(name: name ?? this.name, sets: sets ?? this.sets);
   }
 
   factory CompletedExercise.fromMap(Map<String, dynamic> data) {
-  var setsList = data['sets'] as List<dynamic>? ?? <dynamic>[];
-  List<CompletedSet> sets = setsList.map((s) => CompletedSet.fromMap(s as Map<String, dynamic>)).toList();
-  return CompletedExercise(name: data['name'] ?? '', sets: sets);
+    var setsList = data['sets'] as List<dynamic>? ?? <dynamic>[];
+    List<CompletedSet> sets =
+        setsList
+            .map((s) => CompletedSet.fromMap(s as Map<String, dynamic>))
+            .toList();
+    return CompletedExercise(name: data['name'] ?? '', sets: sets);
+  }
 }
-
-}
-
-
 
 class WorkoutSession {
   final String id;
@@ -88,7 +113,6 @@ class WorkoutSession {
   final DateTime date;
   final int durationInMinutes;
   final List<CompletedExercise> completedExercises;
-  
 
   WorkoutSession({
     required this.id,
@@ -107,32 +131,40 @@ class WorkoutSession {
       'completedExercises': completedExercises.map((e) => e.toMap()).toList(),
     };
   }
+
   factory WorkoutSession.fromFirestore(Map<String, dynamic> data) {
-  var exercisesList = data['completedExercises'] as List<dynamic>? ?? <dynamic>[];
-  List<CompletedExercise> exercises = exercisesList.map((e) => CompletedExercise.fromMap(e as Map<String, dynamic>)).toList();
+    var exercisesList =
+        data['completedExercises'] as List<dynamic>? ?? <dynamic>[];
+    List<CompletedExercise> exercises =
+        exercisesList
+            .map((e) => CompletedExercise.fromMap(e as Map<String, dynamic>))
+            .toList();
 
-  return WorkoutSession(
-    id: data['id'] ?? '',
-    programTitle: data['programTitle'] ?? '',
-    date: data['date'] != null ? (data['date'] as Timestamp).toDate() : DateTime.now(),
-    durationInMinutes: data['durationInMinutes'] ?? 0,
-    completedExercises: exercises,
-  );
-}
+    return WorkoutSession(
+      id: data['id'] ?? '',
+      programTitle: data['programTitle'] ?? '',
+      date:
+          data['date'] != null
+              ? (data['date'] as Timestamp).toDate()
+              : DateTime.now(),
+      durationInMinutes: data['durationInMinutes'] ?? 0,
+      completedExercises: exercises,
+    );
+  }
 
-WorkoutSession copyWith({
-  String? id,
-  String? programTitle,
-  DateTime? date,
-  int? durationInMinutes,
-  List<CompletedExercise>? completedExercises,
-}) {
-  return WorkoutSession(
-    id: id ?? this.id,
-    programTitle: programTitle ?? this.programTitle,
-    date: date ?? this.date,
-    durationInMinutes: durationInMinutes ?? this.durationInMinutes,
-    completedExercises: completedExercises ?? this.completedExercises,
-  );
-}
+  WorkoutSession copyWith({
+    String? id,
+    String? programTitle,
+    DateTime? date,
+    int? durationInMinutes,
+    List<CompletedExercise>? completedExercises,
+  }) {
+    return WorkoutSession(
+      id: id ?? this.id,
+      programTitle: programTitle ?? this.programTitle,
+      date: date ?? this.date,
+      durationInMinutes: durationInMinutes ?? this.durationInMinutes,
+      completedExercises: completedExercises ?? this.completedExercises,
+    );
+  }
 }
