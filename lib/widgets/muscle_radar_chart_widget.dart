@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
@@ -6,31 +7,23 @@ import '../providers/theme_provider.dart';
 class MuscleRadarChartWidget extends ConsumerWidget {
   final Map<String, int> muscleGroupCounts;
 
-  const MuscleRadarChartWidget({
-    Key? key,
-    required this.muscleGroupCounts,
-  }) : super(key: key);
+  const MuscleRadarChartWidget({Key? key, required this.muscleGroupCounts})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    if (muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)) {
+    if (muscleGroupCounts.isEmpty ||
+        muscleGroupCounts.values.every((count) => count == 0)) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.radar,
-              size: 48,
-              color: theme.textSecondary,
-            ),
+            Icon(Icons.radar, size: 48, color: theme.textSecondary),
             const SizedBox(height: 12),
             Text(
               'No muscle data available',
-              style: TextStyle(
-                color: theme.textSecondary,
-                fontSize: 16,
-              ),
+              style: TextStyle(color: theme.textSecondary, fontSize: 16),
             ),
           ],
         ),
@@ -42,12 +35,13 @@ class MuscleRadarChartWidget extends ConsumerWidget {
 
   Widget _buildRadarChart(dynamic theme) {
     // Hitta maxvärdet för skalning
-    final maxValue = muscleGroupCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
-    
+    final maxValue =
+        muscleGroupCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
+
     // Ordna muskelgrupperna i en logisk ordning för radar chart
     final orderedMuscleGroups = [
       'Chest',
-      'Shoulders', 
+      'Shoulders',
       'Back',
       'Biceps',
       'Triceps',
@@ -64,12 +58,15 @@ class MuscleRadarChartWidget extends ConsumerWidget {
         borderColor: theme.primary,
         borderWidth: 3,
         entryRadius: 4,
-        dataEntries: orderedMuscleGroups.map((muscleGroup) {
-          final count = muscleGroupCounts[muscleGroup] ?? 0;
-          // Normalisera värdet till 0-1 skala
-          final normalizedValue = maxValue > 0 ? count / maxValue : 0.0;
-          return RadarEntry(value: normalizedValue * 100); // Skala till 0-100
-        }).toList(),
+        dataEntries:
+            orderedMuscleGroups.map((muscleGroup) {
+              final count = muscleGroupCounts[muscleGroup] ?? 0;
+              // Normalisera värdet till 0-1 skala
+              final normalizedValue = maxValue > 0 ? count / maxValue : 0.0;
+              return RadarEntry(
+                value: normalizedValue * 100,
+              ); // Skala till 0-100
+            }).toList(),
       ),
     ];
 
@@ -97,10 +94,7 @@ class MuscleRadarChartWidget extends ConsumerWidget {
           return const RadarChartTitle(text: '');
         },
         tickCount: 4,
-        ticksTextStyle: TextStyle(
-          color: theme.textSecondary,
-          fontSize: 10,
-        ),
+        ticksTextStyle: TextStyle(color: theme.textSecondary, fontSize: 10),
         tickBorderData: BorderSide(
           color: theme.textSecondary.withOpacity(0.3),
           width: 1,
@@ -108,6 +102,15 @@ class MuscleRadarChartWidget extends ConsumerWidget {
         gridBorderData: BorderSide(
           color: theme.textSecondary.withOpacity(0.3),
           width: 1,
+        ),
+        radarTouchData: RadarTouchData(
+          enabled: true,
+          touchCallback: (FlTouchEvent event, RadarTouchResponse? response) {
+            // Endast haptic vid initial touch, inte vid drag
+            if (event is FlTapDownEvent && response?.touchedSpot != null) {
+              HapticFeedback.lightImpact();
+            }
+          },
         ),
       ),
     );

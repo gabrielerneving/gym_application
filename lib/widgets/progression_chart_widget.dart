@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
@@ -22,7 +23,8 @@ class ProgressionChartWidget extends ConsumerStatefulWidget {
   _ProgressionChartWidgetState createState() => _ProgressionChartWidgetState();
 }
 
-class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget> {
+class _ProgressionChartWidgetState
+    extends ConsumerState<ProgressionChartWidget> {
   List<ProgressionDataPoint> progressionData = [];
   bool isLoading = true;
 
@@ -35,7 +37,7 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
   @override
   void didUpdateWidget(ProgressionChartWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.exerciseName != widget.exerciseName || 
+    if (oldWidget.exerciseName != widget.exerciseName ||
         oldWidget.filterProgramTitle != widget.filterProgramTitle) {
       _loadProgressionData();
     }
@@ -48,8 +50,8 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
 
     try {
       final data = await widget.dbService.getExerciseProgression(
-        widget.exerciseName, 
-        programTitle: widget.filterProgramTitle
+        widget.exerciseName,
+        programTitle: widget.filterProgramTitle,
       );
       if (mounted) {
         setState(() {
@@ -70,13 +72,9 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    
+
     if (isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: theme.primary,
-        ),
-      );
+      return Center(child: CircularProgressIndicator(color: theme.primary));
     }
 
     if (progressionData.isEmpty) {
@@ -84,18 +82,11 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.show_chart,
-              size: 48,
-              color: theme.textSecondary,
-            ),
+            Icon(Icons.show_chart, size: 48, color: theme.textSecondary),
             const SizedBox(height: 12),
             Text(
               'No data for this exercise',
-              style: TextStyle(
-                color: theme.textSecondary,
-                fontSize: 16,
-              ),
+              style: TextStyle(color: theme.textSecondary, fontSize: 16),
             ),
           ],
         ),
@@ -117,25 +108,33 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
     }
 
     // Skapa punkter baserat på vilken typ av data vi vill visa
-    final spots = progressionData.asMap().entries.map((entry) {
-      final index = entry.key;
-      final dataPoint = entry.value;
-      final value = widget.showWeight ? dataPoint.maxWeight : dataPoint.totalVolume;
-      return FlSpot(index.toDouble(), value);
-    }).toList();
+    final spots =
+        progressionData.asMap().entries.map((entry) {
+          final index = entry.key;
+          final dataPoint = entry.value;
+          final value =
+              widget.showWeight ? dataPoint.maxWeight : dataPoint.totalVolume;
+          return FlSpot(index.toDouble(), value);
+        }).toList();
 
     // Hitta min och max värden för y-axeln
-    final values = progressionData.map((p) => widget.showWeight ? p.maxWeight : p.totalVolume).toList();
-    
+    final values =
+        progressionData
+            .map((p) => widget.showWeight ? p.maxWeight : p.totalVolume)
+            .toList();
+
     final minValue = values.reduce((a, b) => a < b ? a : b);
     final maxValue = values.reduce((a, b) => a > b ? a : b);
-    
+
     // Lägg till lite marginal
     final valueRange = maxValue - minValue;
-    final margin = valueRange > 0 ? valueRange * 0.1 : (maxValue > 0 ? maxValue * 0.1 : 1.0);
+    final margin =
+        valueRange > 0
+            ? valueRange * 0.1
+            : (maxValue > 0 ? maxValue * 0.1 : 1.0);
     final yMin = (minValue - margin).clamp(0.0, double.infinity);
     final yMax = maxValue + margin;
-    
+
     // Säkerställ att horizontalInterval aldrig är 0
     final yRange = yMax - yMin;
     final horizontalInterval = yRange > 0 ? yRange / 4 : 1.0;
@@ -156,13 +155,20 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
-              interval: progressionData.length > 6 ? (progressionData.length / 4).ceilToDouble() : 1,
+              interval:
+                  progressionData.length > 6
+                      ? (progressionData.length / 4).ceilToDouble()
+                      : 1,
               getTitlesWidget: (double value, TitleMeta meta) {
                 final index = value.toInt();
                 if (index >= 0 && index < progressionData.length) {
@@ -190,18 +196,13 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
               getTitlesWidget: (double value, TitleMeta meta) {
                 return Text(
                   '${value.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    color: theme.textSecondary,
-                    fontSize: 10,
-                  ),
+                  style: TextStyle(color: theme.textSecondary, fontSize: 10),
                 );
               },
             ),
           ),
         ),
-        borderData: FlBorderData(
-          show: false,
-        ),
+        borderData: FlBorderData(show: false),
         minX: 0,
         maxX: (progressionData.length - 1).toDouble(),
         minY: yMin,
@@ -210,9 +211,10 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
           LineChartBarData(
             spots: spots,
             gradient: LinearGradient(
-              colors: widget.showWeight
-                  ? [theme.primary, theme.primaryLight]
-                  : [theme.accent, theme.accent.withOpacity(0.7)],
+              colors:
+                  widget.showWeight
+                      ? [theme.primary, theme.primaryLight]
+                      : [theme.accent, theme.accent.withOpacity(0.7)],
             ),
             barWidth: 3,
             isStrokeCapRound: true,
@@ -242,6 +244,14 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         ],
         lineTouchData: LineTouchData(
           enabled: true,
+          touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+            // Endast haptic vid initial touch, inte vid drag
+            if (event is FlTapDownEvent &&
+                response?.lineBarSpots != null &&
+                response!.lineBarSpots!.isNotEmpty) {
+              HapticFeedback.lightImpact();
+            }
+          },
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (touchedSpot) => theme.card,
             getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
@@ -249,7 +259,7 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
                 final index = barSpot.x.toInt();
                 if (index >= 0 && index < progressionData.length) {
                   final dataPoint = progressionData[index];
-                  
+
                   if (widget.showWeight) {
                     return LineTooltipItem(
                       'Max Weight: ${dataPoint.maxWeight.toStringAsFixed(1)}kg × ${dataPoint.maxWeightReps}\n${_formatDate(dataPoint.date)}',
@@ -275,14 +285,14 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
             },
           ),
           handleBuiltInTouches: true,
-          getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
+          getTouchedSpotIndicator: (
+            LineChartBarData barData,
+            List<int> spotIndexes,
+          ) {
             return spotIndexes.map((spotIndex) {
               final color = widget.showWeight ? theme.primary : theme.accent;
               return TouchedSpotIndicatorData(
-                FlLine(
-                  color: color.withOpacity(0.5),
-                  strokeWidth: 2,
-                ),
+                FlLine(color: color.withOpacity(0.5), strokeWidth: 2),
                 FlDotData(
                   getDotPainter: (spot, percent, barData, index) {
                     return FlDotCirclePainter(

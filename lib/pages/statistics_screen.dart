@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/popular_workouts_card.dart';
@@ -22,7 +23,7 @@ class StatisticsScreen extends ConsumerStatefulWidget {
 class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   int _selectedIndex = 3; // Index 3 är den aktiva "profil"-ikonen
   DatabaseService? _dbService;
-  
+
   // Statistik data från databasen
   int workoutsThisMonth = 0;
   int totalWorkouts = 0;
@@ -52,7 +53,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Future<void> _loadStatistics() async {
     if (_dbService == null) return;
-    
+
     try {
       final results = await Future.wait([
         _dbService!.getWorkoutsThisMonth(),
@@ -86,7 +87,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
     final themeIndex = ref.watch(themeIndexProvider);
-    
+
     return Scaffold(
       extendBody: true,
       backgroundColor: theme.background,
@@ -114,6 +115,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       iconSize: 28,
                       padding: const EdgeInsets.all(12),
                       onPressed: () {
+                        HapticFeedback.lightImpact();
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => const SettingsScreen(),
@@ -124,87 +126,97 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   ],
                 ),
                 Expanded(
-                  child: isLoading 
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          color: theme.primary,
-                        ),
-                      )
-                    : RefreshIndicator(
-                        color: theme.primary,
-                        backgroundColor: theme.card,
-                        onRefresh: () async {
-                          await _loadStatistics();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Statistics refreshed', style: TextStyle(color: theme.text),),
-                                backgroundColor: theme.primary,
-                                duration: const Duration(seconds: 2),
+                  child:
+                      isLoading
+                          ? Center(
+                            child: CircularProgressIndicator(
+                              color: theme.primary,
                             ),
-                          );
-                        }
-                      },
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: Column(
-                          children: [
-                            // 2x2 statistik-kort
-                            GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 1.1,
-                              children: [
-                                StatCard(
-                                  title: 'This month',
-                                  value: workoutsThisMonth.toString(),
-                                  unit: 'Workouts',
-                                  icon: Icons.calendar_today,
-                                  backgroundColor: const Color(0xFFDC2626),
-                                ),
-                                StatCard(
-                                  title: 'Total workouts',
-                                  value: totalWorkouts.toString(),
-                                  unit: 'Sessions',
-                                  icon: Icons.trending_up,
-                                ),
-                                StatCard(
-                                  title: 'Total time',
-                                  value: totalHours.toStringAsFixed(1),
-                                  unit: 'Hours',
-                                  icon: Icons.timer_outlined,
-                                ),
-                                StatCard(
-                                  title: 'Average workout',
-                                  value: averageWorkoutDuration.toStringAsFixed(0),
-                                  unit: 'Minutes',
-                                  icon: Icons.bar_chart,
-                                ),
-                              ],
+                          )
+                          : RefreshIndicator(
+                            color: theme.primary,
+                            backgroundColor: theme.card,
+                            onRefresh: () async {
+                              await _loadStatistics();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Statistics refreshed',
+                                      style: TextStyle(color: theme.text),
+                                    ),
+                                    backgroundColor: theme.primary,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: Column(
+                                children: [
+                                  // 2x2 statistik-kort
+                                  GridView.count(
+                                    crossAxisCount: 2,
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 1.1,
+                                    children: [
+                                      StatCard(
+                                        title: 'This month',
+                                        value: workoutsThisMonth.toString(),
+                                        unit: 'Workouts',
+                                        icon: Icons.calendar_today,
+                                        backgroundColor: const Color(
+                                          0xFFDC2626,
+                                        ),
+                                      ),
+                                      StatCard(
+                                        title: 'Total workouts',
+                                        value: totalWorkouts.toString(),
+                                        unit: 'Sessions',
+                                        icon: Icons.trending_up,
+                                      ),
+                                      StatCard(
+                                        title: 'Total time',
+                                        value: totalHours.toStringAsFixed(1),
+                                        unit: 'Hours',
+                                        icon: Icons.timer_outlined,
+                                      ),
+                                      StatCard(
+                                        title: 'Average workout',
+                                        value: averageWorkoutDuration
+                                            .toStringAsFixed(0),
+                                        unit: 'Minutes',
+                                        icon: Icons.bar_chart,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildConsistencyButton(theme),
+                                  const SizedBox(height: 16),
+                                  _buildProgressionButton(theme),
+                                  const SizedBox(height: 16),
+                                  _buildOneRMButton(theme),
+                                  const SizedBox(height: 16),
+                                  _buildMuscleGroupsButton(theme),
+                                  const SizedBox(height: 24),
+                                  PopularWorkoutsCard(
+                                    popularWorkouts: popularWorkoutsData,
+                                  ),
+                                  // Extra utrymme så att "Most popular workouts" inte täcks av den flytande navbaren
+                                  const SizedBox(height: 100),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 24),
-                            _buildConsistencyButton(theme),
-                            const SizedBox(height: 16),
-                            _buildProgressionButton(theme),
-                            const SizedBox(height: 16),
-                            _buildOneRMButton(theme),
-                            const SizedBox(height: 16),
-                            _buildMuscleGroupsButton(theme),
-                            const SizedBox(height: 24),
-                            PopularWorkoutsCard(popularWorkouts: popularWorkoutsData),
-                            // Extra utrymme så att "Most popular workouts" inte täcks av den flytande navbaren
-                            const SizedBox(height: 100),
-                          ],
-                        ),
-                      ),
-                    ),
+                          ),
                 ),
               ],
             ),
-          ),          // Flytande navbar
+          ), // Flytande navbar
           Positioned(
             bottom: 20,
             left: 16,
@@ -241,7 +253,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   _buildNavItem(Icons.home_outlined, 0, theme),
                   _buildNavItem(Icons.fitness_center_outlined, 1, theme),
                   _buildNavItem(Icons.history, 2, theme),
-                  _buildNavItem(Icons.bar_chart_outlined, 3, theme), // Aktiv ikon
+                  _buildNavItem(
+                    Icons.bar_chart_outlined,
+                    3,
+                    theme,
+                  ), // Aktiv ikon
                 ],
               ),
             ),
@@ -255,6 +271,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     bool isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() {
           _selectedIndex = index;
         });
@@ -277,11 +294,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget _buildProgressionButton(theme) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => ProgressionScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => ProgressionScreen()),
         );
       },
       child: Container(
@@ -326,19 +342,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'View weight progression charts',
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 14),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: theme.textSecondary,
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios, color: theme.textSecondary, size: 16),
           ],
         ),
       ),
@@ -348,11 +357,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget _buildOneRMButton(theme) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const OneRMScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const OneRMScreen()),
         );
       },
       child: Container(
@@ -397,19 +405,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Track your estimated one-rep max',
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 14),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: theme.textSecondary,
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios, color: theme.textSecondary, size: 16),
           ],
         ),
       ),
@@ -419,11 +420,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget _buildMuscleGroupsButton(theme) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => MuscleGroupsScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => MuscleGroupsScreen()),
         );
       },
       child: Container(
@@ -446,11 +446,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 color: theme.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.radar,
-                color: Colors.white,
-                size: 24,
-              ),
+              child: const Icon(Icons.radar, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -468,19 +464,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Analyze muscle group distribution',
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 14),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: theme.textSecondary,
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios, color: theme.textSecondary, size: 16),
           ],
         ),
       ),
@@ -490,11 +479,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget _buildConsistencyButton(theme) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const ConsistencyScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const ConsistencyScreen()),
         );
       },
       child: Container(
@@ -539,19 +527,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'View your workout heatmap',
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 14),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: theme.textSecondary,
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios, color: theme.textSecondary, size: 16),
           ],
         ),
       ),

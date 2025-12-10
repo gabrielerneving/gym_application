@@ -1,33 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class MuscleBarChartWidget extends StatelessWidget {
   final Map<String, int> muscleGroupCounts;
 
-  const MuscleBarChartWidget({
-    Key? key,
-    required this.muscleGroupCounts,
-  }) : super(key: key);
+  const MuscleBarChartWidget({Key? key, required this.muscleGroupCounts})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    if (muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)) {
+    if (muscleGroupCounts.isEmpty ||
+        muscleGroupCounts.values.every((count) => count == 0)) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.bar_chart,
-              size: 48,
-              color: Colors.grey.shade600,
-            ),
+            Icon(Icons.bar_chart, size: 48, color: Colors.grey.shade600),
             const SizedBox(height: 12),
             Text(
               'No muscle data available',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 16,
-              ),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
             ),
           ],
         ),
@@ -39,7 +32,8 @@ class MuscleBarChartWidget extends StatelessWidget {
 
   Widget _buildBarChart() {
     // Kontrollera om vi har data
-    if (muscleGroupCounts.isEmpty || muscleGroupCounts.values.every((count) => count == 0)) {
+    if (muscleGroupCounts.isEmpty ||
+        muscleGroupCounts.values.every((count) => count == 0)) {
       return const Center(
         child: Text(
           'No muscle group data available',
@@ -49,37 +43,42 @@ class MuscleBarChartWidget extends StatelessWidget {
     }
 
     // Ordna muskelgrupperna alfabetiskt
-    final sortedEntries = muscleGroupCounts.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final sortedEntries =
+        muscleGroupCounts.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
 
-    final maxValue = muscleGroupCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
+    final maxValue =
+        muscleGroupCounts.values.reduce((a, b) => a > b ? a : b).toDouble();
 
-    final barGroups = sortedEntries.asMap().entries.map((entry) {
-      final index = entry.key;
-      final muscleEntry = entry.value;
-      final muscleGroup = muscleEntry.key;
-      final count = muscleEntry.value;
+    final barGroups =
+        sortedEntries.asMap().entries.map((entry) {
+          final index = entry.key;
+          final muscleEntry = entry.value;
+          final muscleGroup = muscleEntry.key;
+          final count = muscleEntry.value;
 
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: count.toDouble(),
-            color: _getMuscleColor(muscleGroup),
-            width: 20,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-            gradient: LinearGradient(
-              colors: [
-                _getMuscleColor(muscleGroup),
-                _getMuscleColor(muscleGroup).withOpacity(0.7),
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-        ],
-      );
-    }).toList();
+          return BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(
+                toY: count.toDouble(),
+                color: _getMuscleColor(muscleGroup),
+                width: 20,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(4),
+                ),
+                gradient: LinearGradient(
+                  colors: [
+                    _getMuscleColor(muscleGroup),
+                    _getMuscleColor(muscleGroup).withOpacity(0.7),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ],
+          );
+        }).toList();
 
     return BarChart(
       BarChartData(
@@ -100,8 +99,12 @@ class MuscleBarChartWidget extends StatelessWidget {
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -136,10 +139,7 @@ class MuscleBarChartWidget extends StatelessWidget {
               getTitlesWidget: (double value, TitleMeta meta) {
                 return Text(
                   value.toInt().toString(),
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 10,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 10),
                 );
               },
             ),
@@ -148,6 +148,12 @@ class MuscleBarChartWidget extends StatelessWidget {
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
           enabled: true,
+          touchCallback: (FlTouchEvent event, BarTouchResponse? response) {
+            // Endast haptic vid initial touch, inte vid drag
+            if (event is FlTapDownEvent && response?.spot != null) {
+              HapticFeedback.lightImpact();
+            }
+          },
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (group) => const Color(0xFF18181B),
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
@@ -170,33 +176,55 @@ class MuscleBarChartWidget extends StatelessWidget {
 
   String _getShortName(String muscleGroup) {
     switch (muscleGroup) {
-      case 'Shoulders': return 'SHLD';
-      case 'Biceps': return 'BIC';
-      case 'Triceps': return 'TRI';
-      case 'Chest': return 'CHT';
-      case 'Back': return 'BCK';
-      case 'Quads': return 'QUAD';
-      case 'Hamstrings': return 'HAM';
-      case 'Glutes': return 'GLUT';
-      case 'Calf': return 'CALF';
-      case 'Abs': return 'ABS';
-      default: return muscleGroup.substring(0, 3).toUpperCase();
+      case 'Shoulders':
+        return 'SHLD';
+      case 'Biceps':
+        return 'BIC';
+      case 'Triceps':
+        return 'TRI';
+      case 'Chest':
+        return 'CHT';
+      case 'Back':
+        return 'BCK';
+      case 'Quads':
+        return 'QUAD';
+      case 'Hamstrings':
+        return 'HAM';
+      case 'Glutes':
+        return 'GLUT';
+      case 'Calf':
+        return 'CALF';
+      case 'Abs':
+        return 'ABS';
+      default:
+        return muscleGroup.substring(0, 3).toUpperCase();
     }
   }
 
   Color _getMuscleColor(String muscleGroup) {
     switch (muscleGroup) {
-      case 'Chest': return const Color(0xFFDC2626);
-      case 'Back': return const Color(0xFF16A34A);
-      case 'Shoulders': return const Color(0xFF2563EB);
-      case 'Biceps': return const Color(0xFF7C3AED);
-      case 'Triceps': return const Color(0xFFEAB308);
-      case 'Quads': return const Color(0xFFE11D48);
-      case 'Hamstrings': return const Color(0xFFDC2F02);
-      case 'Glutes': return const Color(0xFFB91C1C);
-      case 'Calf': return const Color(0xFFEA580C);
-      case 'Abs': return const Color(0xFF06B6D4);
-      default: return Colors.grey;
+      case 'Chest':
+        return const Color(0xFFDC2626);
+      case 'Back':
+        return const Color(0xFF16A34A);
+      case 'Shoulders':
+        return const Color(0xFF2563EB);
+      case 'Biceps':
+        return const Color(0xFF7C3AED);
+      case 'Triceps':
+        return const Color(0xFFEAB308);
+      case 'Quads':
+        return const Color(0xFFE11D48);
+      case 'Hamstrings':
+        return const Color(0xFFDC2F02);
+      case 'Glutes':
+        return const Color(0xFFB91C1C);
+      case 'Calf':
+        return const Color(0xFFEA580C);
+      case 'Abs':
+        return const Color(0xFF06B6D4);
+      default:
+        return Colors.grey;
     }
   }
 }

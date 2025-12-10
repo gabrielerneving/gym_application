@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart'; 
+import 'package:uuid/uuid.dart';
 import '../models/exercise_model.dart';
 import '../providers/theme_provider.dart';
 import '../models/workout_model.dart';
@@ -10,22 +10,16 @@ import '../services/database_service.dart';
 import '../widgets/exercise_list_item.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/gradient_text.dart';
-import 'choose_category_screen.dart'; 
+import 'choose_category_screen.dart';
 import '../models/master_exercise_model.dart';
 import '../models/standard_workout_template.dart';
-import 'template_detail_page.dart'; 
-
-
-
+import 'template_detail_page.dart';
 
 class CreateWorkoutScreen extends ConsumerStatefulWidget {
   final Function(int)? onWorkoutSaved;
-   final WorkoutProgram? workoutToEdit;
-  const CreateWorkoutScreen({
-    Key? key,
-    this.onWorkoutSaved,
-    this.workoutToEdit,
-  }) : super(key: key);
+  final WorkoutProgram? workoutToEdit;
+  const CreateWorkoutScreen({Key? key, this.onWorkoutSaved, this.workoutToEdit})
+    : super(key: key);
 
   @override
   _CreateWorkoutScreenState createState() => _CreateWorkoutScreenState();
@@ -35,10 +29,8 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   final _workoutNameController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isLoading = false;
-  bool _isReordering = false; 
+  bool _isReordering = false;
 
-
-  
   List<Exercise> _exercises = [];
 
   void initState() {
@@ -51,7 +43,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
       // Fyll i listan med de befintliga övningarna
       _exercises = List.from(widget.workoutToEdit!.exercises);
     }
-    
+
     _focusNode.addListener(() {
       setState(() {});
     });
@@ -64,166 +56,184 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   }
 
   // METOD 1: Visar själva menyn
-void _showExerciseOptions(BuildContext context, Exercise exercise, int index) {
-  final theme = ref.read(themeProvider);
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: theme.card, 
-    builder: (BuildContext bc) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Wrap(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(5.0),
-                child: ListTile(
-                  leading: Icon(Icons.edit, color: theme.text),
-                  title: Text('Edit', style: TextStyle(color: theme.text)),
-                  onTap: () {
-                    Navigator.of(context).pop(); // Stäng menyn först
-                    _showEditSetsDialog(exercise); // Anropa sedan dialogen för att ändra sets
-                  },
+  void _showExerciseOptions(
+    BuildContext context,
+    Exercise exercise,
+    int index,
+  ) {
+    final theme = ref.read(themeProvider);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.card,
+      builder: (BuildContext bc) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Wrap(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.all(5.0),
+                  child: ListTile(
+                    leading: Icon(Icons.edit, color: theme.text),
+                    title: Text('Edit', style: TextStyle(color: theme.text)),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.of(context).pop();
+                      _showEditSetsDialog(exercise);
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(5.0),
+                  child: ListTile(
+                    leading: Icon(Icons.delete, color: theme.text),
+                    title: Text('Remove', style: TextStyle(color: theme.text)),
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.of(context).pop();
+                      setState(() {
+                        _exercises.removeAt(index);
+                      });
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(5.0),
+                  child: ListTile(
+                    leading: Icon(Icons.reorder, color: theme.text),
+                    title: Text(
+                      'Change order',
+                      style: TextStyle(color: theme.text),
+                    ),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.of(context).pop();
+                      setState(() {
+                        _isReordering = true;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // METOD 2: Visar en dialog för att ändra antal sets
+  Future<void> _showEditSetsDialog(Exercise exercise) async {
+    final theme = ref.watch(themeProvider);
+    final workingSetsController = TextEditingController(
+      text: exercise.workingSets.toString(),
+    );
+    final warmUpSetsController = TextEditingController(
+      text: exercise.warmUpSets.toString(),
+    );
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Edit sets for ${exercise.name}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: workingSetsController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Working Sets',
+                  hintText: 'Sets that count in statistics',
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(5.0),
-                child: ListTile(
-                  leading: Icon(Icons.delete, color: theme.text),
-                  title: Text('Remove', style: TextStyle(color: theme.text)),
-                  onTap: () {
-                    Navigator.of(context).pop(); 
-                    setState(() {
-                      _exercises.removeAt(index); // Ta bort övningen från listan
-                    });
-                  },
+              const SizedBox(height: 16),
+              TextField(
+                controller: warmUpSetsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Warm-up Sets',
+                  hintText: 'Sets for warming up (optional)',
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(5.0),
-                child: ListTile(
-                leading: Icon(Icons.reorder, color: theme.text),
-                title: Text('Change order', style: TextStyle(color: theme.text)),
-                onTap: () {
-                  Navigator.of(context).pop(); 
-                  // Växla till omordningsläge
-                  setState(() {
-                    _isReordering = true;
-                  });
-                },
-                          ),
+              const SizedBox(height: 8),
+              Text(
+                'Total: ${(int.tryParse(workingSetsController.text) ?? 0) + (int.tryParse(warmUpSetsController.text) ?? 0)} sets',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
               ),
             ],
           ),
-        ),
-      );
-    },
-  );
-}
-
-// METOD 2: Visar en dialog för att ändra antal sets
-Future<void> _showEditSetsDialog(Exercise exercise) async {
-  final theme = ref.watch(themeProvider);
-  final workingSetsController = TextEditingController(text: exercise.workingSets.toString());
-  final warmUpSetsController = TextEditingController(text: exercise.warmUpSets.toString());
-
-  return showDialog<void>(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text('Edit sets for ${exercise.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: workingSetsController,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Working Sets',
-                hintText: 'Sets that count in statistics',
+          actions: <Widget>[
+            TextButton(
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: theme.textSecondary),
               ),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: warmUpSetsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Warm-up Sets',
-                hintText: 'Sets for warming up (optional)',
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Total: ${(int.tryParse(workingSetsController.text) ?? 0) + (int.tryParse(warmUpSetsController.text) ?? 0)} sets',
-              style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              child: const Text('Save'),
+              onPressed: () {
+                setState(() {
+                  final workingSets =
+                      int.tryParse(workingSetsController.text) ?? 0;
+                  final warmUpSets =
+                      int.tryParse(warmUpSetsController.text) ?? 0;
+
+                  exercise.workingSets = workingSets;
+                  exercise.warmUpSets = warmUpSets;
+                  exercise.sets = workingSets + warmUpSets; // Uppdatera total
+                });
+                Navigator.of(context).pop();
+              },
             ),
           ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Cancel', style: TextStyle(color: theme.textSecondary)),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save'),
-            onPressed: () {
-              setState(() {
-                final workingSets = int.tryParse(workingSetsController.text) ?? 0;
-                final warmUpSets = int.tryParse(warmUpSetsController.text) ?? 0;
-                
-                exercise.workingSets = workingSets;
-                exercise.warmUpSets = warmUpSets;
-                exercise.sets = workingSets + warmUpSets; // Uppdatera total
-              });
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
-
-Future<void> _navigateAndAddExercise() async {
-  // Navigera till Skärm A (ChooseCategoryScreen) och VÄNTA på ett resultat.
-  // Resultatet kommer att vara ett MasterExercise-objekt om användaren väljer en,
-  // annars blir det null om de bara backar ut.
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(builder: (context) => const ChooseCategoryScreen()),
-  );
-
-
-  // Kontrollera om vi faktiskt fick tillbaka ett resultat (dvs. inte null)
-  if (result != null && result is MasterExercise) {
-    // VIKTIGT: Vi fick tillbaka ett MasterExercise, men vår lista i denna
-    // skärm är en lista av "vanliga" Exercise-objekt (som också har "sets").
-    // Vi måste konvertera den ena till den andra. Vi sätter "sets" till 1 som standard.
-    final newExercise = Exercise(
-      id: const Uuid().v4(), // Skapa ett HELT NYTT unikt ID för denna instans!
-      name: result.name,
-      sets: 1, // Sätt ett standardvärde för total sets
-      workingSets: 1, // Default: 3 working sets
-      warmUpSets: 0, // Default: 0 warm-up sets
+  Future<void> _navigateAndAddExercise() async {
+    // Navigera till Skärm A (ChooseCategoryScreen) och VÄNTA på ett resultat.
+    // Resultatet kommer att vara ett MasterExercise-objekt om användaren väljer en,
+    // annars blir det null om de bara backar ut.
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ChooseCategoryScreen()),
     );
 
-    // Lägg till den nya övningen i listan och rita om UI:t
-    setState(() {
-      _exercises.add(newExercise);
-    });
+    // Kontrollera om vi faktiskt fick tillbaka ett resultat (dvs. inte null)
+    if (result != null && result is MasterExercise) {
+      // VIKTIGT: Vi fick tillbaka ett MasterExercise, men vår lista i denna
+      // skärm är en lista av "vanliga" Exercise-objekt (som också har "sets").
+      // Vi måste konvertera den ena till den andra. Vi sätter "sets" till 1 som standard.
+      final newExercise = Exercise(
+        id:
+            const Uuid()
+                .v4(), // Skapa ett HELT NYTT unikt ID för denna instans!
+        name: result.name,
+        sets: 1, // Sätt ett standardvärde för total sets
+        workingSets: 1, // Default: 3 working sets
+        warmUpSets: 0, // Default: 0 warm-up sets
+      );
+
+      // Lägg till den nya övningen i listan och rita om UI:t
+      setState(() {
+        _exercises.add(newExercise);
+      });
+    }
   }
-}
 
   // Metod som anropas när "Save" trycks
   Future<void> _saveWorkout() async {
     HapticFeedback.mediumImpact(); // Haptic när workout sparas
-    
+
     // 1. Validera att fälten inte är tomma
     if (_workoutNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -232,13 +242,15 @@ Future<void> _navigateAndAddExercise() async {
       return;
     }
     if (_exercises.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add at least one exercise.')),
       );
       return;
     }
 
-    setState(() { _isLoading = true; });
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       // 2. Hämta den inloggade användarens unika ID
@@ -248,148 +260,136 @@ Future<void> _navigateAndAddExercise() async {
         throw Exception("No user logged in!");
       }
       final uid = user.uid;
-      
+
       if (widget.workoutToEdit != null) {
-      // UPDATE-LÄGE
-      final updatedProgram = WorkoutProgram(
-        id: widget.workoutToEdit!.id, // Använd det befintliga ID:t!
-        title: _workoutNameController.text.trim(),
-        exercises: _exercises,
-      );
-      await DatabaseService(uid: uid).updateWorkoutProgram(updatedProgram);
-    } else {
-      // CREATE-LÄGE 
-      final newProgram = WorkoutProgram(
-        id: const Uuid().v4(),
-        title: _workoutNameController.text.trim(),
-        exercises: _exercises,
-      );
-      await DatabaseService(uid: uid).saveWorkoutProgram(newProgram);
-    }
+        // UPDATE-LÄGE
+        final updatedProgram = WorkoutProgram(
+          id: widget.workoutToEdit!.id, // Använd det befintliga ID:t!
+          title: _workoutNameController.text.trim(),
+          exercises: _exercises,
+        );
+        await DatabaseService(uid: uid).updateWorkoutProgram(updatedProgram);
+      } else {
+        // CREATE-LÄGE
+        final newProgram = WorkoutProgram(
+          id: const Uuid().v4(),
+          title: _workoutNameController.text.trim(),
+          exercises: _exercises,
+        );
+        await DatabaseService(uid: uid).saveWorkoutProgram(newProgram);
+      }
 
       // 5. Stäng tangentbordet först
       FocusManager.instance.primaryFocus?.unfocus();
-      
+
       // 6. Ge feedback och navigera tillbaka
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Workout saved successfully!')),
         );
 
-      _workoutNameController.clear();
-      setState(() {
-        _exercises.clear();
-      });
+        _workoutNameController.clear();
+        setState(() {
+          _exercises.clear();
+        });
 
         // Stäng tangentbordet först
         FocusManager.instance.primaryFocus?.unfocus();
-        
+
         // Gå till Home tab (index 0) istället för att bara poppa
         if (widget.onWorkoutSaved != null) {
           widget.onWorkoutSaved!(0); // 0 = Home tab
         } else {
           Navigator.of(context).pop();
-        } 
+        }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error during post-save operation: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
-    } catch (e) { 
+  @override
+  Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    final isEditMode = widget.workoutToEdit != null;
 
-    
-    if(mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error during post-save operation: $e')),
+    // Om vi är i edit-läge, visa bara Create-tabben
+    if (isEditMode) {
+      return GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          backgroundColor: theme.background,
+          appBar: AppBar(
+            backgroundColor: theme.background,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(
+                Icons.arrow_back,
+                color: theme.primary.withOpacity(0.8),
+                size: 24,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: GradientText(
+              text: 'Edit Workout',
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              currentThemeIndex: ref.watch(themeIndexProvider),
+            ),
+          ),
+          body: _buildCreateTab(theme),
+        ),
       );
     }
-  } finally {
-     if(mounted) {
-       setState(() { _isLoading = false; });
-     }
-  }
-}
 
-@override
-Widget build(BuildContext context) {
-  final theme = ref.watch(themeProvider);
-  final isEditMode = widget.workoutToEdit != null;
-  
-  // Om vi är i edit-läge, visa bara Create-tabben
-  if (isEditMode) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: theme.background,
-        appBar: AppBar(
+    // Annars visa med tabs som vanligt
+    return DefaultTabController(
+      length: 2,
+      child: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: theme.background,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: GradientText(
-            text: 'Edit Workout',
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+          appBar: AppBar(
+            backgroundColor: theme.background,
+            elevation: 0,
+            automaticallyImplyLeading: false,
+            title: GradientText(
+              text: 'Create Workout',
+              style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold),
+              currentThemeIndex: ref.watch(themeIndexProvider),
             ),
-            currentThemeIndex: ref.watch(themeIndexProvider),
+            bottom: TabBar(
+              labelColor: theme.text,
+              unselectedLabelColor: theme.textSecondary,
+              indicatorColor: theme.primary,
+              tabs: const [
+                Tab(text: 'Create', icon: Icon(Icons.add_circle_outline)),
+                Tab(text: 'Templates', icon: Icon(Icons.star_outline)),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [_buildCreateTab(theme), _buildTemplatesTab(theme)],
           ),
         ),
-        body: _buildCreateTab(theme),
       ),
     );
   }
-  
-  // Annars visa med tabs som vanligt
-  return DefaultTabController(
-    length: 2,
-    child: GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: theme.background,
-        appBar: AppBar(
-          backgroundColor: theme.background,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          title: GradientText(
-            text: 'Create Workout',
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-            ),
-            currentThemeIndex: ref.watch(themeIndexProvider),
-          ),
-          bottom: TabBar(
-            labelColor: theme.text,
-            unselectedLabelColor: theme.textSecondary,
-            indicatorColor: theme.primary,
-            tabs: const [
-              Tab(
-                text: 'Create',
-                icon: Icon(Icons.add_circle_outline),
-              ),
-              Tab(
-                text: 'Templates',
-                icon: Icon(Icons.star_outline),
-              ),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _buildCreateTab(theme),
-            _buildTemplatesTab(theme),
-          ],
-        ),
-      ),
-    ),
-  );
-}
 
   Widget _buildCreateTab(theme) {
     return Padding(
@@ -402,7 +402,10 @@ Widget build(BuildContext context) {
             children: [
               Expanded(
                 child: GradientText(
-                  text: widget.workoutToEdit == null ? 'Create New Workout' : 'Edit Workout',
+                  text:
+                      widget.workoutToEdit == null
+                          ? 'Create New Workout'
+                          : 'Edit Workout',
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -419,16 +422,21 @@ Widget build(BuildContext context) {
                       _isReordering = false; // Gå tillbaka till normalläge
                     });
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: theme.success),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.success,
+                  ),
                   child: Text('Done', style: TextStyle(color: theme.text)),
                 )
               else
                 ElevatedButton(
                   onPressed: _isLoading ? null : _saveWorkout,
-                  style: ElevatedButton.styleFrom(backgroundColor: theme.primary),
-                  child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : Text('Save', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.primary,
+                  ),
+                  child:
+                      _isLoading
+                          ? const CircularProgressIndicator()
+                          : Text('Save', style: TextStyle(color: Colors.white)),
                 ),
             ],
           ),
@@ -457,10 +465,7 @@ Widget build(BuildContext context) {
           Center(
             child: SizedBox(
               width: 330,
-              child: Divider(
-                color: theme.primary,
-                thickness: 1,
-              ),
+              child: Divider(color: theme.primary, thickness: 1),
             ),
           ),
           Expanded(
@@ -481,21 +486,23 @@ Widget build(BuildContext context) {
                 });
               },
               // Bygger varje objekt i listan.
-              children: _exercises.map((exercise) {
-                return Container(
-                  // VIKTIGT: Varje barn i en ReorderableListView måste ha en unik Key.
-                  key: Key(exercise.id),
-                  child: ExerciseListItem(
-                    exercise: exercise,
-                    isReordering: _isReordering, // Skicka med det aktuella läget
-                    onMenuPressed: () {
-                      // Hitta index för den specifika övningen för att kunna ta bort den
-                      final index = _exercises.indexOf(exercise);
-                      _showExerciseOptions(context, exercise, index);
-                    },
-                  ),
-                );
-              }).toList(),
+              children:
+                  _exercises.map((exercise) {
+                    return Container(
+                      // VIKTIGT: Varje barn i en ReorderableListView måste ha en unik Key.
+                      key: Key(exercise.id),
+                      child: ExerciseListItem(
+                        exercise: exercise,
+                        isReordering:
+                            _isReordering, // Skicka med det aktuella läget
+                        onMenuPressed: () {
+                          // Hitta index för den specifika övningen för att kunna ta bort den
+                          final index = _exercises.indexOf(exercise);
+                          _showExerciseOptions(context, exercise, index);
+                        },
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
           const SizedBox(height: 20),
@@ -517,7 +524,9 @@ Widget build(BuildContext context) {
               ),
             ),
           ),
-          SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40),
+          SizedBox(
+            height: MediaQuery.of(context).viewInsets.bottom > 0 ? 0 : 40,
+          ),
         ],
       ),
     );
@@ -531,19 +540,13 @@ Widget build(BuildContext context) {
         children: [
           GradientText(
             text: 'Standard Templates',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             currentThemeIndex: ref.watch(themeIndexProvider),
           ),
           const SizedBox(height: 8),
           Text(
             'Choose from our curated workout templates',
-            style: TextStyle(
-              fontSize: 16,
-              color: theme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 16, color: theme.textSecondary),
           ),
           const SizedBox(height: 20),
           Expanded(
@@ -612,25 +615,16 @@ Widget build(BuildContext context) {
       decoration: BoxDecoration(
         color: theme.background,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.3),
-        ),
+        border: Border.all(color: theme.textSecondary.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 12,
-            color: theme.textSecondary,
-          ),
+          Icon(icon, size: 12, color: theme.textSecondary),
           const SizedBox(width: 4),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 10,
-              color: theme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 10, color: theme.textSecondary),
           ),
         ],
       ),
@@ -653,9 +647,7 @@ class _TemplateCardState extends State<_TemplateCard> {
 
   void _showSuccessOverlay(BuildContext context) {
     final overlay = Overlay.of(context);
-    final overlayEntry = OverlayEntry(
-      builder: (context) => _SuccessOverlay(),
-    );
+    final overlayEntry = OverlayEntry(builder: (context) => _SuccessOverlay());
 
     overlay.insert(overlayEntry);
 
@@ -720,11 +712,12 @@ class _TemplateCardState extends State<_TemplateCard> {
 
         return GestureDetector(
           onTap: () {
-            // Navigate to template detail page
+            HapticFeedback.lightImpact();
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => TemplateDetailPage(template: widget.template),
+                builder:
+                    (context) => TemplateDetailPage(template: widget.template),
               ),
             );
           },
@@ -734,10 +727,7 @@ class _TemplateCardState extends State<_TemplateCard> {
             decoration: BoxDecoration(
               color: theme.card,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.grey.withOpacity(0.2),
-                width: 1,
-              ),
+              border: Border.all(color: Colors.grey.withOpacity(0.2), width: 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -750,11 +740,7 @@ class _TemplateCardState extends State<_TemplateCard> {
                         color: theme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
-                        Icons.star,
-                        color: theme.primary,
-                        size: 20,
-                      ),
+                      child: Icon(Icons.star, color: theme.primary, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -817,29 +803,38 @@ class _TemplateCardState extends State<_TemplateCard> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _isAdding ? null : () => _addToMyWorkouts(context, theme),
+                    onPressed:
+                        _isAdding
+                            ? null
+                            : () => _addToMyWorkouts(context, theme),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _isAdding 
-                          ? theme.textSecondary.withOpacity(0.3)
-                          : theme.primary,
+                      backgroundColor:
+                          _isAdding
+                              ? theme.textSecondary.withOpacity(0.3)
+                              : theme.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      disabledBackgroundColor: theme.textSecondary.withOpacity(0.3),
+                      disabledBackgroundColor: theme.textSecondary.withOpacity(
+                        0.3,
+                      ),
                       disabledForegroundColor: Colors.white.withOpacity(0.5),
                     ),
-                    icon: _isAdding
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.add, size: 20),
+                    icon:
+                        _isAdding
+                            ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                            : const Icon(Icons.add, size: 20),
                     label: Text(
                       _isAdding ? 'Adding...' : 'Add to My Workouts',
                       style: const TextStyle(
@@ -863,25 +858,16 @@ class _TemplateCardState extends State<_TemplateCard> {
       decoration: BoxDecoration(
         color: theme.background,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.3),
-        ),
+        border: Border.all(color: theme.textSecondary.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 12,
-            color: theme.textSecondary,
-          ),
+          Icon(icon, size: 12, color: theme.textSecondary),
           const SizedBox(width: 4),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 10,
-              color: theme.textSecondary,
-            ),
+            style: TextStyle(fontSize: 10, color: theme.textSecondary),
           ),
         ],
       ),
@@ -909,9 +895,10 @@ class _SuccessOverlayState extends State<_SuccessOverlay>
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
@@ -941,7 +928,7 @@ class _SuccessOverlayState extends State<_SuccessOverlay>
     return Consumer(
       builder: (context, ref, _) {
         final theme = ref.watch(themeProvider);
-        
+
         return Material(
           color: Colors.black.withOpacity(0.3),
           child: Center(
@@ -953,7 +940,10 @@ class _SuccessOverlayState extends State<_SuccessOverlay>
                   child: Opacity(
                     opacity: _fadeAnimation.value,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 24,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.card,
                         borderRadius: BorderRadius.circular(20),

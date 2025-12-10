@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../providers/theme_provider.dart';
@@ -43,6 +44,7 @@ class ThemeSelector extends ConsumerWidget {
                   name: themeName,
                   isSelected: isSelected,
                   onTap: () {
+                    HapticFeedback.selectionClick();
                     ref.read(themeProvider.notifier).setTheme(theme);
                   },
                 ),
@@ -81,7 +83,10 @@ class _ThemeButton extends ConsumerWidget {
           color: currentTheme.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? color : currentTheme.textSecondary.withOpacity(0.2),
+            color:
+                isSelected
+                    ? color
+                    : currentTheme.textSecondary.withOpacity(0.2),
             width: 3,
           ),
         ),
@@ -102,13 +107,10 @@ class _ThemeButton extends ConsumerWidget {
                   ),
                 ],
               ),
-              child: isSelected
-                  ? const Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 24,
-                    )
-                  : null,
+              child:
+                  isSelected
+                      ? const Icon(Icons.check, color: Colors.white, size: 24)
+                      : null,
             ),
             const SizedBox(height: 8),
             Padding(
@@ -119,7 +121,10 @@ class _ThemeButton extends ConsumerWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isSelected ? currentTheme.text : currentTheme.textSecondary,
+                  color:
+                      isSelected
+                          ? currentTheme.text
+                          : currentTheme.textSecondary,
                   fontSize: 10,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),

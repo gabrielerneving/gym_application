@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
@@ -101,14 +102,18 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    
+
     return Scaffold(
       backgroundColor: theme.background,
       appBar: AppBar(
         backgroundColor: theme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
+          icon: Icon(
+            Icons.arrow_back,
+            color: theme.primary.withOpacity(0.8),
+            size: 24,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -120,34 +125,35 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
           ),
         ),
       ),
-      body: isLoading
-          ? Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(theme.primary),
-              ),
-            )
-          : exerciseNames.isEmpty
+      body:
+          isLoading
+              ? Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(theme.primary),
+                ),
+              )
+              : exerciseNames.isEmpty
               ? _buildEmptyState(theme)
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildExerciseSelector(theme),
-                      const SizedBox(height: 16),
-                      _buildFormulaSelector(theme),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildExerciseSelector(theme),
+                    const SizedBox(height: 16),
+                    _buildFormulaSelector(theme),
+                    const SizedBox(height: 24),
+                    if (oneRMData.isNotEmpty) ...[
+                      _buildCurrentOneRM(theme),
                       const SizedBox(height: 24),
-                      if (oneRMData.isNotEmpty) ...[
-                        _buildCurrentOneRM(theme),
-                        const SizedBox(height: 24),
-                        _buildOneRMChart(theme),
-                        const SizedBox(height: 24),
-                        _buildPercentageGuide(theme),
-                      ] else
-                        _buildNoDataForExercise(theme),
-                    ],
-                  ),
+                      _buildOneRMChart(theme),
+                      const SizedBox(height: 24),
+                      _buildPercentageGuide(theme),
+                    ] else
+                      _buildNoDataForExercise(theme),
+                  ],
                 ),
+              ),
     );
   }
 
@@ -173,10 +179,7 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
           const SizedBox(height: 8),
           Text(
             'Complete some workouts to see your 1RM',
-            style: TextStyle(
-              color: theme.text.withOpacity(0.6),
-              fontSize: 14,
-            ),
+            style: TextStyle(color: theme.text.withOpacity(0.6), fontSize: 14),
           ),
         ],
       ),
@@ -237,14 +240,16 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
             fontWeight: FontWeight.w600,
           ),
           dropdownColor: theme.surface,
-          items: exerciseNames.map((String exercise) {
-            return DropdownMenuItem<String>(
-              value: exercise,
-              child: Text(exercise),
-            );
-          }).toList(),
+          items:
+              exerciseNames.map((String exercise) {
+                return DropdownMenuItem<String>(
+                  value: exercise,
+                  child: Text(exercise),
+                );
+              }).toList(),
           onChanged: (String? newValue) {
             if (newValue != null) {
+              HapticFeedback.selectionClick();
               setState(() {
                 selectedExercise = newValue;
               });
@@ -269,38 +274,37 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
           value: selectedFormula,
           isExpanded: true,
           icon: Icon(Icons.calculate, color: theme.primary),
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: theme.text, fontSize: 14),
           dropdownColor: theme.surface,
-          items: OneRMFormula.values.map((OneRMFormula formula) {
-            return DropdownMenuItem<OneRMFormula>(
-              value: formula,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    formula.displayName,
-                    style: TextStyle(
-                      color: theme.text,
-                      fontWeight: FontWeight.w600,
-                    ),
+          items:
+              OneRMFormula.values.map((OneRMFormula formula) {
+                return DropdownMenuItem<OneRMFormula>(
+                  value: formula,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formula.displayName,
+                        style: TextStyle(
+                          color: theme.text,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        formula.description,
+                        style: TextStyle(
+                          color: theme.text.withOpacity(0.6),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    formula.description,
-                    style: TextStyle(
-                      color: theme.text.withOpacity(0.6),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+                );
+              }).toList(),
           onChanged: (OneRMFormula? newValue) {
             if (newValue != null) {
+              HapticFeedback.selectionClick();
               setState(() {
                 selectedFormula = newValue;
               });
@@ -314,12 +318,15 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
 
   Widget _buildCurrentOneRM(AppColors theme) {
     final current = oneRMData.last;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [theme.primary.withOpacity(0.2), theme.primary.withOpacity(0.05)],
+          colors: [
+            theme.primary.withOpacity(0.2),
+            theme.primary.withOpacity(0.05),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -348,10 +355,7 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
           const SizedBox(height: 8),
           Text(
             'Based on ${current.weight.toStringAsFixed(1)}kg × ${current.reps} reps',
-            style: TextStyle(
-              color: theme.text.withOpacity(0.6),
-              fontSize: 13,
-            ),
+            style: TextStyle(color: theme.text.withOpacity(0.6), fontSize: 13),
           ),
           if (oneRMData.length > 1) ...[
             const SizedBox(height: 12),
@@ -367,11 +371,11 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
     final previous = oneRMData[oneRMData.length - 2].oneRM;
     final difference = current - previous;
     final percentChange = (difference / previous) * 100;
-    
+
     final isPositive = difference > 0;
     final color = isPositive ? Colors.green : Colors.red;
     final icon = isPositive ? Icons.trending_up : Icons.trending_down;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -399,9 +403,10 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
   Widget _buildOneRMChart(AppColors theme) {
     if (oneRMData.isEmpty) return const SizedBox();
 
-    final spots = oneRMData.asMap().entries.map((entry) {
-      return FlSpot(entry.key.toDouble(), entry.value.oneRM);
-    }).toList();
+    final spots =
+        oneRMData.asMap().entries.map((entry) {
+          return FlSpot(entry.key.toDouble(), entry.value.oneRM);
+        }).toList();
 
     final oneRMs = oneRMData.map((p) => p.oneRM).toList();
     final minY = oneRMs.reduce((a, b) => a < b ? a : b) * 0.95;
@@ -462,7 +467,8 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
                       showTitles: true,
                       reservedSize: 30,
                       getTitlesWidget: (value, meta) {
-                        if (value.toInt() >= 0 && value.toInt() < oneRMData.length) {
+                        if (value.toInt() >= 0 &&
+                            value.toInt() < oneRMData.length) {
                           final date = oneRMData[value.toInt()].date;
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -479,8 +485,12 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
                       },
                     ),
                   ),
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
                 borderData: FlBorderData(show: false),
                 minY: minY,
@@ -518,13 +528,23 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
 
   Widget _buildPercentageGuide(AppColors theme) {
     if (oneRMData.isEmpty) return const SizedBox();
-    
+
     final oneRM = oneRMData.last.oneRM;
     final percentages = [
       {'percent': 95, 'reps': '1-2', 'label': 'Strength', 'color': Colors.red},
       {'percent': 85, 'reps': '3-5', 'label': 'Power', 'color': Colors.orange},
-      {'percent': 75, 'reps': '6-8', 'label': 'Hypertrophy', 'color': Colors.blue},
-      {'percent': 65, 'reps': '9-12', 'label': 'Endurance', 'color': Colors.green},
+      {
+        'percent': 75,
+        'reps': '6-8',
+        'label': 'Hypertrophy',
+        'color': Colors.blue,
+      },
+      {
+        'percent': 65,
+        'reps': '9-12',
+        'label': 'Endurance',
+        'color': Colors.green,
+      },
     ];
 
     return Container(
@@ -548,15 +568,15 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
           const SizedBox(height: 4),
           Text(
             'Recommended weights based on your 1RM',
-            style: TextStyle(
-              color: theme.text.withOpacity(0.6),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: theme.text.withOpacity(0.6), fontSize: 12),
           ),
           const SizedBox(height: 16),
           ...percentages.map((zone) {
             final percent = zone['percent'] as int;
-            final weight = OneRMCalculator.percentageWeight(oneRM, percent.toDouble());
+            final weight = OneRMCalculator.percentageWeight(
+              oneRM,
+              percent.toDouble(),
+            );
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
