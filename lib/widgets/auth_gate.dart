@@ -16,6 +16,7 @@ class AuthGate extends ConsumerStatefulWidget {
 
 class _AuthGateState extends ConsumerState<AuthGate> {
   String? _lastUid;
+  bool _wasLoggedIn = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,14 +26,20 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       // Lyssnar på inloggningsstatus
       stream: authService.user,
       builder: (context, snapshot) {
-        // Väntar på Firebase
+        // Väntar på Firebase - visa bara laddning om vi aldrig har varit inloggade
         if (snapshot.connectionState == ConnectionState.waiting) {
+          // Om vi redan var inloggade, visa MainScreen istället för laddning
+          // Detta förhindrar "refresh" vid tillfälliga auth-statusändringar
+          if (_wasLoggedIn) {
+            return const MainScreen();
+          }
           return const Center(child: CircularProgressIndicator());
         }
 
         // Kontrollera om användaren har ändrats (byte av konto eller utloggning)
         if (snapshot.hasData) {
           final currentUid = snapshot.data!.uid;
+          _wasLoggedIn = true;
           
           // Om user ID har ändrats, invalidera workout provider
           // Detta säkerställer att varje användare får sin egen isolerad data
@@ -51,6 +58,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           ref.invalidate(workoutProvider);
           _lastUid = null;
         }
+        _wasLoggedIn = false;
         
         return const AuthScreen();
       },

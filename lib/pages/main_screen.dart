@@ -123,18 +123,31 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
 
   final theme = ref.watch(themeProvider);
   
-  return AnnotatedRegion<SystemUiOverlayStyle>(
-    value: const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-    ),
-    child: Scaffold(
-    extendBody: true,
-    extendBodyBehindAppBar: true,
-    backgroundColor: theme.background,
-    
-    body: Stack(
+  return PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) {
+      if (didPop) return;
+      
+      // Om inte på home-fliken, gå till home först
+      if (_selectedIndex != 0) {
+        _onItemTapped(0);
+      } else {
+        // På home-fliken - visa bekräftelsedialog eller minimera appen
+        SystemNavigator.pop();
+      }
+    },
+    child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      backgroundColor: theme.background,
+      
+      body: Stack(
         children: [
           // LAGER 1: Huvudinnehållet med dynamisk padding för bannern
           AnimatedPadding(
@@ -409,7 +422,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
         ),
         ],
       ),
-  ),
+    ),
+    ),
   );
   }
 }
