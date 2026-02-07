@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/workout_model.dart';
 import '../models/master_exercise_model.dart';
 import '../models/exercise_model.dart';
@@ -8,6 +9,7 @@ import '../utils/one_rm_calculator.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static bool _legsMigrationDone = false;
 
   // Användarens unika ID
   final String uid;
@@ -34,7 +36,7 @@ class DatabaseService {
         }).toList(),
       });
     } catch (e) {
-      print('Error saving workout program: $e');
+      debugPrint('Error saving workout program: $e');
       rethrow;
     }
   }
@@ -74,7 +76,7 @@ Future<void> deleteWorkoutProgram(String programId) async {
     // Anropa .delete() för att ta bort det
     await docRef.delete();
   } catch (e) {
-    print('Error deleting workout program: $e');
+    debugPrint('Error deleting workout program: $e');
     // Kasta felet vidare om du vill hantera det i UI:t
     rethrow;
   }
@@ -99,7 +101,7 @@ Future<void> updateWorkoutProgram(WorkoutProgram program) async {
       }).toList(),
     });
   } catch (e) {
-    print('Error updating workout program: $e');
+    debugPrint('Error updating workout program: $e');
     rethrow;
   }
 }
@@ -113,7 +115,7 @@ Future<void> saveWorkoutSession(WorkoutSession session) async {
     // Spara sessionen med sitt unika ID
     await collectionRef.doc(session.id).set(session.toMap());
   } catch (e) {
-    print('Error saving workout session: $e');
+    debugPrint('Error saving workout session: $e');
     rethrow;
   }
 }
@@ -220,7 +222,7 @@ Future<DateTime?> loadActiveStartTime() async {
       // Anropa .delete() för att ta bort det
       await docRef.delete();
     } catch (e) {
-      print('Error deleting active workout state: $e');
+      debugPrint('Error deleting active workout state: $e');
       // Vi behöver inte nödvändigtvis kasta felet vidare här,
       // eftersom det inte är kritiskt för användaren om den här filen blir kvar.
     }
@@ -235,9 +237,9 @@ Future<DateTime?> loadActiveStartTime() async {
           .collection('workout_sessions')
           .doc(sessionId)
           .delete();
-      print('Workout session deleted successfully: $sessionId');
+      debugPrint('Workout session deleted successfully: $sessionId');
     } catch (e) {
-      print('Error deleting workout session: $e');
+      debugPrint('Error deleting workout session: $e');
       rethrow;
     }
   }
@@ -267,7 +269,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     return WorkoutSession.fromFirestore(querySnapshot.docs.first.data());
 
   } catch (e) {
-    print("Error finding last session: $e");
+    debugPrint("Error finding last session: $e");
     return null;
   }
 }
@@ -288,7 +290,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .map((doc) => WorkoutSession.fromFirestore(doc.data()))
           .toList();
     } catch (e) {
-      print("Error fetching workout sessions: $e");
+      debugPrint("Error fetching workout sessions: $e");
       return [];
     }
   }
@@ -312,7 +314,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .map((doc) => WorkoutSession.fromFirestore(doc.data()))
           .toList();
     } catch (e) {
-      print("Error fetching workout sessions in period: $e");
+      debugPrint("Error fetching workout sessions in period: $e");
       return [];
     }
   }
@@ -342,7 +344,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
 
       return querySnapshot.docs.length;
     } catch (e) {
-      print("Error counting total workouts: $e");
+      debugPrint("Error counting total workouts: $e");
       return 0;
     }
   }
@@ -634,7 +636,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     'Quads', 
     'Hamstrings',
     'Glutes',
-    'Calf',
+    'Calves',
     'Biceps',
     'Triceps',
     'Chest',
@@ -676,12 +678,15 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         exerciseToMuscleGroup[exerciseName] = 'Quads'; // Map legacy "Legs" to "Quads"
       }
       
-      // Migration: Handle legacy "Legs" category
-      await _migrateLegsCategory();
+      // Migration: Run only once per app session to avoid repeated writes on every read
+      if (!_legsMigrationDone) {
+        await _migrateLegsCategory();
+        _legsMigrationDone = true;
+      }
       
       return exerciseToMuscleGroup;
     } catch (e) {
-      print('Error fetching exercise to muscle group mapping: $e');
+      debugPrint('Error fetching exercise to muscle group mapping: $e');
       return {};
     }
   }
@@ -700,7 +705,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         await doc.reference.update({'category': 'Quads'});
       }
     } catch (e) {
-      print('Error migrating Legs category: $e');
+      debugPrint('Error migrating Legs category: $e');
     }
   }
 
@@ -735,7 +740,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       
       return muscleGroupCounts;
     } catch (e) {
-      print('Error calculating muscle group set counts: $e');
+      debugPrint('Error calculating muscle group set counts: $e');
       return {};
     }
   }
@@ -777,7 +782,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       
       return muscleGroupCounts;
     } catch (e) {
-      print('Error calculating muscle group set counts for period: $e');
+      debugPrint('Error calculating muscle group set counts for period: $e');
       return {};
     }
   }
@@ -818,7 +823,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       }
       return heatmapData;
     } catch (e) {
-      print('Error fetching heatmap data: $e');
+      debugPrint('Error fetching heatmap data: $e');
       return {};
     }
   }
@@ -878,7 +883,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         }
       }
     } catch (e) {
-      print('Error adding exercises to master exercises: $e');
+      debugPrint('Error adding exercises to master exercises: $e');
       // Don't throw error here - we still want the workout to be saved even if this fails
     }
   }
@@ -887,80 +892,67 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   String _getCategoryForExercise(String exerciseName) {
     final name = exerciseName.toLowerCase();
     
-    // Special cases first (before general rules)
-    if (name.contains('reverse') && name.contains('pec')) {
-      return 'Shoulders';
-    }
+    // === SPECIFIKA FALL FÖRST (undvik felklassificering) ===
+    
+    // Leg Curl / Leg Extension måste fångas innan generella curl/extension-regler
+    if (name.contains('leg') && name.contains('curl')) return 'Hamstrings';
+    if (name.contains('leg') && name.contains('extension')) return 'Quads';
+    if (name.contains('hamstring')) return 'Hamstrings';
+    
+    // Reverse pec deck = Shoulders
+    if (name.contains('reverse') && name.contains('pec')) return 'Shoulders';
     
     // Chest exercises
-    if (name.contains('press') && (name.contains('chest') || name.contains('bench') || name.contains('incline'))) {
+    if (name.contains('press') && (name.contains('chest') || name.contains('bench') || name.contains('incline') || name.contains('decline'))) {
       return 'Chest';
     }
-    if (name.contains('fly') || name.contains('pec')) {
-      return 'Chest';
-    }
-    if (name.contains('push') && name.contains('up')) {
-      return 'Chest';
-    }
+    if (name.contains('fly') || name.contains('flye') || name.contains('pec')) return 'Chest';
+    if (name.contains('push') && name.contains('up')) return 'Chest';
     
     // Back exercises
-    if (name.contains('pull') || name.contains('row') || name.contains('lat')) {
-      return 'Back';
-    }
-    if (name.contains('deadlift')) {
-      return 'Back';
-    }
+    if (name.contains('pull') && (name.contains('up') || name.contains('down'))) return 'Back';
+    if (name.contains('row') || name.contains('lat ')) return 'Back';
+    if (name.contains('deadlift') && !name.contains('romanian') && !name.contains('rdl') && !name.contains('stiff')) return 'Back';
+    
+    // Hamstrings (RDL, Romanian, stiff-leg)
+    if (name.contains('romanian') || name.contains('rdl') || name.contains('stiff')) return 'Hamstrings';
+    if (name.contains('reverse') && name.contains('lunge')) return 'Hamstrings';
     
     // Shoulder exercises
-    if (name.contains('lateral') || name.contains('shoulder') || name.contains('overhead')) {
+    if (name.contains('lateral') || name.contains('shoulder') || name.contains('overhead') || name.contains('military')) {
       return 'Shoulders';
     }
+    if (name.contains('face') && name.contains('pull')) return 'Shoulders';
+    if (name.contains('rear') && name.contains('delt')) return 'Shoulders';
     
-    // Biceps exercises
-    if (name.contains('curl') || name.contains('bicep')) {
-      return 'Biceps';
-    }
+    // Biceps exercises (efter leg curl-check)
+    if (name.contains('curl') || name.contains('bicep') || name.contains('hammer')) return 'Biceps';
     
-    // Triceps exercises
-    if (name.contains('tricep') || name.contains('extension') || name.contains('jm press')) {
+    // Triceps exercises (efter leg extension-check)
+    if (name.contains('tricep') || name.contains('pushdown') || name.contains('skull') || name.contains('jm press')) {
       return 'Triceps';
     }
-    if (name.contains('dip')) {
-      return 'Triceps';
-    }
+    if (name.contains('extension') && !name.contains('leg') && !name.contains('back')) return 'Triceps';
+    if (name.contains('dip')) return 'Triceps';
     
     // Quads exercises
-    if (name.contains('squat') || name.contains('leg press') || name.contains('extension')) {
-      return 'Quads';
-    }
-    if (name.contains('lunge') && !name.contains('reverse')) {
-      return 'Quads';
-    }
-    
-    // Hamstrings exercises
-    if (name.contains('deadlift') || name.contains('curl') && name.contains('leg')) {
-      return 'Hamstrings';
-    }
-    if (name.contains('reverse') && name.contains('lunge')) {
-      return 'Hamstrings';
-    }
+    if (name.contains('squat') || name.contains('leg press')) return 'Quads';
+    if (name.contains('lunge') && !name.contains('reverse')) return 'Quads';
     
     // Glutes exercises
-    if (name.contains('thrust') || name.contains('glute') || name.contains('hip')) {
-      return 'Glutes';
-    }
+    if (name.contains('thrust') || name.contains('glute') || name.contains('hip')) return 'Glutes';
     
     // Calf exercises
-    if (name.contains('calf') || name.contains('raise') && (name.contains('standing') || name.contains('seated'))) {
+    if (name.contains('calf') || (name.contains('raise') && (name.contains('standing') || name.contains('seated')))) {
       return 'Calf';
     }
     
     // Abs exercises
-    if (name.contains('plank') || name.contains('crunch') || name.contains('twist') || name.contains('abs')) {
+    if (name.contains('plank') || name.contains('crunch') || name.contains('twist') || name.contains('abs') || name.contains('sit') && name.contains('up')) {
       return 'Abs';
     }
     
-    // Default to Chest if can't determine (most common in templates)
+    // Default
     return 'Chest';
   }
 
@@ -970,7 +962,8 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   /// Detta inkluderar workout programs, sessions, master exercises, etc.
   Future<void> deleteAllUserData() async {
     try {
-      final batch = _db.batch();
+      // Samla alla dokument som ska raderas
+      final allDocs = <DocumentReference>[];
       
       // Radera workout programs
       final workoutPrograms = await _db
@@ -978,9 +971,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .doc(uid)
           .collection('workout_programs')
           .get();
-      for (final doc in workoutPrograms.docs) {
-        batch.delete(doc.reference);
-      }
+      allDocs.addAll(workoutPrograms.docs.map((d) => d.reference));
       
       // Radera workout sessions
       final workoutSessions = await _db
@@ -988,9 +979,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .doc(uid)
           .collection('workout_sessions')
           .get();
-      for (final doc in workoutSessions.docs) {
-        batch.delete(doc.reference);
-      }
+      allDocs.addAll(workoutSessions.docs.map((d) => d.reference));
       
       // Radera master exercises
       final masterExercises = await _db
@@ -998,9 +987,7 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .doc(uid)
           .collection('master_exercises')
           .get();
-      for (final doc in masterExercises.docs) {
-        batch.delete(doc.reference);
-      }
+      allDocs.addAll(masterExercises.docs.map((d) => d.reference));
       
       // Radera active session data
       final activeSession = await _db
@@ -1008,20 +995,22 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .doc(uid)
           .collection('active_session')
           .get();
-      for (final doc in activeSession.docs) {
-        batch.delete(doc.reference);
-      }
+      allDocs.addAll(activeSession.docs.map((d) => d.reference));
       
       // Radera användarens huvud-dokument
-      final userDoc = _db.collection('users').doc(uid);
-      batch.delete(userDoc);
+      allDocs.add(_db.collection('users').doc(uid));
       
-      // Utför alla raderingar i en batch
-      await batch.commit();
-      
-      print('All user data deleted successfully');
+      // Chunk i batchar av max 400 (Firestore limit är 500)
+      for (int i = 0; i < allDocs.length; i += 400) {
+        final batch = _db.batch();
+        final end = (i + 400 < allDocs.length) ? i + 400 : allDocs.length;
+        for (int j = i; j < end; j++) {
+          batch.delete(allDocs[j]);
+        }
+        await batch.commit();
+      }
     } catch (e) {
-      print('Error deleting user data: $e');
+      debugPrint('Error deleting user data: $e');
       rethrow;
     }
   }
@@ -1124,7 +1113,7 @@ class StandardWorkoutService {
           .doc(template.id)
           .set(template.toMap());
     } catch (e) {
-      print('Error adding standard workout: $e');
+      debugPrint('Error adding standard workout: $e');
       rethrow;
     }
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Settings för optional workout features
@@ -40,7 +41,7 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
         showProgression: prefs.getBool(_keyShowProgression) ?? false,
       );
     } catch (e) {
-      print('Error loading workout settings: $e');
+      debugPrint('Error loading workout settings: $e');
     }
   }
 
@@ -51,7 +52,7 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
       await prefs.setBool(_keyShowRIR, value);
       state = state.copyWith(showRIR: value);
     } catch (e) {
-      print('Error saving RIR setting: $e');
+      debugPrint('Error saving RIR setting: $e');
     }
   }
 
@@ -62,7 +63,7 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
       await prefs.setBool(_keyShowProgression, value);
       state = state.copyWith(showProgression: value);
     } catch (e) {
-      print('Error saving progression setting: $e');
+      debugPrint('Error saving progression setting: $e');
     }
   }
 }

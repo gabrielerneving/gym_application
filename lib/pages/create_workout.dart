@@ -33,6 +33,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 
   List<Exercise> _exercises = [];
 
+  @override
   void initState() {
     super.initState();
 
@@ -51,6 +52,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 
   @override
   void dispose() {
+    _workoutNameController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -603,28 +605,6 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
                 );
               },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTemplateInfoChip(theme, IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.background,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.textSecondary.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: theme.textSecondary),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(fontSize: 10, color: theme.textSecondary),
           ),
         ],
       ),

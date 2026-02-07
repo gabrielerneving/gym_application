@@ -37,7 +37,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           // Om user ID har ändrats, invalidera workout provider
           // Detta säkerställer att varje användare får sin egen isolerad data
           if (_lastUid != null && _lastUid != currentUid) {
-            print('User changed from $_lastUid to $currentUid - invalidating workout provider');
+            debugPrint('User changed from $_lastUid to $currentUid - invalidating workout provider');
             ref.invalidate(workoutProvider);
           }
           _lastUid = currentUid;
@@ -47,7 +47,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
         // Inte inloggad - rensa senaste UID och invalidera providers
         if (_lastUid != null) {
-          print('User logged out - invalidating workout provider');
+          debugPrint('User logged out - invalidating workout provider');
           ref.invalidate(workoutProvider);
           _lastUid = null;
         }

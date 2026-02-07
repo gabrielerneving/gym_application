@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   // Skapa en instans av FirebaseAuth
@@ -16,11 +17,11 @@ class AuthService {
       return result.user;
     } on FirebaseAuthException catch (e) {
       // Hantera specifika fel, t.ex. om e-posten redan används
-      print('Firebase Auth Exception: ${e.message}');
+      debugPrint('Firebase Auth Exception: ${e.message}');
       return null;
     } catch (e) {
       // Hantera alla andra typer av fel
-      print('An unknown error occurred: $e');
+      debugPrint('An unknown error occurred: $e');
       return null;
     }
   }
@@ -37,11 +38,11 @@ class AuthService {
       return result.user;
     } on FirebaseAuthException catch (e) {
       // Hantera specifika fel, t.ex. fel lösenord eller ingen användare hittades
-      print('Firebase Auth Exception: ${e.message}');
+      debugPrint('Firebase Auth Exception: ${e.message}');
       return null;
     } catch (e) {
       // Hantera alla andra typer av fel
-      print('An unknown error occurred: $e');
+      debugPrint('An unknown error occurred: $e');
       return null;
     }
   }
@@ -59,19 +60,19 @@ class AuthService {
       final user = _auth.currentUser;
       if (user != null) {
         await user.delete();
-        print('User account deleted successfully');
+        debugPrint('User account deleted successfully');
       } else {
         throw Exception('No user is currently logged in');
       }
     } on FirebaseAuthException catch (e) {
-      print('Firebase Auth Exception during account deletion: ${e.message}');
+      debugPrint('Firebase Auth Exception during account deletion: ${e.message}');
       // Re-authentication might be needed for recent sign-in requirement
       if (e.code == 'requires-recent-login') {
         throw Exception('Account deletion requires recent authentication. Please log in again and try again.');
       }
       rethrow;
     } catch (e) {
-      print('An unknown error occurred during account deletion: $e');
+      debugPrint('An unknown error occurred during account deletion: $e');
       rethrow;
     }
   }

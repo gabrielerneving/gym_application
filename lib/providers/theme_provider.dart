@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 
@@ -17,7 +18,7 @@ class ThemeNotifier extends StateNotifier<AppColors> {
       final themeIndex = prefs.getInt(_themeKey) ?? 0;
       state = AppTheme.getThemeByIndex(themeIndex);
     } catch (e) {
-      print('Error loading theme: $e');
+      debugPrint('Error loading theme: $e');
     }
   }
 
@@ -29,7 +30,7 @@ class ThemeNotifier extends StateNotifier<AppColors> {
       final themeIndex = AppTheme.getThemeIndex(theme);
       await prefs.setInt(_themeKey, themeIndex);
     } catch (e) {
-      print('Error saving theme: $e');
+      debugPrint('Error saving theme: $e');
     }
   }
 

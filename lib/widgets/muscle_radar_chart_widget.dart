@@ -48,6 +48,7 @@ class MuscleRadarChartWidget extends ConsumerWidget {
       'Quads',
       'Hamstrings',
       'Glutes',
+      'Calves',
       'Abs',
     ];
 

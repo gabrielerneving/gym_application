@@ -57,8 +57,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
       vsync: this,
     );
     
-    // Starta kontinuerlig pulsning för workout banner
-    _bannerAnimationController.repeat(reverse: true);
+    // Bannern startas/stoppas dynamiskt baserat på om ett workout pågår
     
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
@@ -107,41 +106,47 @@ class _MainScreenState extends ConsumerState<MainScreen> with TickerProviderStat
     });
   }
 
-Widget build(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
   final activeWorkout = ref.watch(workoutProvider);
 
-  // Sätt status bar stil
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-    ),
-  );
+  // Starta/stoppa banner-animationen baserat på om ett workout pågår
+  if (activeWorkout.isRunning && !_bannerAnimationController.isAnimating) {
+    _bannerAnimationController.repeat(reverse: true);
+  } else if (!activeWorkout.isRunning && _bannerAnimationController.isAnimating) {
+    _bannerAnimationController.stop();
+    _bannerAnimationController.reset();
+  }
 
   final double navBarWidth = MediaQuery.of(context).size.width - 32;
   final double itemWidth = navBarWidth / _icons.length;
 
   final theme = ref.watch(themeProvider);
   
-  return Scaffold(
+  return AnnotatedRegion<SystemUiOverlayStyle>(
+    value: const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+    child: Scaffold(
     extendBody: true,
     extendBodyBehindAppBar: true,
     backgroundColor: theme.background,
     
     body: Stack(
-      children: [
-        // LAGER 1: Huvudinnehållet med dynamisk padding för bannern
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 300),
-          padding: EdgeInsets.only(
-            top: activeWorkout.isRunning ? 80 : 0, // 80px space för bannern när den visas
+        children: [
+          // LAGER 1: Huvudinnehållet med dynamisk padding för bannern
+          AnimatedPadding(
+            duration: const Duration(milliseconds: 300),
+            padding: EdgeInsets.only(
+              top: activeWorkout.isRunning ? 80 : 0, // 80px space för bannern när den visas
+            ),
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _widgetOptions,
+            ),
           ),
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: _widgetOptions,
-          ),
-        ),
 
         // LAGER 2: Förbättrad "Workout in progress"-banner
         if (activeWorkout.isRunning)
@@ -290,7 +295,17 @@ Widget build(BuildContext context) {
           bottom: 20,
           left: 16,
           right: 16,
-          child: Container(
+          child: GestureDetector(
+            onHorizontalDragEnd: (details) {
+              if (details.primaryVelocity != null) {
+                if (details.primaryVelocity! > 300 && _selectedIndex > 0) {
+                  _onItemTapped(_selectedIndex - 1);
+                } else if (details.primaryVelocity! < -300 && _selectedIndex < _icons.length - 1) {
+                  _onItemTapped(_selectedIndex + 1);
+                }
+              }
+            },
+            child: Container(
             height: 65,
             decoration: BoxDecoration(
               color: theme.card,
@@ -316,83 +331,85 @@ Widget build(BuildContext context) {
                 width: 0.5,
               ),
             ),
-        child: Stack(
-          children: [
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeInOutCubic,
-              left: _selectedIndex * itemWidth + (itemWidth / 2 - 35),
-              top: 10,
-              child: AnimatedBuilder(
-                animation: _animationController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 1.0 + (_animationController.value * 0.1),
-                    child: Container(
-                      width: 70,
-                      height: 45,
-                      decoration: BoxDecoration(
-                        gradient: theme.primaryGradient,
-                        borderRadius: BorderRadius.circular(25),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.primary.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(_icons.length, (index) {
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => _onItemTapped(index),
-                    behavior: HitTestBehavior.translucent,
-                    child: SizedBox(
-                      height: 65,
-                      child: Center(
-                        child: AnimatedBuilder(
-                          animation: _iconAnimationController,
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: _selectedIndex == index 
-                                  ? 1.0 + (_iconAnimationController.value * 0.15)
-                                  : 1.0,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                  _selectedIndex == index ? _activeIcons[index] : _icons[index],
-                                  color: _selectedIndex == index
-                                      ? Colors.white
-                                      : theme.textSecondary,
-                                  size: _selectedIndex == index 
-                                      ? (index == 1 ? 32 : 26)  
-                                      : (index == 1 ? 28 : 24), 
-                                ),
+            child: Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  left: _selectedIndex * itemWidth + (itemWidth / 2 - 35),
+                  top: 10,
+                  child: AnimatedBuilder(
+                    animation: _animationController,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: 1.0 + (_animationController.value * 0.1),
+                        child: Container(
+                          width: 70,
+                          height: 45,
+                          decoration: BoxDecoration(
+                            gradient: theme.primaryGradient,
+                            borderRadius: BorderRadius.circular(25),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.primary.withOpacity(0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 1),
                               ),
-                            );
-                          },
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(_icons.length, (index) {
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => _onItemTapped(index),
+                        behavior: HitTestBehavior.translucent,
+                        child: SizedBox(
+                          height: 65,
+                          child: Center(
+                            child: AnimatedBuilder(
+                              animation: _iconAnimationController,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _selectedIndex == index 
+                                      ? 1.0 + (_iconAnimationController.value * 0.15)
+                                      : 1.0,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.all(8),
+                                    child: Icon(
+                                      _selectedIndex == index ? _activeIcons[index] : _icons[index],
+                                      color: _selectedIndex == index
+                                          ? Colors.white
+                                          : theme.textSecondary,
+                                      size: _selectedIndex == index 
+                                          ? (index == 1 ? 32 : 26)  
+                                          : (index == 1 ? 28 : 24), 
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              }),
+                    );
+                  }),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
           ),
         ),
         ],
       ),
-    );
+  ),
+  );
   }
 }

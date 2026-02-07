@@ -15,8 +15,6 @@ class WorkoutHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
-  // Använder nu Firebase istället för hårdkodad data
-  int _selectedIndex = 2; // Index för bottom nav bar
 
   @override
   Widget build(BuildContext context) {
@@ -32,124 +30,56 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
     return Scaffold(
       extendBody: true,
       backgroundColor: theme.background,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 60, 16, 60),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GradientText(
-                  text: 'Workout history',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 34,
-                  ),
-                  currentThemeIndex: ref.watch(themeIndexProvider),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: StreamBuilder<List<WorkoutSession>>(
-                    stream: dbService.getWorkoutSessions(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text("Error: ${snapshot.error}"));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return Center(
-                          child: Text(
-                            "Your workout history is empty.\nComplete a workout to see it here!",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: theme.textSecondary, fontSize: 16),
-                          ),
-                        );
-                      }
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 60, 16, 100),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GradientText(
+              text: 'Workout history',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 34,
+              ),
+              currentThemeIndex: ref.watch(themeIndexProvider),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: StreamBuilder<List<WorkoutSession>>(
+                stream: dbService.getWorkoutSessions(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(
+                      child: Text(
+                        "Your workout history is empty.\nComplete a workout to see it here!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.textSecondary, fontSize: 16),
+                      ),
+                    );
+                  }
 
-                      final workoutHistory = snapshot.data!;
+                  final workoutHistory = snapshot.data!;
 
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 40), // Padding för innehållet
-                        itemCount: workoutHistory.length,
-                        itemBuilder: (context, index) {
-                          return WorkoutHistoryWidget(session: workoutHistory[index]);
-                        },
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 40),
+                    itemCount: workoutHistory.length,
+                    itemBuilder: (context, index) {
+                      return WorkoutHistoryWidget(
+                        key: ValueKey(workoutHistory[index].id),
+                        session: workoutHistory[index],
                       );
                     },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
-            child: Container(
-              height: 65,
-              decoration: BoxDecoration(
-                color: theme.card,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  // Huvudskugga - mjukare och mindre aggressiv
-                  BoxShadow(
-                    color: theme.primary.withOpacity(0.04),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                    spreadRadius: 0,
-                  ),
-                  // Liten skugga nära navbaren
-                  BoxShadow(
-                    color: theme.primary.withOpacity(0.08),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                    spreadRadius: -1,
-                  ),
-                ],
-                border: Border.all(
-                  color: theme.text.withOpacity(0.1),
-                  width: 0.5,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(Icons.home_outlined, 0),
-                  _buildNavItem(Icons.fitness_center_outlined, 1),
-                  _buildNavItem(Icons.history, 2), // Detta är den aktiva
-                  _buildNavItem(Icons.bar_chart_outlined, 3),
-                ],
+                  );
+                },
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Bygger en enskild ikon i botten-menyn
-  Widget _buildNavItem(IconData icon, int index) {
-    final theme = ref.read(themeProvider);
-    bool isSelected = _selectedIndex == index;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? theme.primary : Colors.transparent,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          color: isSelected ? theme.text : theme.textSecondary,
-          size: 28,
+          ],
         ),
       ),
     );

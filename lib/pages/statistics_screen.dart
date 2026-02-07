@@ -21,7 +21,6 @@ class StatisticsScreen extends ConsumerStatefulWidget {
 }
 
 class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
-  int _selectedIndex = 3; // Index 3 är den aktiva "profil"-ikonen
   DatabaseService? _dbService;
 
   // Statistik data från databasen
@@ -31,6 +30,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   double averageWorkoutDuration = 0.0;
   Map<String, int> popularWorkoutsData = {};
   bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -55,29 +55,43 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     if (_dbService == null) return;
 
     try {
-      final results = await Future.wait([
-        _dbService!.getWorkoutsThisMonth(),
-        _dbService!.getTotalWorkouts(),
-        _dbService!.getTotalTrainingHours(),
-        _dbService!.getAverageWorkoutDuration(),
-        _dbService!.getMostTrainedPrograms(),
-      ]);
+      // Hämta ALL data EN gång istället för att anropa getAllWorkoutSessions() flera gånger
+      final allSessions = await _dbService!.getAllWorkoutSessions();
+      final workoutsThisMonthCount = await _dbService!.getWorkoutsThisMonth();
+
+      // Beräkna total träningstid
+      final totalMinutes = allSessions.fold<int>(
+        0, (sum, session) => sum + session.durationInMinutes,
+      );
+      final hours = totalMinutes / 60.0;
+      final avgDuration = allSessions.isEmpty ? 0.0 : totalMinutes / allSessions.length;
+
+      // Beräkna mest tränade program
+      final programCounts = <String, int>{};
+      for (final session in allSessions) {
+        programCounts[session.programTitle] = 
+            (programCounts[session.programTitle] ?? 0) + 1;
+      }
+      final sortedEntries = programCounts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top5 = Map<String, int>.fromEntries(sortedEntries.take(5));
 
       if (mounted) {
         setState(() {
-          workoutsThisMonth = results[0] as int;
-          totalWorkouts = results[1] as int;
-          totalHours = results[2] as double;
-          averageWorkoutDuration = results[3] as double;
-          popularWorkoutsData = results[4] as Map<String, int>;
+          workoutsThisMonth = workoutsThisMonthCount;
+          totalWorkouts = allSessions.length;
+          totalHours = hours;
+          averageWorkoutDuration = avgDuration;
+          popularWorkoutsData = top5;
           isLoading = false;
+          errorMessage = null;
         });
       }
     } catch (e) {
-      print('Error loading statistics: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
+          errorMessage = 'Could not load statistics. Pull down to try again.';
         });
       }
     }
@@ -89,11 +103,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final themeIndex = ref.watch(themeIndexProvider);
 
     return Scaffold(
-      extendBody: true,
       backgroundColor: theme.background,
-      body: Stack(
-        children: [
-          Padding(
+      body: Padding(
             padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,9 +181,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                         value: workoutsThisMonth.toString(),
                                         unit: 'Workouts',
                                         icon: Icons.calendar_today,
-                                        backgroundColor: const Color(
-                                          0xFFDC2626,
-                                        ),
+                                        isPrimary: true,
                                       ),
                                       StatCard(
                                         title: 'Total workouts',
@@ -216,78 +225,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 ),
               ],
             ),
-          ), // Flytande navbar
-          Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
-            child: Container(
-              height: 65,
-              decoration: BoxDecoration(
-                color: theme.card,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  // Huvudskugga - mjukare och mindre aggressiv
-                  BoxShadow(
-                    color: theme.primary.withOpacity(0.04),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                    spreadRadius: 0,
-                  ),
-                  // Liten skugga nära navbaren
-                  BoxShadow(
-                    color: theme.primary.withOpacity(0.08),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                    spreadRadius: -1,
-                  ),
-                ],
-                border: Border.all(
-                  color: theme.textSecondary.withOpacity(0.1),
-                  width: 0.5,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(Icons.home_outlined, 0, theme),
-                  _buildNavItem(Icons.fitness_center_outlined, 1, theme),
-                  _buildNavItem(Icons.history, 2, theme),
-                  _buildNavItem(
-                    Icons.bar_chart_outlined,
-                    3,
-                    theme,
-                  ), // Aktiv ikon
-                ],
-              ),
-            ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, int index, theme) {
-    bool isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? theme.primary : Colors.transparent,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          color: isSelected ? Colors.white : theme.textSecondary,
-          size: 28,
-        ),
-      ),
     );
   }
 

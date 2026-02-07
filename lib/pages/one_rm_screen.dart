@@ -62,7 +62,7 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
         });
       }
     } catch (e) {
-      print('Error loading exercise names: $e');
+      debugPrint('Error loading exercise names: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -90,7 +90,7 @@ class _OneRMScreenState extends ConsumerState<OneRMScreen> {
         });
       }
     } catch (e) {
-      print('Error loading 1RM data: $e');
+      debugPrint('Error loading 1RM data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -65,6 +66,12 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
         ),
       );
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   Future<void> startWorkout(WorkoutProgram program) async {
     if (state.isRunning) return;
 
@@ -98,6 +105,7 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
     );
 
     // STEG 3: Bygg placeholders från förra passets värden (INTE nuvarande session)
+    // VIKTIGT: Använd övningsnamn för stabila nycklar som överlever exercise-reordering
     final Map<String, dynamic> placeholders = <String, dynamic>{};
     if (lastSession != null) {
       for (int exIndex = 0; exIndex < program.exercises.length; exIndex++) {
@@ -109,22 +117,26 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
           orElse: () => CompletedExercise(name: "", sets: []),
         );
 
-        // Skapa placeholders från förra passets data
+        // Skapa placeholders från förra passets data med STABILA nycklar
+        // Format: "exerciseName_w_setNumber" istället för "exIndex_w_setIndex"
         for (int setIndex = 0; setIndex < currentExercise.sets; setIndex++) {
           if (lastExerciseData.sets.isNotEmpty &&
               setIndex < lastExerciseData.sets.length) {
             final lastSet = lastExerciseData.sets[setIndex];
+            // Använd övningsnamn och absolut set-nummer för stabilitet
+            final keyBase = '${currentExercise.name}_$setIndex';
+            
             if (lastSet.weight > 0) {
-              placeholders['w_${exIndex}_$setIndex'] = lastSet.weight;
+              placeholders['w_$keyBase'] = lastSet.weight;
             }
             if (lastSet.reps > 0) {
-              placeholders['r_${exIndex}_$setIndex'] = lastSet.reps;
+              placeholders['r_$keyBase'] = lastSet.reps;
             }
             if (lastSet.notes != null && lastSet.notes!.isNotEmpty) {
-              placeholders['n_${exIndex}_$setIndex'] = lastSet.notes;
+              placeholders['n_$keyBase'] = lastSet.notes;
             }
             if (lastSet.rir != null && lastSet.rir! > 0) {
-              placeholders['rir_${exIndex}_$setIndex'] = lastSet.rir;
+              placeholders['rir_$keyBase'] = lastSet.rir;
             }
           }
         }
@@ -172,8 +184,10 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
     double? weightProgression;
 
     if (!currentSet.isWarmUp) {
-      final previousWeight = state.placeholders['w_${exerciseIndex}_$setIndex'];
-      final previousReps = state.placeholders['r_${exerciseIndex}_$setIndex'];
+      final exerciseName = state.session!.completedExercises[exerciseIndex].name;
+      final keyBase = '${exerciseName}_$setIndex';
+      final previousWeight = state.placeholders['w_$keyBase'];
+      final previousReps = state.placeholders['r_$keyBase'];
 
       if (previousWeight != null && previousReps != null) {
         final updatedWeight = weight ?? currentSet.weight;
@@ -267,10 +281,9 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
 
         // Beräkna progression om setet inte är ett warmup
         if (!set.isWarmUp) {
-          final previousWeight =
-              state.placeholders['w_${exerciseIndex}_$setIndex'];
-          final previousReps =
-              state.placeholders['r_${exerciseIndex}_$setIndex'];
+          final keyBase = '${exercise.name}_$setIndex';
+          final previousWeight = state.placeholders['w_$keyBase'];
+          final previousReps = state.placeholders['r_$keyBase'];
 
           if (previousWeight != null && previousReps != null) {
             final currentWeight = set.weight;
@@ -406,10 +419,14 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
       final ex = session.completedExercises[exIndex];
       for (int setIndex = 0; setIndex < ex.sets.length; setIndex++) {
         final set = ex.sets[setIndex];
-        if (set.weight > 0) placeholders['w_${exIndex}_$setIndex'] = set.weight;
-        if (set.reps > 0) placeholders['r_${exIndex}_$setIndex'] = set.reps;
+        final keyBase = '${ex.name}_$setIndex';
+        if (set.weight > 0) placeholders['w_$keyBase'] = set.weight;
+        if (set.reps > 0) placeholders['r_$keyBase'] = set.reps;
         if (set.notes != null && set.notes!.isNotEmpty) {
-          placeholders['n_${exIndex}_$setIndex'] = set.notes;
+          placeholders['n_$keyBase'] = set.notes;
+        }
+        if (set.rir != null && set.rir! > 0) {
+          placeholders['rir_$keyBase'] = set.rir;
         }
       }
     }
@@ -426,7 +443,7 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
 
     // Kontrollera om träningspasset har pågått för länge redan när vi återupptar (8 timmar = 28800 sekunder)
     if (totalElapsedSeconds >= 28800) {
-      print('Workout exceeded 8 hours, auto-finishing on resume...');
+      debugPrint('Workout exceeded 8 hours, auto-finishing on resume...');
       // Avsluta workoutet automatiskt istället för att återuppta
       dbService.deleteActiveWorkoutState();
       state = state.copyWith(clearStaleSession: true);
@@ -464,7 +481,7 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
 
           // Kontrollera om träningspasset har pågått för länge (8 timmar = 28800 sekunder)
           if (actualElapsedSeconds >= 28800) {
-            print('Workout has been running for 8 hours, auto-finishing...');
+            debugPrint('Workout has been running for 8 hours, auto-finishing...');
             finishWorkout();
             return;
           }
@@ -482,9 +499,11 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
 
   void _saveStateToFirestore() {
     if (!state.isRunning || state.session == null) return;
+    // OBS: Överskriver INTE session.date här — startTime sparas separat.
+    // Om vi sätter date: DateTime.now() vid varje save, och startTime saknas vid resume,
+    // blir elapsed-tid felberäknad.
     final sessionToSave = state.session!.copyWith(
       durationInMinutes: (state.elapsedSeconds / 60).round(),
-      date: DateTime.now(),
     );
     dbService.saveActiveWorkoutState(sessionToSave);
     // Persist edited fields as well
@@ -529,34 +548,18 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
       ..removeAt(setIndex);
     updatedExercises[exerciseIndex] = exercise.copyWith(sets: updatedSets);
 
-    // DATA INTEGRITY FIX: Reorganize placeholders and editedFields after removing a set
-    final newPlaceholders = <String, dynamic>{};
-    final newEditedFields = <String>{};
-
-    for (int exIdx = 0; exIdx < updatedExercises.length; exIdx++) {
-      final ex = updatedExercises[exIdx];
-      for (int setIdx = 0; setIdx < ex.sets.length; setIdx++) {
-        // Determine source indices for this set's data
-        int sourceSetIdx = setIdx;
-
-        // If we're in the same exercise and past the removed set, shift source index
-        if (exIdx == exerciseIndex && setIdx >= setIndex) {
-          sourceSetIdx = setIdx + 1;
-        }
-
-        // Copy placeholders with new keys
-        for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
-          final oldKey = '$prefix${exIdx}_$sourceSetIdx';
-          final newKey = '$prefix${exIdx}_$setIdx';
-
-          if (state.placeholders.containsKey(oldKey)) {
-            newPlaceholders[newKey] = state.placeholders[oldKey];
-          }
-
-          if (state.editedFields.contains(oldKey)) {
-            newEditedFields.add(newKey);
-          }
-        }
+    // Rensa alla placeholders och edited fields för sets efter det borttagna
+    // eftersom set-index kommer att shifta
+    final newPlaceholders = Map<String, dynamic>.from(state.placeholders);
+    final newEditedFields = Set<String>.from(state.editedFields);
+    final exerciseName = exercise.name;
+    
+    // Ta bort placeholders och edited fields för alla sets från det borttagna och uppåt
+    for (int idx = setIndex; idx < exercise.sets.length; idx++) {
+      for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
+        final key = '$prefix${exerciseName}_$idx';
+        newPlaceholders.remove(key);
+        newEditedFields.remove(key);
       }
     }
 
@@ -602,37 +605,24 @@ class WorkoutStateNotifier extends StateNotifier<ActiveWorkoutState> {
   void removeExercise(int exerciseIndex) {
     if (!state.isRunning || state.session == null) return;
 
+    final exerciseToRemove = state.session!.completedExercises[exerciseIndex];
     final updatedExercises = List<CompletedExercise>.from(
       state.session!.completedExercises,
     )..removeAt(exerciseIndex);
 
-    // DATA INTEGRITY FIX: Reorganize placeholders and editedFields after removing an exercise
-    final newPlaceholders = <String, dynamic>{};
-    final newEditedFields = <String>{};
-
-    for (int exIdx = 0; exIdx < updatedExercises.length; exIdx++) {
-      final ex = updatedExercises[exIdx];
-
-      // Determine source exercise index
-      int sourceExIdx = exIdx;
-      if (exIdx >= exerciseIndex) {
-        sourceExIdx = exIdx + 1; // Shift from removed exercise
-      }
-
-      for (int setIdx = 0; setIdx < ex.sets.length; setIdx++) {
-        // Copy placeholders with new keys
-        for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
-          final oldKey = '$prefix${sourceExIdx}_$setIdx';
-          final newKey = '$prefix${exIdx}_$setIdx';
-
-          if (state.placeholders.containsKey(oldKey)) {
-            newPlaceholders[newKey] = state.placeholders[oldKey];
-          }
-
-          if (state.editedFields.contains(oldKey)) {
-            newEditedFields.add(newKey);
-          }
-        }
+    // Ta bort alla placeholders och edited fields för den borttagna övningen
+    final newPlaceholders = Map<String, dynamic>.from(state.placeholders);
+    final newEditedFields = Set<String>.from(state.editedFields);
+    final exerciseName = exerciseToRemove.name;
+    
+    // Ta bort alla nycklar för denna övning
+    // Använd exakt prefix-matching med alla kända prefix för att undvika
+    // kollision med övningar som har överlappande namn (t.ex. "Bench Press" vs "Bench Press Close Grip")
+    for (int idx = 0; idx < exerciseToRemove.sets.length; idx++) {
+      for (final prefix in ['w_', 'r_', 'n_', 'rir_']) {
+        final key = '$prefix${exerciseName}_$idx';
+        newPlaceholders.remove(key);
+        newEditedFields.remove(key);
       }
     }
 

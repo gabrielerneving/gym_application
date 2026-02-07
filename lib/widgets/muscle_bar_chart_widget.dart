@@ -155,7 +155,7 @@ class MuscleBarChartWidget extends StatelessWidget {
             }
           },
           touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => const Color(0xFF18181B),
+            getTooltipColor: (group) => const Color(0xFF1E1E1E),
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final muscleGroup = sortedEntries[group.x.toInt()].key;
               final count = rod.toY.toInt();

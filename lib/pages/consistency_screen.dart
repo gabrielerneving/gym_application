@@ -59,7 +59,7 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
         });
       }
     } catch (e) {
-      print('Error loading heatmap data: $e');
+      debugPrint('Error loading heatmap data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -237,7 +237,7 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
                         value: averagePerWeek.toStringAsFixed(1),
                         unit: 'Workouts',
                         icon: Icons.calendar_view_week,
-                        backgroundColor: theme.primary,
+                        isPrimary: true,
                       ),
                       StatCard(
                         title: 'Average / Month',

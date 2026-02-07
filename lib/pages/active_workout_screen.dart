@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/workout_provider.dart';
 import '../providers/theme_provider.dart';
@@ -8,6 +7,7 @@ import '../providers/workout_settings_provider.dart';
 import '../widgets/gradient_button.dart';
 import '../pages/choose_category_screen.dart';
 import '../models/master_exercise_model.dart';
+import '../models/workout_session_model.dart';
 
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
   const ActiveWorkoutScreen({Key? key}) : super(key: key);
@@ -22,6 +22,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   final Map<String, TextEditingController> _controllers = {};
   final Set<String> _editedFields = {};
   String? _currentSessionId;
+
+  // Formatering för timern (statisk för att undvika omallokering i build)
+  static String _formatDuration(int totalSeconds) {
+    final duration = Duration(seconds: totalSeconds);
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$minutes:$seconds";
+  }
 
   @override
   void initState() {
@@ -87,11 +95,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       for (int setIndex = 0; setIndex < exercise.sets.length; setIndex++) {
         final set = exercise.sets[setIndex];
 
-        // Skapa unika nycklar för varje fält
-        final weightKey = 'w_${exIndex}_$setIndex';
-        final repsKey = 'r_${exIndex}_$setIndex';
-        final notesKey = 'n_${exIndex}_$setIndex';
-        final rirKey = 'rir_${exIndex}_$setIndex';
+        // Skapa unika nycklar baserade på övningsnamn för stabilitet
+        final keyBase = '${exercise.name}_$setIndex';
+        final weightKey = 'w_$keyBase';
+        final repsKey = 'r_$keyBase';
+        final notesKey = 'n_$keyBase';
+        final rirKey = 'rir_$keyBase';
 
         // Skapa/uppdatera controllers baserat på om användaren redigerat fältet
         // Logik: Bara redigerade fält ska ha text i controller
@@ -161,11 +170,17 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       });
     }
 
-    // Återinitialisera controllers om session ändras (ny workout startar)
-    if (session != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _initializeControllers();
-      });
+    // Återinitialisera controllers om session struktur ändras (nytt set tillagt etc.)
+    if (session != null && _controllers.isNotEmpty) {
+      int expectedControllers = 0;
+      for (var ex in session.completedExercises) {
+        expectedControllers += ex.sets.length * 4;
+      }
+      if (_controllers.length != expectedControllers || _currentSessionId != session.id) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _initializeControllers();
+        });
+      }
     }
 
     // Om inget pass är igång (t.ex. om användaren navigerar hit via en länk av misstag eller på något sätt),
@@ -176,24 +191,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       );
     }
 
-    // formatering för timern
-    String formatDuration(int totalSeconds) {
-      final duration = Duration(seconds: totalSeconds);
-      final minutes = duration.inMinutes.toString().padLeft(2, '0');
-      final seconds = duration.inSeconds
-          .remainder(60)
-          .toString()
-          .padLeft(2, '0');
-      return "$minutes:$seconds";
-    }
-
     // Hantera tillbaka-knappen utan dialog
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
         // Spara workout state innan användaren lämnar skärmen
         ref.read(workoutProvider.notifier).saveCurrentState();
         // Timer fortsätter att köra
-        return true;
       },
       child: GestureDetector(
         onTap: () {
@@ -304,7 +308,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                               ),
                             ),
                             child: Text(
-                              formatDuration(activeWorkoutState.elapsedSeconds),
+                              _formatDuration(activeWorkoutState.elapsedSeconds),
                               style: TextStyle(
                                 color: theme.text,
                                 fontSize: 18,
@@ -471,15 +475,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                                   final setIndex = entry.key;
                                   final set = entry.value;
 
-                                  // Hämta de unika nycklarna för detta set
-                                  final weightKey =
-                                      'w_${exerciseIndex}_$setIndex';
-                                  final repsKey =
-                                      'r_${exerciseIndex}_$setIndex';
-                                  final notesKey =
-                                      'n_${exerciseIndex}_$setIndex';
-                                  final rirKey =
-                                      'rir_${exerciseIndex}_$setIndex';
+                                  // Hämta de unika nycklarna för detta set baserat på övningsnamn
+                                  final keyBase = '${exercise.name}_$setIndex';
+                                  final weightKey = 'w_$keyBase';
+                                  final repsKey = 'r_$keyBase';
+                                  final notesKey = 'n_$keyBase';
+                                  final rirKey = 'rir_$keyBase';
 
                                   // Bestäm textfärgen. Om fältet finns i editedFields (från provider), använd vit. Annars, grå.
                                   final providerState = ref.watch(
@@ -832,7 +833,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 }
 
 class SwipeableSetRowNew extends ConsumerStatefulWidget {
-  final dynamic set;
+  final CompletedSet set;
   final int setIndex;
   final int exerciseIndex;
   final int warmUpSets;
@@ -918,10 +919,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     if (isHorizontalSwipe && (hasEnoughVelocity || hasEnoughDistance)) {
       // Läs placeholders från provider (förra passets värden)
       final ph = ref.read(workoutProvider).placeholders;
-      final wKey = 'w_${widget.exerciseIndex}_${widget.setIndex}';
-      final rKey = 'r_${widget.exerciseIndex}_${widget.setIndex}';
-      final nKey = 'n_${widget.exerciseIndex}_${widget.setIndex}';
-      final rirKey = 'rir_${widget.exerciseIndex}_${widget.setIndex}';
+      // Använd keys som redan passats in till widget
+      final wKey = widget.weightKey;
+      final rKey = widget.repsKey;
+      final nKey = widget.notesKey;
+      final rirKey = widget.rirKey;
 
       final hasPlaceholders =
           ((ph[wKey] is num && (ph[wKey] as num) > 0) ||
@@ -1002,10 +1004,11 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
           1.0,
         ); // Anpassad till ny range
         final ph = ref.watch(workoutProvider).placeholders;
-        final wKey = 'w_${widget.exerciseIndex}_${widget.setIndex}';
-        final rKey = 'r_${widget.exerciseIndex}_${widget.setIndex}';
-        final nKey = 'n_${widget.exerciseIndex}_${widget.setIndex}';
-        final rirKey = 'rir_${widget.exerciseIndex}_${widget.setIndex}';
+        // Använd keys som redan passats in till widget
+        final wKey = widget.weightKey;
+        final rKey = widget.repsKey;
+        final nKey = widget.notesKey;
+        final rirKey = widget.rirKey;
 
         final hasPlaceholders =
             ((ph[wKey] is num && (ph[wKey] as num) > 0) ||
@@ -1172,8 +1175,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                               (() {
                                 final ph =
                                     ref.watch(workoutProvider).placeholders;
-                                final v =
-                                    ph['w_${widget.exerciseIndex}_${widget.setIndex}'];
+                                final v = ph[widget.weightKey];
                                 if (v is num && v > 0) return v.toString();
                                 return '';
                               })(),
@@ -1219,8 +1221,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                               (() {
                                 final ph =
                                     ref.watch(workoutProvider).placeholders;
-                                final v =
-                                    ph['r_${widget.exerciseIndex}_${widget.setIndex}'];
+                                final v = ph[widget.repsKey];
                                 if (v is num && v > 0) return v.toString();
                                 return '';
                               })(),
@@ -1267,8 +1268,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                                 (() {
                                   final ph =
                                       ref.watch(workoutProvider).placeholders;
-                                  final v =
-                                      ph['rir_${widget.exerciseIndex}_${widget.setIndex}'];
+                                  final v = ph[widget.rirKey];
                                   if (v is num && v > 0) return v.toString();
                                   return '';
                                 })(),
@@ -1307,8 +1307,7 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
                               (() {
                                 final ph =
                                     ref.watch(workoutProvider).placeholders;
-                                final v =
-                                    ph['n_${widget.exerciseIndex}_${widget.setIndex}'];
+                                final v = ph[widget.notesKey];
                                 if (v is String && v.isNotEmpty) return v;
                                 return '';
                               })(),
@@ -1354,9 +1353,14 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
 
     final currentWeight = widget.set.weight;
     final currentReps = widget.set.reps;
+    
+    // Kontrollera om användaren har börjat fylla i fälten (antingen genom att skriva eller swipa)
+    final hasEditedWeight = widget.editedFields.contains(widget.weightKey);
+    final hasEditedReps = widget.editedFields.contains(widget.repsKey);
 
-    // Don't show if current set is empty (not yet filled in)
-    if (currentWeight == 0 || currentReps == 0) return null;
+    // Don't show if current set is empty and not edited yet
+    if (!hasEditedWeight && !hasEditedReps) return null;
+    if (currentWeight == 0 && currentReps == 0) return null;
 
     // PRIORITERA sparade progressionsvärden från sessionen
     // Dessa överlever app-restart och är alltid korrekta
@@ -1367,10 +1371,8 @@ class _SwipeableSetRowNewState extends ConsumerState<SwipeableSetRowNew>
     // OCH vi har placeholders att jämföra med
     if (repProgression == null || weightProgression == null) {
       final placeholders = ref.watch(workoutProvider).placeholders;
-      final previousWeight =
-          placeholders['w_${widget.exerciseIndex}_${widget.setIndex}'];
-      final previousReps =
-          placeholders['r_${widget.exerciseIndex}_${widget.setIndex}'];
+      final previousWeight = placeholders[widget.weightKey];
+      final previousReps = placeholders[widget.repsKey];
 
       if (previousWeight != null && previousReps != null) {
         // Calculate rep progression if not saved (backwards compatibility)

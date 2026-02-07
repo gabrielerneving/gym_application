@@ -63,7 +63,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
         });
       }
     } catch (e) {
-      print('Error loading progression data: $e');
+      debugPrint('Error loading progression data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;

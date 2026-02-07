@@ -149,12 +149,15 @@ Future<void> _performAccountDeletion(
   try {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      // Step 1: Delete user data from Firestore
-      final dbService = DatabaseService(uid: user.uid);
-      await dbService.deleteAllUserData();
+      final uid = user.uid;
 
-      // Step 2: Delete Firebase Auth account
+      // Step 1: Delete Firebase Auth account FIRST
+      // If this fails (e.g. requires-recent-login), user keeps their data.
       await AuthService().deleteAccount();
+
+      // Step 2: Delete user data from Firestore (only if auth delete succeeded)
+      final dbService = DatabaseService(uid: uid);
+      await dbService.deleteAllUserData();
 
       // Close loading dialog
       if (context.mounted) {
@@ -204,12 +207,12 @@ Future<void> _openPrivacyPolicy() async {
     // Vi försöker öppna direkt istället
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
-    print('Could not open privacy policy: $e');
+    debugPrint('Could not open privacy policy: $e');
     // Försök med in-app webview som fallback
     try {
       await launchUrl(uri, mode: LaunchMode.inAppWebView);
     } catch (e2) {
-      print('Could not open in webview either: $e2');
+      debugPrint('Could not open in webview either: $e2');
       // Här kan du visa en dialog till användaren
     }
   }

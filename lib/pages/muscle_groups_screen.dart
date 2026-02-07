@@ -102,7 +102,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
         });
       }
     } catch (e) {
-      print('Error loading muscle data: $e');
+      debugPrint('Error loading muscle data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;

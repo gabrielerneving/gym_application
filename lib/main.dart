@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:dynamic_color/dynamic_color.dart';
+
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
 import 'providers/theme_provider.dart';
@@ -27,10 +27,7 @@ class MyApp extends ConsumerWidget {
     // Watch theme provider for dynamic theme switching
     final appTheme = ref.watch(themeProvider);
     
-    return DynamicColorBuilder(
-      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-        // Use system colors if available (Material You), otherwise use custom theme
-        return MaterialApp(
+    return MaterialApp(
           title: 'Repicore',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
@@ -56,7 +53,5 @@ class MyApp extends ConsumerWidget {
           ],
           home: const AuthGate(),
         );
-      },
-    );
   }
 }

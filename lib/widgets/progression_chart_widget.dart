@@ -60,7 +60,7 @@ class _ProgressionChartWidgetState
         });
       }
     } catch (e) {
-      print('Error loading progression data: $e');
+      debugPrint('Error loading progression data: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
