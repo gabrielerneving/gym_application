@@ -787,6 +787,72 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     }
   }
 
+  // Räkna working sets per muskelgrupp, uppdelat i tidsbuckets.
+  // Returnerar en lista där varje element är en Map<muscleGroup, count>
+  // för motsvarande bucket (i samma ordning som bucketsStarts/bucketsEnds).
+  // Endast EN hämtning av sessions + exercise map, bucketindelning görs i minnet.
+  Future<List<Map<String, int>>> getMuscleGroupCountsByBuckets({
+    required List<DateTime> bucketStarts,
+    required List<DateTime> bucketEnds,
+  }) async {
+    assert(bucketStarts.length == bucketEnds.length);
+    try {
+      if (bucketStarts.isEmpty) return [];
+
+      final overallStart = bucketStarts.reduce((a, b) => a.isBefore(b) ? a : b);
+      final overallEnd = bucketEnds.reduce((a, b) => a.isAfter(b) ? a : b);
+
+      final sessions = await getWorkoutSessionsInPeriod(
+        startDate: overallStart,
+        endDate: overallEnd,
+      );
+      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
+
+      final result = List<Map<String, int>>.generate(bucketStarts.length, (_) {
+        final m = <String, int>{};
+        for (final mg in muscleGroups) {
+          m[mg] = 0;
+        }
+        return m;
+      });
+
+      for (final session in sessions) {
+        final sessionDate = session.date;
+        int bucketIndex = -1;
+        for (int i = 0; i < bucketStarts.length; i++) {
+          if (!sessionDate.isBefore(bucketStarts[i]) &&
+              !sessionDate.isAfter(bucketEnds[i])) {
+            bucketIndex = i;
+            break;
+          }
+        }
+        if (bucketIndex == -1) continue;
+
+        for (final completedExercise in session.completedExercises) {
+          final muscleGroup = exerciseToMuscleGroup[completedExercise.name];
+          if (muscleGroup == null) continue;
+
+          final workingSetsCount = completedExercise.sets
+              .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
+              .length;
+          result[bucketIndex][muscleGroup] =
+              (result[bucketIndex][muscleGroup] ?? 0) + workingSetsCount;
+        }
+      }
+
+      return result;
+    } catch (e) {
+      debugPrint('Error calculating muscle group counts by buckets: $e');
+      return List.generate(bucketStarts.length, (_) {
+        final m = <String, int>{};
+        for (final mg in muscleGroups) {
+          m[mg] = 0;
+        }
+        return m;
+      });
+    }
+  }
+
   // Hitta mest tränade muskelgrupper (sorterat)
   Future<List<MuscleGroupStat>> getMostTrainedMuscleGroups() async {
     final setCounts = await getMuscleGroupSetCounts();
