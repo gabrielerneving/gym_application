@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_app/providers/rest_timer_provider.dart';
+import 'package:gym_app/providers/workout_settings_provider.dart';
 
 /// The rest timer's derived state is pure, so the rules that matter — when it
 /// reads as overtime, how the ring fills, what happens without a target — can
@@ -90,6 +91,25 @@ void main() {
       for (var i = 1; i < presets.length; i++) {
         expect(presets[i], greaterThan(presets[i - 1]));
       }
+    });
+  });
+
+  group('visibility setting', () {
+    test('the rest timer is on by default, unlike the other extras', () {
+      const defaults = WorkoutSettings();
+
+      expect(defaults.showRestTimer, isTrue);
+      expect(defaults.showRIR, isFalse);
+      expect(defaults.showProgression, isFalse);
+    });
+
+    test('copyWith leaves the other toggles alone', () {
+      const on = WorkoutSettings(showRIR: true, showProgression: true);
+      final off = on.copyWith(showRestTimer: false);
+
+      expect(off.showRestTimer, isFalse);
+      expect(off.showRIR, isTrue);
+      expect(off.showProgression, isTrue);
     });
   });
 }

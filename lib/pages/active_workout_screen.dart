@@ -190,6 +190,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     final bottomInset = media.padding.bottom;
     final keyboardOpen = media.viewInsets.bottom > 0;
 
+    final showRestTimer =
+        ref.watch(workoutSettingsProvider.select((s) => s.showRestTimer));
+    final restTimerVisible = showRestTimer && !keyboardOpen;
+
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
@@ -272,7 +276,11 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     AppSpacing.xs,
                     AppSpacing.screenH,
                     // Clears the floating rest timer as well as the safe area.
-                    AppSpacing.xxxl + _restTimerClearance + bottomInset,
+                    // With the timer switched off there is nothing to clear, so
+                    // the last button does not sit above a gap of dead space.
+                    AppSpacing.xxxl +
+                        (showRestTimer ? _restTimerClearance : 0) +
+                        bottomInset,
                   ),
                   child: Column(
                     children: [
@@ -308,8 +316,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
             // The rest timer floats over the list so it is reachable without
             // scrolling. Hidden while the keyboard is up, where it would sit on
-            // top of the number pad the user is aiming at.
-            if (!keyboardOpen)
+            // top of the number pad the user is aiming at, and switched off
+            // entirely from Settings for people who do not time their rests.
+            if (restTimerVisible)
               const Positioned(
                 left: 0,
                 right: 0,

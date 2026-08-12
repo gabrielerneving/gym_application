@@ -7,18 +7,28 @@ class WorkoutSettings {
   final bool showRIR;
   final bool showProgression;
 
+  /// Visar den flytande vilotimern under passet.
+  ///
+  /// Default är PÅ, till skillnad från de två ovan: den som inte vill ha den
+  /// stänger av den en gång, medan den som har nytta av den slipper leta reda
+  /// på den först.
+  final bool showRestTimer;
+
   const WorkoutSettings({
     this.showRIR = false,
     this.showProgression = false,
+    this.showRestTimer = true,
   });
 
   WorkoutSettings copyWith({
     bool? showRIR,
     bool? showProgression,
+    bool? showRestTimer,
   }) {
     return WorkoutSettings(
       showRIR: showRIR ?? this.showRIR,
       showProgression: showProgression ?? this.showProgression,
+      showRestTimer: showRestTimer ?? this.showRestTimer,
     );
   }
 }
@@ -31,6 +41,7 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
 
   static const String _keyShowRIR = 'show_rir';
   static const String _keyShowProgression = 'show_progression';
+  static const String _keyShowRestTimer = 'show_rest_timer';
 
   /// Ladda settings från SharedPreferences
   Future<void> _loadSettings() async {
@@ -39,6 +50,7 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
       state = WorkoutSettings(
         showRIR: prefs.getBool(_keyShowRIR) ?? false,
         showProgression: prefs.getBool(_keyShowProgression) ?? false,
+        showRestTimer: prefs.getBool(_keyShowRestTimer) ?? true,
       );
     } catch (e) {
       debugPrint('Error loading workout settings: $e');
@@ -64,6 +76,17 @@ class WorkoutSettingsNotifier extends StateNotifier<WorkoutSettings> {
       state = state.copyWith(showProgression: value);
     } catch (e) {
       debugPrint('Error saving progression setting: $e');
+    }
+  }
+
+  /// Toggle the floating rest timer on the active workout screen.
+  Future<void> toggleShowRestTimer(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyShowRestTimer, value);
+      state = state.copyWith(showRestTimer: value);
+    } catch (e) {
+      debugPrint('Error saving rest timer setting: $e');
     }
   }
 }

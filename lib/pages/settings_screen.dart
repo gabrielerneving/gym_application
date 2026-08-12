@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth_screen.dart';
+import '../providers/rest_timer_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_settings_provider.dart';
 import '../services/auth_service.dart';
@@ -31,6 +32,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
     final settings = ref.watch(workoutSettingsProvider);
+    final restTimer = ref.watch(restTimerProvider);
     final email = FirebaseAuth.instance.currentUser?.email;
 
     return AppScaffold(
@@ -82,6 +84,28 @@ class SettingsScreen extends ConsumerWidget {
                     .read(workoutSettingsProvider.notifier)
                     .toggleShowProgression(v),
               ),
+              _ToggleTile(
+                icon: Icons.timer_outlined,
+                title: 'Rest timer',
+                subtitle: 'A floating timer that counts your rest between sets',
+                value: settings.showRestTimer,
+                onChanged: (v) => ref
+                    .read(workoutSettingsProvider.notifier)
+                    .toggleShowRestTimer(v),
+              ),
+              // Only meaningful while the timer is on the screen, so it folds
+              // away with it rather than sitting there doing nothing.
+              if (settings.showRestTimer)
+                _ToggleTile(
+                  icon: Icons.play_circle_outline_rounded,
+                  title: 'Start rest automatically',
+                  subtitle: 'Begin the rest as soon as a set is filled in',
+                  value: restTimer.autoStart,
+                  onChanged: (v) =>
+                      ref.read(restTimerProvider.notifier).setAutoStart(v),
+                ),
+              if (settings.showRestTimer)
+                _RestTargetTile(targetSeconds: restTimer.targetSeconds),
             ],
           ),
         ),
@@ -185,6 +209,75 @@ class _ToggleTile extends StatelessWidget {
         value: value,
         onChanged: _set,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+}
+
+/// Picks the rest target without leaving Settings. The same value backs the
+/// picker inside the timer's own sheet, so the two can never disagree.
+class _RestTargetTile extends ConsumerWidget {
+  final int targetSeconds;
+
+  const _RestTargetTile({required this.targetSeconds});
+
+  static String _label(int seconds) {
+    if (seconds == 0) return 'No target';
+    if (seconds % 60 == 0) return '${seconds ~/ 60} min';
+    return '${seconds}s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return AppTile(
+      bare: true,
+      icon: Icons.hourglass_bottom_rounded,
+      title: 'Target rest',
+      subtitle: targetSeconds == 0
+          ? 'The timer just counts up'
+          : 'The ring fills toward this, then keeps counting',
+      onTap: () => _pick(context, ref),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _label(targetSeconds),
+            style: AppType.mono(t, size: 14).copyWith(color: t.primary),
+          ),
+          Icon(Icons.chevron_right_rounded, size: 20, color: t.textTertiary),
+        ],
+      ),
+    );
+  }
+
+  void _pick(BuildContext context, WidgetRef ref) {
+    HapticFeedback.selectionClick();
+    AppSheet.show<void>(
+      context: context,
+      ref: ref,
+      title: 'Target rest',
+      subtitle: 'How long you aim to rest between working sets',
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final current = ref.watch(
+            restTimerProvider.select((s) => s.targetSeconds),
+          );
+          return Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final preset in RestTimerNotifier.targetPresets)
+                AppChip(
+                  label: _label(preset),
+                  selected: current == preset,
+                  onTap: () =>
+                      ref.read(restTimerProvider.notifier).setTarget(preset),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
