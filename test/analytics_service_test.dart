@@ -263,6 +263,112 @@ void main() {
         isFalse,
       );
     });
+
+    test('a plateau needs a session before the window to compare against', () {
+      List<WorkoutSession> flat(int count) => [
+            for (var i = 0; i < count; i++)
+              session(date: DateTime(2025, 1, 6 + i * 7), exercises: {
+                'Row': [set(70, 5)],
+              }),
+          ];
+
+      // Four flat sessions and nothing earlier is a short history, not a stall:
+      // there is no previous peak to have failed to beat.
+      expect(
+        AnalyticsService.exerciseProgress(flat(4), 'Row').isStalled,
+        isFalse,
+      );
+      expect(
+        AnalyticsService.exerciseProgress(flat(5), 'Row').isStalled,
+        isTrue,
+      );
+    });
+
+    test('high-rep sessions are not counted as a failed attempt at a best', () {
+      // Five sessions of real progression, then a block of 15-rep work. Sets
+      // that high carry no 1RM estimate at all, and counting them as "no
+      // improvement" reported a pump block as a plateau.
+      final sessions = [
+        for (var i = 0; i < 5; i++)
+          session(date: DateTime(2025, 1, 6 + i * 7), exercises: {
+            'Row': [set(60 + i * 5, 5)],
+          }),
+        for (var i = 0; i < 4; i++)
+          session(date: DateTime(2025, 2, 10 + i * 7), exercises: {
+            'Row': [set(40, 15)],
+          }),
+      ];
+
+      final p = AnalyticsService.exerciseProgress(sessions, 'Row');
+      expect(p.points.length, 9);
+      expect(p.ratedPoints.length, 5);
+      expect(p.isStalled, isFalse);
+    });
+  });
+
+  group('insights', () {
+    /// Mon/Wed/Fri for four straight weeks with identical sessions, then a
+    /// single session on the fifth Monday. A perfectly consistent lifter.
+    List<WorkoutSession> steadyWeeks({double mondayWeight = 100}) {
+      return [
+        for (var week = 0; week < 4; week++)
+          for (final offset in [0, 2, 4])
+            session(
+              date: DateTime(2025, 1, 6).add(Duration(days: week * 7 + offset)),
+              exercises: {
+                'Bench Press': [set(100, 5)],
+              },
+            ),
+        session(date: DateTime(2025, 2, 3), exercises: {
+          'Bench Press': [set(mondayWeight, 5)],
+        }),
+      ];
+    }
+
+    final monday = DateTime(2025, 2, 3);
+
+    test('a normal Monday is not reported as a lighter week', () {
+      final result =
+          AnalyticsService.insights(steadyWeeks(), const {}, now: monday);
+
+      // The comparison used to put one Monday session against four *complete*
+      // weeks, so a consistent lifter was told they were ~66% down every Monday.
+      expect(result.where((i) => i.title == 'Lighter week'), isEmpty);
+    });
+
+    test('weeks before the first session do not inflate the baseline', () {
+      final fresh = [
+        session(date: DateTime(2025, 1, 27), exercises: {
+          'Bench Press': [set(100, 5)],
+        }),
+        session(date: monday, exercises: {
+          'Bench Press': [set(100, 5), set(100, 5)],
+        }),
+      ];
+
+      final result = AnalyticsService.insights(fresh, const {}, now: monday);
+
+      // Only one prior week exists. Averaging in three empty weeks turned a
+      // second session into a several-hundred-percent jump.
+      expect(
+        result.where((i) =>
+            i.title == 'Volume is climbing' || i.title == 'Lighter week'),
+        isEmpty,
+      );
+    });
+
+    test('a new PR outranks the ambient observations', () {
+      final result = AnalyticsService.insights(
+        steadyWeeks(mondayWeight: 110),
+        const {},
+        now: monday,
+      );
+
+      // The screen shows the first three. A PR set this week must not be pushed
+      // out by a streak that will still be there tomorrow.
+      expect(result.first.title, 'New PR: Bench Press');
+      expect(result.map((i) => i.title), contains('5-week streak'));
+    });
   });
 
   group('personal bests', () {
@@ -325,6 +431,109 @@ void main() {
       expect(low.status, VolumeStatus.low);
       expect(good.status, VolumeStatus.optimal);
       expect(high.status, VolumeStatus.high);
+    });
+
+    test('the default band is the same number in both places', () {
+      // MuscleBalance repeats the defaults as literals because Dart will not
+      // fold int.toDouble() in a const context. This is the pin that keeps the
+      // two copies honest.
+      expect(MuscleBalance.defaultTargetMin,
+          TrainingGoals.defaultWeeklySetsMin.toDouble());
+      expect(MuscleBalance.defaultTargetMax,
+          TrainingGoals.defaultWeeklySetsMax.toDouble());
+    });
+
+    test('a custom band re-scores the same training', () {
+      // Six working sets of chest a week: under the default band, comfortably
+      // inside a maintenance band, over a very light one.
+      final sessions = [
+        for (var week = 0; week < 4; week++)
+          session(date: DateTime(2025, 3, 18).subtract(Duration(days: 7 * week)),
+              exercises: {
+                'Bench Press': [set(100, 5), set(100, 5), set(100, 5)],
+                'Incline Press': [set(60, 8), set(60, 8), set(60, 8)],
+              }),
+      ];
+      const map = {'Bench Press': 'Chest', 'Incline Press': 'Chest'};
+      final now = DateTime(2025, 3, 20);
+
+      MuscleBalance chestUnder(TrainingGoals goals) {
+        final balance = AnalyticsService.muscleBalance(
+          sessions,
+          map,
+          now: now,
+          goals: goals,
+        );
+        return balance.firstWhere((b) => b.group == 'Chest');
+      }
+
+      expect(chestUnder(const TrainingGoals()).setsPerWeek, 6);
+      expect(chestUnder(const TrainingGoals()).status, VolumeStatus.low);
+      expect(
+        chestUnder(const TrainingGoals(weeklySetsMin: 6, weeklySetsMax: 10))
+            .status,
+        VolumeStatus.optimal,
+      );
+      expect(
+        chestUnder(const TrainingGoals(weeklySetsMin: 2, weeklySetsMax: 5))
+            .status,
+        VolumeStatus.high,
+      );
+    });
+
+    test('each result carries the band it was scored against', () {
+      final balance = AnalyticsService.muscleBalance(
+        const [],
+        const {},
+        goals: const TrainingGoals(weeklySetsMin: 4, weeklySetsMax: 9),
+      );
+
+      expect(balance, isNotEmpty);
+      expect(balance.every((b) => b.targetMin == 4 && b.targetMax == 9), isTrue);
+    });
+  });
+
+  group('training goals', () {
+    test('the defaults reproduce the old hard-coded behaviour', () {
+      const goals = TrainingGoals();
+
+      expect(goals.weeklySetsMin, 10);
+      expect(goals.weeklySetsMax, 20);
+      expect(goals.sessionsPerWeek, 1);
+      expect(goals.isDefault, isTrue);
+      expect(goals.bandLabel, '10–20');
+    });
+
+    test('an inverted or out-of-range band is corrected, not accepted', () {
+      // Max below min: the max is pushed back above the min rather than the
+      // band silently rendering backwards on the charts.
+      expect(TrainingGoals.band(15, 4).weeklySetsMin, 15);
+      expect(TrainingGoals.band(15, 4).weeklySetsMax, 16);
+
+      // Both ends clamp into range.
+      expect(TrainingGoals.band(-5, 400).weeklySetsMin, TrainingGoals.minSets);
+      expect(TrainingGoals.band(-5, 400).weeklySetsMax, TrainingGoals.maxSets);
+
+      // A band can never collapse to a single number.
+      final collapsed = TrainingGoals.band(12, 12);
+      expect(collapsed.weeklySetsMax - collapsed.weeklySetsMin,
+          greaterThanOrEqualTo(TrainingGoals.minBandWidth));
+    });
+
+    test('copyWith keeps the band ordered when one end moves past the other',
+        () {
+      const goals = TrainingGoals(weeklySetsMin: 8, weeklySetsMax: 12);
+
+      expect(goals.copyWith(weeklySetsMin: 20).weeklySetsMax,
+          greaterThan(goals.copyWith(weeklySetsMin: 20).weeklySetsMin));
+    });
+
+    test('sessions per week is clamped to something a week can hold', () {
+      expect(TrainingGoals.band(10, 20, sessionsPerWeek: 0).sessionsPerWeek, 1);
+      expect(
+        TrainingGoals.band(10, 20, sessionsPerWeek: 99).sessionsPerWeek,
+        TrainingGoals.maxSessionsPerWeek,
+      );
     });
   });
 

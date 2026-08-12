@@ -1,7 +1,10 @@
 import 'dart:math' as math;
 
+import '../models/training_goals.dart';
 import '../models/workout_session_model.dart';
 import '../utils/one_rm_calculator.dart';
+
+export '../models/training_goals.dart';
 
 /// ---------------------------------------------------------------------------
 /// AnalyticsService — every derived training statistic in the app.
@@ -516,13 +519,15 @@ class AnalyticsService {
   }
 
   /// Average weekly sets per muscle group over the trailing [weeks] window,
-  /// scored against the evidence-based 10–20 sets/week hypertrophy band.
+  /// scored against the user's weekly set band from [goals] (10–20 by default,
+  /// the evidence-based hypertrophy range).
   static List<MuscleBalance> muscleBalance(
     List<WorkoutSession> sessions,
     Map<String, String> exerciseToMuscle, {
     int weeks = 4,
     DateTime? now,
     List<String> groups = defaultMuscleGroups,
+    TrainingGoals goals = const TrainingGoals(),
   }) {
     final ref = now ?? DateTime.now();
     final start = weekStart(ref).subtract(Duration(days: 7 * (weeks - 1)));
@@ -542,6 +547,8 @@ class AnalyticsService {
         group: group,
         setsPerWeek: perWeek,
         totalSets: totals[group] ?? 0,
+        targetMin: goals.setsMin,
+        targetMax: goals.setsMax,
       ));
     }
 
@@ -609,86 +616,134 @@ class AnalyticsService {
   // --- Insights --------------------------------------------------------------
 
   /// Turns the numbers into a short list of plain-language observations shown
-  /// at the top of the Statistics tab. Ordered by usefulness; take the first
-  /// two or three.
+  /// at the top of the Statistics tab.
+  ///
+  /// Sorted by [Insight.priority], so a caller with room for only the first two
+  /// or three still gets the most useful ones. Nothing here is a model or a
+  /// prediction — every entry is a threshold on the user's own history, and the
+  /// thresholds are all visible in this method.
   static List<Insight> insights(
     List<WorkoutSession> sessions,
     Map<String, String> exerciseToMuscle, {
     DateTime? now,
+    TrainingGoals goals = const TrainingGoals(),
   }) {
     final ref = now ?? DateTime.now();
     final out = <Insight>[];
 
     if (sessions.isEmpty) return out;
 
-    // 1. Volume trend, this week vs the four-week average.
-    final weeks = weeklyVolume(sessions, weeks: 5, now: ref);
-    if (weeks.length >= 5) {
-      final thisWeek = weeks.last.volume;
-      final priorWeeks = weeks.sublist(0, weeks.length - 1);
-      final priorAvg =
-          priorWeeks.map((w) => w.volume).reduce((a, b) => a + b) /
-              priorWeeks.length;
-      if (priorAvg > 0) {
+    // 1. Volume trend: this week against the same stretch of the weeks before
+    //    it.
+    //
+    //    The current week is only part-finished, so the earlier weeks are cut
+    //    off at today's weekday. Compared against four *complete* weeks, a
+    //    single Monday session is always ~75% down, and the app announced a
+    //    "lighter week" every Monday.
+    final thisWeekStart = weekStart(ref);
+    final daysElapsed = ref.weekday; // Mon = 1 … Sun = 7
+    final firstWeek = weekStart(
+      sessions.map((s) => s.date).reduce((a, b) => a.isBefore(b) ? a : b),
+    );
+
+    double weekToDate(DateTime start) {
+      final end = start.add(Duration(days: daysElapsed));
+      var total = 0.0;
+      for (final s in sessions) {
+        if (!s.date.isBefore(start) && s.date.isBefore(end)) {
+          total += sessionVolume(s);
+        }
+      }
+      return total;
+    }
+
+    // Weeks from before the user's first session are not light weeks, they are
+    // no weeks. Averaging them in drags the baseline toward zero and turns an
+    // ordinary week into a triple-digit jump.
+    final priorWeeks = [
+      for (var i = 1; i <= 4; i++) thisWeekStart.subtract(Duration(days: 7 * i))
+    ].where((w) => !w.isBefore(firstWeek)).toList();
+
+    if (priorWeeks.length >= 2) {
+      final thisWeek = weekToDate(thisWeekStart);
+      final priorAvg = priorWeeks.map(weekToDate).reduce((a, b) => a + b) /
+          priorWeeks.length;
+
+      if (priorAvg > 0 && thisWeek > 0) {
         final change = ((thisWeek - priorAvg) / priorAvg) * 100;
+        final baseline = '${priorWeeks.length}-week average';
+
         if (change >= 15) {
           out.add(Insight(
             kind: InsightKind.positive,
+            priority: InsightPriority.volumeClimb,
             title: 'Volume is climbing',
             message:
-                'This week is ${change.round()}% above your 4-week average. '
-                'Keep an eye on recovery.',
+                'By this point in the week you are ${change.round()}% above '
+                'your $baseline. Keep an eye on recovery.',
           ));
-        } else if (change <= -25 && thisWeek > 0) {
+        } else if (change <= -25) {
           out.add(Insight(
             kind: InsightKind.warning,
+            priority: InsightPriority.volumeDrop,
             title: 'Lighter week',
             message:
-                'You are ${change.abs().round()}% below your 4-week average. '
-                'A deload is fine — just do not let it drift.',
+                'You are ${change.abs().round()}% below your $baseline for '
+                'this point in the week. A deload is fine — just do not let '
+                'it drift.',
           ));
         }
       }
     }
 
     // 2. Streak.
-    final streak = weeklyStreak(sessions, now: ref);
+    final streak =
+        weeklyStreak(sessions, sessionsPerWeek: goals.sessionsPerWeek, now: ref);
     if (streak.current >= 3) {
       out.add(Insight(
         kind: InsightKind.positive,
+        priority: InsightPriority.streak,
         title: '${streak.current}-week streak',
-        message: 'You have trained every week for ${streak.current} weeks.',
+        message: goals.sessionsPerWeek == 1
+            ? 'You have trained every week for ${streak.current} weeks.'
+            : 'You have hit ${goals.sessionsLabel} a week for '
+                '${streak.current} weeks.',
       ));
     }
 
-    // 3. Under-trained muscle groups.
-    final balance = muscleBalance(sessions, exerciseToMuscle, now: ref);
+    // 3. Under-trained muscle groups, against the user's own floor.
+    final balance =
+        muscleBalance(sessions, exerciseToMuscle, now: ref, goals: goals);
     final trained = balance.where((b) => b.totalSets > 0).toList();
     if (trained.length >= 3) {
       final weakest = trained.last;
       if (weakest.status == VolumeStatus.low) {
         out.add(Insight(
           kind: InsightKind.suggestion,
+          priority: InsightPriority.laggingMuscle,
           title: '${weakest.group} is lagging',
           message:
               'Only ${weakest.setsPerWeek.toStringAsFixed(1)} sets/week over the '
-              'last month. Aim for 10 or more.',
+              'last month. Your goal is ${goals.weeklySetsMin} or more.',
         ));
       }
     }
 
-    // 4. Stalled lifts.
+    // 4. Stalled lifts. [ExerciseProgress.isStalled] already requires enough
+    //    sessions to judge, so the only extra filter is recency.
     final progress = allExerciseProgress(sessions);
     final stalled = progress.values
-        .where((p) => p.points.length >= 4 && p.isStalled && p.isRecent(ref))
+        .where((p) => p.isStalled && p.isRecent(ref))
         .toList();
     if (stalled.isNotEmpty) {
       stalled.sort((a, b) => b.points.length.compareTo(a.points.length));
       out.add(Insight(
         kind: InsightKind.suggestion,
+        priority: InsightPriority.plateau,
         title: '${stalled.first.name} has plateaued',
         message:
-            'No estimated 1RM improvement across the last ${math.min(stalled.first.points.length, 4)} sessions. '
+            'No estimated 1RM improvement across the last '
+            '${ExerciseProgress.stallWindow} sessions. '
             'Try changing reps, rest or exercise order.',
       ));
     }
@@ -698,6 +753,7 @@ class AnalyticsService {
     if (prs.isNotEmpty) {
       out.add(Insight(
         kind: InsightKind.positive,
+        priority: InsightPriority.personalRecord,
         title: prs.length == 1
             ? 'New PR: ${prs.first.exercise}'
             : '${prs.length} new PRs',
@@ -707,7 +763,18 @@ class AnalyticsService {
       ));
     }
 
-    return out;
+    // The rules above run in the order that reads best. What the user sees is
+    // ranked instead, because the screen only has room for the first few — a new
+    // PR used to be dropped whenever volume, streak and muscle balance all had
+    // something to say. `List.sort` is not stable, so ties fall back to the
+    // order the rules ran in.
+    final ranked = out.asMap().entries.toList()
+      ..sort((a, b) {
+        final byPriority = b.value.priority.compareTo(a.value.priority);
+        return byPriority != 0 ? byPriority : a.key.compareTo(b.key);
+      });
+
+    return [for (final e in ranked) e.value];
   }
 }
 
@@ -715,7 +782,7 @@ class AnalyticsService {
 /// Value objects
 /// ---------------------------------------------------------------------------
 
-/// A half-open date window: `start <= date <= end`.
+/// A closed date window: `start <= date <= end`. Both ends are inclusive.
 class DateRange {
   final DateTime start;
   final DateTime end;
@@ -921,15 +988,39 @@ class ExerciseProgress {
     return ((points.last.estimatedOneRm - start) / start) * 100;
   }
 
-  /// True when the last four sessions produced no new estimated 1RM best.
+  /// How many trailing sessions are checked for a new best. The UI quotes this
+  /// number, so it lives here rather than as prose in three places.
+  static const int stallWindow = 4;
+
+  /// A session has to clear the old peak by this much to count as progress.
+  /// Half a percent absorbs rounding in the estimate instead of reading it as a
+  /// real improvement.
+  static const double stallTolerance = 1.005;
+
+  /// Sessions that produced a usable 1RM estimate.
+  ///
+  /// A session built entirely from sets above 12 reps has no estimate at all
+  /// (see [AnalyticsService.exerciseProgress]), so its `estimatedOneRm` is 0.
+  /// Left in, every such session counts as "no improvement" and a high-rep
+  /// block gets reported as a plateau. They are skipped instead.
+  List<ExercisePoint> get ratedPoints =>
+      points.where((p) => p.estimatedOneRm > 0).toList(growable: false);
+
+  /// True when the last [stallWindow] rated sessions produced no new estimated
+  /// 1RM best.
+  ///
+  /// Needs *more* than [stallWindow] rated sessions: a stall is measured against
+  /// an earlier peak, and with exactly four sessions there is nothing before the
+  /// window to beat.
   bool get isStalled {
-    if (points.length < 4) return false;
-    final recent = points.sublist(points.length - 4);
-    final peakBefore = points
-        .sublist(0, points.length - 4)
+    final rated = ratedPoints;
+    if (rated.length <= stallWindow) return false;
+
+    final recent = rated.sublist(rated.length - stallWindow);
+    final peakBefore = rated
+        .sublist(0, rated.length - stallWindow)
         .fold<double>(0, (m, p) => math.max(m, p.estimatedOneRm));
-    if (peakBefore <= 0) return false;
-    return recent.every((p) => p.estimatedOneRm <= peakBefore * 1.005);
+    return recent.every((p) => p.estimatedOneRm <= peakBefore * stallTolerance);
   }
 
   /// Trained within the last month — used to avoid nagging about lifts the
@@ -976,16 +1067,29 @@ class MuscleBalance {
   final double setsPerWeek;
   final int totalSets;
 
+  /// The weekly working-set band this group was scored against. Carried on the
+  /// result rather than read from a constant, because the band is the user's
+  /// [TrainingGoals] — a chart drawn from these results can shade the right
+  /// strip without having to look the goal up again.
+  final double targetMin;
+  final double targetMax;
+
   const MuscleBalance({
     required this.group,
     required this.setsPerWeek,
     required this.totalSets,
+    this.targetMin = defaultTargetMin,
+    this.targetMax = defaultTargetMax,
   });
 
-  /// Recommended weekly working-set band for hypertrophy. Broadly accepted
-  /// range from the training literature; smaller muscles sit at the low end.
-  static const double targetMin = 10;
-  static const double targetMax = 20;
+  /// The band a user gets before they touch Settings: the broadly accepted
+  /// hypertrophy range from the training literature.
+  ///
+  /// These mirror [TrainingGoals.defaultWeeklySetsMin]/[TrainingGoals.defaultWeeklySetsMax]
+  /// as literals because Dart will not fold `int.toDouble()` in a const
+  /// context. A test pins the two pairs together.
+  static const double defaultTargetMin = 10;
+  static const double defaultTargetMax = 20;
 
   VolumeStatus get status {
     if (setsPerWeek <= 0) return VolumeStatus.none;
@@ -1023,14 +1127,36 @@ class ProgramUsage {
 
 enum InsightKind { positive, warning, suggestion }
 
+/// The ranking behind [Insight.priority], gathered in one place so the editorial
+/// call — what a lifter most wants to see when only two or three fit on screen —
+/// is visible as a list rather than spread across the rules that emit them.
+///
+/// Fresh and actionable outrank ambient: a PR you just set, or a lift that has
+/// stopped moving, beats a streak that will still be there tomorrow.
+abstract final class InsightPriority {
+  static const int personalRecord = 100;
+  static const int plateau = 90;
+  static const int laggingMuscle = 80;
+  static const int volumeDrop = 70;
+  static const int volumeClimb = 60;
+  static const int streak = 50;
+
+  /// Fallback for an insight that does not opt into the ranking.
+  static const int normal = 40;
+}
+
 class Insight {
   final InsightKind kind;
   final String title;
   final String message;
 
+  /// Higher shows first. See [InsightPriority].
+  final int priority;
+
   const Insight({
     required this.kind,
     required this.title,
     required this.message,
+    this.priority = InsightPriority.normal,
   });
 }

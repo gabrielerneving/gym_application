@@ -1254,7 +1254,8 @@ class _DetailStats extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'No new best across the last four sessions.',
+                    'No new best across the last '
+                    '${ExerciseProgress.stallWindow} sessions.',
                     style: AppType.caption(t),
                   ),
                 ),

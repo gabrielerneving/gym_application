@@ -146,6 +146,7 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
     }
 
     final streak = data.streak;
+    final goal = data.goals.sessionsPerWeek;
     final frequency = AnalyticsService.weeklyFrequency(data.sessions);
     final weekdayCounts = AnalyticsService.weekdayDistribution(windowSessions);
 
@@ -185,7 +186,13 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
             StatTile(
               label: 'This week',
               value: streak.thisWeek.toDouble(),
-              unit: streak.thisWeek == 1 ? 'session' : 'sessions',
+              // A weekly goal turns the count into progress, so show what it
+              // is being counted toward rather than just the raw number.
+              unit: goal > 1
+                  ? 'of $goal sessions'
+                  : streak.thisWeek == 1
+                      ? 'session'
+                      : 'sessions',
               icon: Icons.event_available_rounded,
             ),
             StatTile(

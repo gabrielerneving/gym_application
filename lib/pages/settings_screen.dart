@@ -11,6 +11,7 @@ import '../providers/workout_settings_provider.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../widgets/theme_selector.dart';
+import '../widgets/training_goal_sheets.dart';
 import '../widgets/ui/ui.dart';
 
 /// The app version, mirrored from `pubspec.yaml` (`version: 1.3.0+15`).
@@ -110,13 +111,31 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
 
-        // --- Account ---------------------------------------------------------
+        // --- Goals -----------------------------------------------------------
         const FadeSlideIn(
           index: 3,
+          child: SectionHeader(
+            title: 'Goals',
+            subtitle: 'The targets your statistics are measured against.',
+          ),
+        ),
+        const FadeSlideIn(
+          index: 4,
+          child: AppTileGroup(
+            children: [
+              WeeklySetBandTile(),
+              SessionsPerWeekTile(),
+            ],
+          ),
+        ),
+
+        // --- Account ---------------------------------------------------------
+        const FadeSlideIn(
+          index: 5,
           child: SectionHeader(title: 'Account'),
         ),
         FadeSlideIn(
-          index: 4,
+          index: 6,
           child: AppTileGroup(
             children: [
               AppTile(
@@ -140,11 +159,11 @@ class SettingsScreen extends ConsumerWidget {
 
         // --- About -----------------------------------------------------------
         const FadeSlideIn(
-          index: 5,
+          index: 7,
           child: SectionHeader(title: 'About'),
         ),
         FadeSlideIn(
-          index: 6,
+          index: 8,
           child: AppTileGroup(
             children: [
               AppTile(

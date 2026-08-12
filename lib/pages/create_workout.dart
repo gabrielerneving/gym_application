@@ -39,6 +39,10 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   static const int _tabBuild = 0;
   static const int _tabTemplates = 1;
 
+  /// Vertical room the floating save bar needs: the large button plus the gap
+  /// above it. Only reserved while the bar is actually on screen.
+  static const double _saveBarExtent = 58 + AppSpacing.lg;
+
   final TextEditingController _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
 
@@ -51,12 +55,15 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 
   bool get _isEditMode => widget.workoutToEdit != null;
 
-  /// The save bar stays disabled until the workout has a name and at least one
-  /// exercise.
-  bool get _canSave =>
-      !_isLoading &&
-      _nameController.text.trim().isNotEmpty &&
-      _exercises.isNotEmpty;
+  /// A workout needs a name and at least one exercise before it can be saved.
+  bool get _isFormValid =>
+      _nameController.text.trim().isNotEmpty && _exercises.isNotEmpty;
+
+  bool get _canSave => _isFormValid && !_isLoading;
+
+  /// The save bar rides in only once there is something to save — and stays
+  /// put while the save is in flight, so it does not slide away mid-spinner.
+  bool get _showSaveBar => _isFormValid || _isLoading;
 
   int get _totalSets =>
       _exercises.fold<int>(0, (sum, exercise) => sum + exercise.sets);
@@ -268,8 +275,16 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   String get _builderSubtitle {
     if (_isReordering) return 'Drag the rows into the order you want';
     if (_exercises.isEmpty) return 'Name it, then add your exercises';
+
     final count = _exercises.length;
-    return '$count exercise${count == 1 ? '' : 's'} · $_totalSets sets';
+    final plural = count == 1 ? '' : 's';
+
+    // The save bar is hidden until the form is valid, so the subtitle carries
+    // the "what's missing" hint the greyed-out button used to imply.
+    if (_nameController.text.trim().isEmpty) {
+      return '$count exercise$plural · name it to save';
+    }
+    return '$count exercise$plural · $_totalSets sets';
   }
 
   @override
@@ -283,10 +298,18 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 
     // In tab mode the floating nav bar overlays the bottom of the screen, so
     // the sticky save bar has to clear it. Pushed as a route there is no bar.
+    // `AppSpacing.md` of air keeps the button from sitting kerb-to-kerb on the
+    // nav bar — they should read as two separate things, not one tall slab.
     final double navClearance = isEdit ? 0 : NavBarMetrics.totalHeight;
     final double barBottom = keyboard > 0
         ? keyboard + AppSpacing.sm
-        : media.padding.bottom + (isEdit ? AppSpacing.md : navClearance);
+        : media.padding.bottom + navClearance + AppSpacing.md;
+
+    // The bar floats over the content, so the list has to end above it — but
+    // only while it is showing, otherwise the empty screen carries dead space.
+    final double builderBottomPadding =
+        (isEdit ? AppSpacing.xxl : AppSpacing.navBarClearance) +
+            (_showSaveBar ? _saveBarExtent : 0);
 
     return Stack(
       fit: StackFit.expand,
@@ -297,7 +320,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
               showBuilder ? _builderSubtitle : 'Curated programs, ready to copy',
           showBack: isEdit,
           bottomPadding: showBuilder
-              ? (isEdit ? 108.0 : AppSpacing.navBarClearance + 92)
+              ? builderBottomPadding
               : AppSpacing.navBarClearance,
           actions: [
             if (showBuilder && _exercises.length > 1)
@@ -336,7 +359,8 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
           slivers: showBuilder ? _builderSlivers(t) : _templateSlivers(),
         ),
 
-        // Sticky save bar — floats over the content, above the nav bar.
+        // Sticky save bar — floats over the content, above the nav bar, and
+        // only once the workout is actually saveable.
         if (showBuilder)
           Positioned(
             left: 0,
@@ -346,9 +370,9 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
               type: MaterialType.transparency,
               child: _SaveBar(
                 label: isEdit ? 'Save changes' : 'Save workout',
-                enabled: _canSave,
+                visible: _showSaveBar,
                 loading: _isLoading,
-                onPressed: _saveWorkout,
+                onPressed: _canSave ? _saveWorkout : null,
               ),
             ),
           ),
@@ -614,35 +638,56 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 }
 
 /// ---------------------------------------------------------------------------
-/// The sticky save bar.
+/// The sticky save action.
+///
+/// Deliberately *not* a full-width glass slab: stacked on top of the floating
+/// nav bar that read as two competing panels and ate the bottom third of the
+/// screen. A single compact button, carried by its own primary glow, is enough
+/// — and it stays out of the way entirely until [visible].
 /// ---------------------------------------------------------------------------
 class _SaveBar extends StatelessWidget {
   final String label;
-  final bool enabled;
+
+  /// Drives the slide-and-fade. Hidden, the bar also stops taking taps so the
+  /// content scrolling underneath stays reachable.
+  final bool visible;
+
   final bool loading;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _SaveBar({
     required this.label,
-    required this.enabled,
+    required this.visible,
     required this.loading,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-      child: GlassSurface(
-        radius: AppRadius.xl,
-        padding: const EdgeInsets.all(AppSpacing.sm + 2),
-        child: AppButton(
-          label: label,
-          icon: Icons.check_rounded,
-          expand: true,
-          size: AppButtonSize.large,
-          loading: loading,
-          onPressed: enabled ? onPressed : null,
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, 0.75),
+        duration: AppMotion.normal,
+        curve: visible ? AppMotion.enter : AppMotion.exit,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: visible ? AppMotion.normal : AppMotion.fast,
+          curve: AppMotion.standard,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenH,
+            ),
+            child: Center(
+              child: AppButton(
+                label: label,
+                icon: Icons.check_rounded,
+                size: AppButtonSize.large,
+                loading: loading,
+                onPressed: onPressed,
+              ),
+            ),
+          ),
         ),
       ),
     );

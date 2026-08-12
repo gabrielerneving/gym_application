@@ -9,6 +9,7 @@ import '../providers/theme_provider.dart';
 import '../services/analytics_service.dart';
 import '../widgets/muscle_bar_chart_widget.dart';
 import '../widgets/muscle_radar_chart_widget.dart';
+import '../widgets/training_goal_sheets.dart';
 import '../widgets/ui/ui.dart';
 
 /// ---------------------------------------------------------------------------
@@ -16,13 +17,16 @@ import '../widgets/ui/ui.dart';
 ///
 /// Two views over the same window:
 ///   * **Balance**   — the radar plus a plain-language verdict on which groups
-///                     are over- and under-represented against the 10–20
-///                     sets/week band.
+///                     are over- and under-represented against the user's
+///                     weekly set band.
 ///   * **Breakdown** — the numbers: a bar per group and a target-banded
 ///                     [StatBar] list sorted by weekly volume.
 ///
 /// Everything is derived from the cached [trainingDataProvider] snapshot via
-/// [AnalyticsService]; nothing on this screen touches Firestore directly.
+/// [AnalyticsService]; nothing on this screen touches Firestore directly. The
+/// band both views score against is the [TrainingGoals] carried on that same
+/// snapshot, passed down rather than re-read, so a shaded strip and the caption
+/// under it can never describe different numbers.
 /// ---------------------------------------------------------------------------
 class MuscleGroupsScreen extends ConsumerStatefulWidget {
   const MuscleGroupsScreen({super.key});
@@ -116,6 +120,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
       data.exerciseToMuscle,
       weeks: weeks,
       now: now,
+      goals: data.goals,
     );
 
     final groupCounts = <String, int>{
@@ -155,6 +160,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
       onRefresh: _refresh,
       children: _sections(
         balance: balance,
+        goals: data.goals,
         groupCounts: groupCounts,
         categorised: categorised,
         uncategorised: uncategorised,
@@ -166,6 +172,7 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
 
   List<Widget> _sections({
     required List<MuscleBalance> balance,
+    required TrainingGoals goals,
     required Map<String, int> groupCounts,
     required int categorised,
     required int uncategorised,
@@ -194,12 +201,13 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
         ),
         SectionHeader(
           title: 'How balanced are you?',
-          subtitle: 'Weekly sets against the 10–20 band · $windowLabel',
+          subtitle:
+              'Weekly sets against the ${goals.bandLabel} band · $windowLabel',
         ),
         FadeSlideIn(
           key: ValueKey('$view-verdict'),
           index: 2,
-          child: _BalanceVerdict(balance: balance),
+          child: _BalanceVerdict(balance: balance, goals: goals),
         ),
       ] else ...[
         FadeSlideIn(
@@ -214,7 +222,11 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
         FadeSlideIn(
           key: ValueKey('$view-list'),
           index: 2,
-          child: _BreakdownList(balance: balance, totalSets: categorised),
+          child: _BreakdownList(
+            balance: balance,
+            goals: goals,
+            totalSets: categorised,
+          ),
         ),
       ],
 
@@ -388,8 +400,9 @@ class _RadarCard extends ConsumerWidget {
 /// The plain-language answer to "am I lopsided?".
 class _BalanceVerdict extends ConsumerWidget {
   final List<MuscleBalance> balance;
+  final TrainingGoals goals;
 
-  const _BalanceVerdict({required this.balance});
+  const _BalanceVerdict({required this.balance, required this.goals});
 
   static const List<VolumeStatus> _order = [
     VolumeStatus.high,
@@ -419,8 +432,8 @@ class _BalanceVerdict extends ConsumerWidget {
       detail = 'Log a few exercises from your library and the balance shows up '
           'here.';
     } else {
-      headline =
-          '$onTarget of ${balance.length} groups sit inside 10–20 sets a week';
+      headline = '$onTarget of ${balance.length} groups sit inside '
+          '${goals.bandSentence}';
       if (trained.length == 1) {
         detail = '${trained.first.group} is the only group you trained, at '
             '${_perWeek(trained.first.setsPerWeek)}.';
@@ -566,9 +579,14 @@ class _BarCard extends ConsumerWidget {
 /// Every group as a target-banded bar, biggest first.
 class _BreakdownList extends ConsumerWidget {
   final List<MuscleBalance> balance;
+  final TrainingGoals goals;
   final int totalSets;
 
-  const _BreakdownList({required this.balance, required this.totalSets});
+  const _BreakdownList({
+    required this.balance,
+    required this.goals,
+    required this.totalSets,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -577,9 +595,10 @@ class _BreakdownList extends ConsumerWidget {
     final maxPerWeek = balance.isEmpty
         ? 0.0
         : balance.map((b) => b.setsPerWeek).reduce(math.max);
-    // Always keep the whole target band inside the track, even when every
-    // group is far below it.
-    final barMax = math.max(maxPerWeek * 1.08, MuscleBalance.targetMax * 1.2);
+    // Whichever reaches higher sets the scale: the whole band has to stay in
+    // the track when every group is far below it, and every bar has to when
+    // the user has set a band low enough to be cleared.
+    final barMax = math.max(maxPerWeek * 1.08, goals.setsMax * 1.2);
 
     return AppCard(
       child: Column(
@@ -594,32 +613,48 @@ class _BreakdownList extends ConsumerWidget {
                 max: barMax,
                 valueLabel: _perWeek(balance[i].setsPerWeek),
                 color: _statusColor(t, balance[i].status),
-                targetMin: MuscleBalance.targetMin,
-                targetMax: MuscleBalance.targetMax,
+                targetMin: goals.setsMin,
+                targetMax: goals.setsMax,
               ),
             ),
           const SizedBox(height: AppSpacing.md),
           Divider(height: 1, thickness: 1, color: t.divider),
           const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Container(
-                width: 24,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: t.textSecondary.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
+          // Tappable: this legend is where the band is most likely to strike
+          // someone as wrong for them, which makes it the right place to be
+          // able to change it rather than going hunting through Settings.
+          Pressable(
+            onTap: () => TrainingGoalSheets.weeklySetBand(context, ref),
+            scale: 0.99,
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: t.textSecondary.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  'The shaded band is 10–20 working sets a week — the range '
-                  'most lifters grow on.',
-                  style: AppType.caption(t),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    // The default band is the one from the literature and can be
+                    // sold as such; a band the user chose is theirs, and saying
+                    // otherwise would put words in the research's mouth.
+                    goals.isDefault
+                        ? 'The shaded band is ${goals.bandLabel} working sets a '
+                            'week — the range most lifters grow on. Tap to '
+                            'change it.'
+                        : 'The shaded band is ${goals.bandLabel} working sets a '
+                            'week — the goal you set for yourself.',
+                    style: AppType.caption(t),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.sm),
+                Icon(Icons.tune_rounded, size: 16, color: t.textTertiary),
+              ],
+            ),
           ),
         ],
       ),

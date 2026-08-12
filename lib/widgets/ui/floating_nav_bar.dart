@@ -1,9 +1,13 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/theme_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/design_tokens.dart';
 import 'motion.dart';
 
@@ -11,14 +15,32 @@ import 'motion.dart';
 class NavBarMetrics {
   NavBarMetrics._();
 
-  static const double height = 62;
+  static const double height = 60;
 
-  /// Gap between the bar and the bottom safe-area inset.
-  static const double bottomGap = 20;
+  /// Gap between the bar and the bottom safe-area inset. Deliberately small —
+  /// the bar should read as resting *on* the bottom edge, not hovering in the
+  /// middle of the empty strip above it.
+  static const double bottomGap = 8;
 
   /// Distance from the bottom of the screen to the top of the bar,
   /// excluding the safe-area inset.
   static const double totalHeight = height + bottomGap;
+
+  /// Inset between the bar's edge and the tab slots. Also the gutter the
+  /// travelling bubble leaves around itself.
+  static const double innerPadding = 5;
+
+  /// The hairline rim. `Container` adds a decoration's border as padding, so
+  /// the bar has to budget for it or the tab row overflows by 2px.
+  static const double borderWidth = 1;
+
+  /// Total horizontal chrome around the tab slots.
+  static const double horizontalChrome = (innerPadding + borderWidth) * 2;
+
+  /// Width bounds for a single tab slot. The bar hugs `slot * tabCount` so it
+  /// stays centred and never stretches to a full-width banner on a tablet.
+  static const double minSlotWidth = 60;
+  static const double maxSlotWidth = 78;
 }
 
 /// A single destination in the [FloatingNavBar].
@@ -37,11 +59,17 @@ class NavDestination {
 /// ---------------------------------------------------------------------------
 /// The floating navigation bar.
 ///
-/// A narrow, fully detached frosted pill that hugs its content: inactive tabs
-/// are icon-only, the active tab expands to reveal its label behind a filled
-/// gradient pill. Swiping horizontally across the bar moves between tabs.
+/// A compact, detached capsule sitting just above the system inset. Translucent
+/// with a soft blur behind it so content shows through, and nothing more — no
+/// highlights, no sheens.
+///
+/// Selection is a single travelling bubble rather than four independent pills.
+/// It is driven by one spring simulation over a continuous tab position, so it
+/// overshoots, stretches in the direction of travel and settles — and every
+/// icon it passes over lights up partially on the way. Swiping horizontally
+/// across the bar moves between tabs.
 /// ---------------------------------------------------------------------------
-class FloatingNavBar extends ConsumerWidget {
+class FloatingNavBar extends ConsumerStatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final List<NavDestination> destinations;
@@ -58,72 +86,200 @@ class FloatingNavBar extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FloatingNavBar> createState() => _FloatingNavBarState();
+}
+
+class _FloatingNavBarState extends ConsumerState<FloatingNavBar>
+    with SingleTickerProviderStateMixin {
+  /// The Material 3 Expressive "spatial" spring: leaves fast, overshoots once,
+  /// settles soft. Under-damped on purpose — a critically damped bubble reads
+  /// as a cross-fade rather than as something with mass.
+  static final SpringDescription _spring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: 440,
+    ratio: 0.72,
+  );
+
+  /// Unbounded: the spring is allowed to carry `value` past 1 and back.
+  late final AnimationController _controller =
+      AnimationController.unbounded(vsync: this, value: 1);
+
+  late double _from = widget.currentIndex.toDouble();
+  late double _to = widget.currentIndex.toDouble();
+
+  /// Continuous tab position, in slots.
+  double get _position => _from + (_to - _from) * _controller.value;
+
+  /// Travel speed, in slots per second.
+  double get _speed => (_to - _from) * _controller.velocity;
+
+  @override
+  void didUpdateWidget(covariant FloatingNavBar old) {
+    super.didUpdateWidget(old);
+    if (old.currentIndex != widget.currentIndex) {
+      _springTo(widget.currentIndex.toDouble());
+    }
+  }
+
+  /// Retargets mid-flight without losing momentum: the bubble's current
+  /// position and velocity become the new simulation's starting conditions.
+  void _springTo(double target) {
+    final start = _position;
+    final span = target - start;
+    if (span.abs() < 0.001) {
+      _controller.stop();
+      _from = _to = target;
+      _controller.value = 1;
+      return;
+    }
+    // Convert slots/sec into the new simulation's 0→1 units.
+    final normalisedVelocity = _speed / span;
+    _from = start;
+    _to = target;
+    _controller.animateWith(
+      SpringSimulation(_spring, 0, 1, normalisedVelocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleSwipe(DragEndDetails details) {
+    final v = details.primaryVelocity;
+    if (v == null) return;
+    if (v > 260 && widget.currentIndex > 0) {
+      HapticFeedback.selectionClick();
+      widget.onTap(widget.currentIndex - 1);
+    } else if (v < -260 &&
+        widget.currentIndex < widget.destinations.length - 1) {
+      HapticFeedback.selectionClick();
+      widget.onTap(widget.currentIndex + 1);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final t = ref.watch(themeProvider);
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    // A bar floating above the keyboard is worse than no bar at all.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final show = widget.visible && !keyboardOpen;
 
     return AnimatedSlide(
       duration: AppMotion.normal,
       curve: AppMotion.standard,
-      offset: visible ? Offset.zero : const Offset(0, 1.6),
+      offset: show ? Offset.zero : const Offset(0, 1.6),
       child: AnimatedOpacity(
         duration: AppMotion.fast,
-        opacity: visible ? 1 : 0,
+        opacity: show ? 1 : 0,
         child: Padding(
           padding: EdgeInsets.only(
             bottom: bottomInset + NavBarMetrics.bottomGap,
             left: AppSpacing.lg,
             right: AppSpacing.lg,
           ),
-          child: Center(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragEnd: (details) {
-                final v = details.primaryVelocity;
-                if (v == null) return;
-                if (v > 260 && currentIndex > 0) {
-                  onTap(currentIndex - 1);
-                } else if (v < -260 && currentIndex < destinations.length - 1) {
-                  onTap(currentIndex + 1);
-                }
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  boxShadow: t.shadowFloating,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                    child: Container(
-                      height: NavBarMetrics.height,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: t.glass,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                        border: Border.all(
-                          color: t.isDark
-                              ? Colors.white.withValues(alpha: 0.09)
-                              : Colors.white.withValues(alpha: 0.7),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(destinations.length, (i) {
-                          return _NavItem(
-                            destination: destinations[i],
-                            selected: i == currentIndex,
-                            onTap: () => onTap(i),
-                          );
-                        }),
-                      ),
-                    ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final count = widget.destinations.length;
+              final usable =
+                  constraints.maxWidth - NavBarMetrics.horizontalChrome;
+              final slot = (usable / count).clamp(
+                NavBarMetrics.minSlotWidth,
+                NavBarMetrics.maxSlotWidth,
+              );
+              final barWidth = math.min(
+                slot * count + NavBarMetrics.horizontalChrome,
+                constraints.maxWidth,
+              );
+
+              // A Row, never a Center. The bottom Align hands down *loose*
+              // constraints, and a Center with a bounded-but-loose height
+              // expands to the full stack instead of shrink-wrapping — which
+              // parks the bar in the vertical middle of the screen and leaves
+              // the enclosing Align with nothing left to push down. A Row
+              // centres horizontally and still hugs the bar's own height.
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: barWidth,
+                    child: _capsule(t, slot),
                   ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _capsule(AppColors t, double slot) {
+    final radius = BorderRadius.circular(AppRadius.pill);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragEnd: _handleSwipe,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: t.shadowFloating,
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              height: NavBarMetrics.height,
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                // Translucent enough to read as sitting over the page, opaque
+                // enough that the labels never fight the content behind them.
+                color: t.elevated.withValues(alpha: t.isDark ? 0.62 : 0.74),
+                border: Border.all(
+                  color: t.isDark
+                      ? Colors.white.withValues(alpha: 0.07)
+                      : Colors.black.withValues(alpha: 0.05),
+                  width: NavBarMetrics.borderWidth,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(NavBarMetrics.innerPadding),
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) {
+                    final position = _position;
+                    return Stack(
+                      children: [
+                        _bubble(t, slot, position),
+                        Positioned.fill(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0;
+                                  i < widget.destinations.length;
+                                  i++)
+                                SizedBox(
+                                  width: slot,
+                                  child: _NavItem(
+                                    theme: t,
+                                    destination: widget.destinations[i],
+                                    // Falls off linearly with distance, so an
+                                    // icon the bubble passes over lights up
+                                    // partially on the way through.
+                                    selection: 1 - (position - i).abs(),
+                                    onTap: () => widget.onTap(i),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -132,89 +288,123 @@ class FloatingNavBar extends ConsumerWidget {
       ),
     );
   }
-}
 
-class _NavItem extends ConsumerWidget {
-  final NavDestination destination;
-  final bool selected;
-  final VoidCallback onTap;
+  /// The travelling selection bubble.
+  Widget _bubble(AppColors t, double slot, double position) {
+    // Stretch along the direction of travel and squash across it, scaled by
+    // how fast the bubble is actually moving. This is what makes it read as a
+    // drop of liquid instead of a rectangle sliding on rails.
+    final stretch = (_speed.abs() * 0.045).clamp(0.0, 0.20);
+    const gutter = 2.0;
 
-  const _NavItem({
-    required this.destination,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: selected ? 1 : 0),
-      duration: AppMotion.normal,
-      curve: AppMotion.spring,
-      builder: (context, raw, _) {
-        // The spring curve overshoots past 1 — clamp before it reaches any
-        // opacity or colour interpolation.
-        final v = raw.clamp(0.0, 1.0);
-
-        return Pressable(
-          onTap: onTap,
-          haptic: HapticStrength.selection,
-          scale: 0.9,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            padding: EdgeInsets.symmetric(horizontal: 14 + 3 * v),
-            height: double.infinity,
+    return Positioned(
+      left: position * slot + gutter,
+      top: 0,
+      bottom: 0,
+      width: slot - gutter * 2,
+      child: IgnorePointer(
+        child: Transform.scale(
+          scaleX: 1 + stretch,
+          scaleY: 1 - stretch * 0.5,
+          child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.pill),
-              gradient: v == 0
-                  ? null
-                  : LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        t.primary.withValues(alpha: v),
-                        t.primaryLight.withValues(alpha: v),
-                      ],
-                    ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  selected ? destination.activeIcon : destination.icon,
-                  size: 22 + 1.5 * v,
-                  color: Color.lerp(t.textSecondary, t.onPrimary, v),
-                ),
-                ClipRect(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: v,
-                    child: Opacity(
-                      opacity: v,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 7),
-                        child: Text(
-                          destination.label,
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
-                            color: t.onPrimary,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+              gradient: t.primaryGradientDiagonal,
+              boxShadow: [
+                BoxShadow(
+                  color: t.primary.withValues(alpha: 0.26),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: -3,
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final AppColors theme;
+  final NavDestination destination;
+
+  /// How selected this tab is, 0→1. Read straight off the bubble's position,
+  /// so it is continuous rather than a boolean.
+  final double selection;
+
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.theme,
+    required this.destination,
+    required this.selection,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final v = selection.clamp(0.0, 1.0);
+    final tint = Color.lerp(theme.textSecondary, theme.onPrimary, v)!;
+
+    return Pressable(
+      onTap: onTap,
+      haptic: HapticStrength.selection,
+      scale: 0.9,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            height: 23,
+            // Cross-fading a glyph with itself only dims it mid-transition, so
+            // tabs whose two icons are the same render once.
+            child: destination.icon == destination.activeIcon
+                ? Center(
+                    child: Icon(
+                      destination.icon,
+                      size: 21 + 1.3 * v,
+                      color: tint,
+                    ),
+                  )
+                : Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Opacity(
+                        opacity: 1 - v,
+                        child: Icon(destination.icon, size: 21, color: tint),
+                      ),
+                      Opacity(
+                        opacity: v,
+                        child: Icon(
+                          destination.activeIcon,
+                          size: 21 + 1.3 * v,
+                          color: tint,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            destination.label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            style: TextStyle(
+              color: tint,
+              fontSize: 10.5,
+              height: 1.0,
+              fontWeight: FontWeight.lerp(
+                FontWeight.w600,
+                FontWeight.w800,
+                v,
+              ),
+              letterSpacing: -0.05,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

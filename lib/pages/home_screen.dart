@@ -318,6 +318,7 @@ class _TodayStrip extends ConsumerWidget {
       ),
       data: (data) {
         final streak = data.streak;
+        final goal = data.goals.sessionsPerWeek;
 
         return FadeSlideIn(
           child: AppCard(
@@ -348,7 +349,16 @@ class _TodayStrip extends ConsumerWidget {
                         icon: Icons.bolt_rounded,
                         label: 'This week',
                         value: streak.thisWeek,
-                        unit: streak.thisWeek == 1 ? 'session' : 'sessions',
+                        // With a weekly goal set, the count is only half the
+                        // story — "2 of 4" says whether the week is on track.
+                        unit: goal > 1
+                            ? 'of $goal sessions'
+                            : streak.thisWeek == 1
+                                ? 'session'
+                                : 'sessions',
+                        color: goal > 1 && streak.thisWeek >= goal
+                            ? t.success
+                            : null,
                       ),
                     ),
                     if (onTap != null)

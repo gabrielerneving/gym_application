@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/workout_session_model.dart';
 import '../services/analytics_service.dart';
 import '../services/database_service.dart';
+import 'training_goals_provider.dart';
 
 /// ---------------------------------------------------------------------------
 /// Analytics wiring.
@@ -49,10 +50,19 @@ final exerciseMuscleMapProvider =
 });
 
 /// Everything the statistics screens need, resolved together.
+///
+/// Watching the goals here is what makes them take effect everywhere at once:
+/// editing the weekly set band rebuilds this from the *cached* session list, so
+/// every screen re-scores instantly without a single extra Firestore read.
 final trainingDataProvider = FutureProvider<TrainingData>((ref) async {
+  final goals = ref.watch(trainingGoalsProvider);
   final sessions = await ref.watch(workoutSessionsProvider.future);
   final muscleMap = await ref.watch(exerciseMuscleMapProvider.future);
-  return TrainingData(sessions: sessions, exerciseToMuscle: muscleMap);
+  return TrainingData(
+    sessions: sessions,
+    exerciseToMuscle: muscleMap,
+    goals: goals,
+  );
 });
 
 /// The period currently selected on the statistics screens. Shared so moving
@@ -67,7 +77,16 @@ class TrainingData {
   final List<WorkoutSession> sessions;
   final Map<String, String> exerciseToMuscle;
 
-  TrainingData({required this.sessions, required this.exerciseToMuscle});
+  /// The targets everything below is scored against. Screens read this rather
+  /// than watching [trainingGoalsProvider] separately, so the numbers on the
+  /// chart and the numbers in the caption can never come from different reads.
+  final TrainingGoals goals;
+
+  TrainingData({
+    required this.sessions,
+    required this.exerciseToMuscle,
+    this.goals = const TrainingGoals(),
+  });
 
   bool get isEmpty => sessions.isEmpty;
 
@@ -80,16 +99,19 @@ class TrainingData {
   late final List<PersonalBest> personalBests =
       AnalyticsService.personalBests(sessions);
 
-  late final StreakInfo streak = AnalyticsService.weeklyStreak(sessions);
+  late final StreakInfo streak = AnalyticsService.weeklyStreak(
+    sessions,
+    sessionsPerWeek: goals.sessionsPerWeek,
+  );
 
   late final List<ProgramUsage> programs =
       AnalyticsService.programUsage(sessions);
 
   late final List<MuscleBalance> muscleBalance =
-      AnalyticsService.muscleBalance(sessions, exerciseToMuscle);
+      AnalyticsService.muscleBalance(sessions, exerciseToMuscle, goals: goals);
 
   late final List<Insight> insights =
-      AnalyticsService.insights(sessions, exerciseToMuscle);
+      AnalyticsService.insights(sessions, exerciseToMuscle, goals: goals);
 
   late final List<TimeBucket> weeklyVolume =
       AnalyticsService.weeklyVolume(sessions, weeks: 12);

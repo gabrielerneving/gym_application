@@ -31,7 +31,7 @@ class AppSpacing {
   /// Bottom padding that clears the floating nav bar. `AppScaffold` adds the
   /// device's bottom safe-area inset on top of this, so screens that use the
   /// scaffold get correct clearance without doing the maths themselves.
-  static const double navBarClearance = 104;
+  static const double navBarClearance = 92;
 }
 
 /// Corner radii. The app leans generous and consistent — squircle-ish cards,

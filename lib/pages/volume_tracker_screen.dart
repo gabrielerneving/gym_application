@@ -14,8 +14,8 @@ import '../widgets/ui/ui.dart';
 ///
 /// Everything comes from [trainingDataProvider] (one cached read of the session
 /// history) and [AnalyticsService]: period totals with a comparison against the
-/// previous window, weekly sets per muscle group scored against the 10–20
-/// sets/week hypertrophy band, a 12-week tonnage trend, and a short list of
+/// previous window, weekly sets per muscle group scored against the user's own
+/// set band from [TrainingGoals], a 12-week tonnage trend, and a short list of
 /// what to add next.
 /// ---------------------------------------------------------------------------
 class VolumeTrackerScreen extends ConsumerWidget {
@@ -86,6 +86,7 @@ class VolumeTrackerScreen extends ConsumerWidget {
           data.sessions,
           data.exerciseToMuscle,
           weeks: weeks,
+          goals: data.goals,
         );
         final currentSets = AnalyticsService.muscleGroupSets(
           data.sessions,
@@ -98,7 +99,7 @@ class VolumeTrackerScreen extends ConsumerWidget {
           range: range.previous(),
         );
         final lagging = AnalyticsService.weakestGroups(balance, limit: 3)
-            .where((m) => m.setsPerWeek < MuscleBalance.targetMin)
+            .where((m) => m.setsPerWeek < m.targetMin)
             .toList();
 
         return AppScaffold(
@@ -142,8 +143,7 @@ class VolumeTrackerScreen extends ConsumerWidget {
             SectionHeader(
               title: 'Muscle balance',
               subtitle: '${_weeksLabel(weeks)} · target '
-                  '${MuscleBalance.targetMin.toInt()}–'
-                  '${MuscleBalance.targetMax.toInt()} sets per week',
+                  '${data.goals.bandLabel} sets per week',
             ),
             FadeSlideIn(
               index: 4,
@@ -155,7 +155,10 @@ class VolumeTrackerScreen extends ConsumerWidget {
               ),
             ),
             const SectionHeader(title: 'What to add'),
-            FadeSlideIn(index: 5, child: _Recommendations(lagging: lagging)),
+            FadeSlideIn(
+              index: 5,
+              child: _Recommendations(lagging: lagging, goals: data.goals),
+            ),
             const SizedBox(height: AppSpacing.sm),
             const _MethodNote(),
           ],
@@ -532,9 +535,11 @@ class _BalanceCard extends ConsumerWidget {
       );
     }
 
-    // Keep the 10–20 band visible even when one group dwarfs the rest.
-    final peak = balance.first.setsPerWeek;
-    final maxScale = math.max(MuscleBalance.targetMax * 1.2, peak * 1.12);
+    // Every group carries the band it was scored against, so the axis clears
+    // the top of the user's target before it stretches for the tallest bar:
+    // a 3–6 band and a 25–35 one both stay fully inside the track.
+    final peak = balance.first;
+    final maxScale = math.max(peak.targetMax * 1.2, peak.setsPerWeek * 1.12);
     final unmapped = currentSets['Other'] ?? 0;
 
     return AppCard(
@@ -618,8 +623,8 @@ class _MuscleRow extends ConsumerWidget {
             max: maxScale,
             valueLabel: '${AppFormat.weight(muscle.setsPerWeek)} /wk',
             color: tone,
-            targetMin: MuscleBalance.targetMin,
-            targetMax: MuscleBalance.targetMax,
+            targetMin: muscle.targetMin,
+            targetMax: muscle.targetMax,
           ),
           Row(
             children: [
@@ -657,7 +662,11 @@ class _MuscleRow extends ConsumerWidget {
 class _Recommendations extends ConsumerWidget {
   final List<MuscleBalance> lagging;
 
-  const _Recommendations({required this.lagging});
+  /// The band the groups were scored against. Needed for the all-clear copy,
+  /// which has no lagging group left to read the floor off.
+  final TrainingGoals goals;
+
+  const _Recommendations({required this.lagging, required this.goals});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -681,7 +690,7 @@ class _Recommendations extends ConsumerWidget {
                   const SizedBox(height: 3),
                   Text(
                     'Every muscle group is at or above the '
-                    '${MuscleBalance.targetMin.toInt()} sets per week floor.',
+                    '${goals.weeklySetsMin} sets per week floor.',
                     style: AppType.secondary(t),
                   ),
                 ],
@@ -719,8 +728,7 @@ class _RecommendationRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
     final tone = _statusColor(t, muscle.status);
-    final missing =
-        math.max(1, (MuscleBalance.targetMin - muscle.setsPerWeek).ceil());
+    final missing = math.max(1, (muscle.targetMin - muscle.setsPerWeek).ceil());
 
     return Row(
       children: [
@@ -736,7 +744,7 @@ class _RecommendationRow extends ConsumerWidget {
               Text(
                 muscle.status == VolumeStatus.none
                     ? 'Not trained at all. Start with '
-                        '${MuscleBalance.targetMin.toInt()} sets a week.'
+                        '${muscle.targetMin.toInt()} sets a week.'
                     : 'At ${AppFormat.weight(muscle.setsPerWeek)} sets a week. '
                         'Add about $missing more.',
                 style: AppType.secondary(t),

@@ -900,7 +900,7 @@ class _PlateauCard extends ConsumerWidget {
                 Text('Progress has stalled', style: AppType.heading(t)),
                 const SizedBox(height: 4),
                 Text(
-                  'Four sessions without beating '
+                  '${ExerciseProgress.stallWindow} sessions without beating '
                   '${AppFormat.weight(best)} kg estimated. Next time drop to '
                   '${AppFormat.weight(target)} kg for 4×5, then add 2.5 kg a '
                   'week — or swap in a close variation for a month and come '

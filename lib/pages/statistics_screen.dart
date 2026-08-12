@@ -156,7 +156,12 @@ class StatisticsScreen extends ConsumerWidget {
         title: 'Muscle balance',
         subtitle: 'Average sets per week, last 4 weeks',
       ),
-      FadeSlideIn(child: _MuscleBalanceCard(balance: data.muscleBalance)),
+      FadeSlideIn(
+        child: _MuscleBalanceCard(
+          balance: data.muscleBalance,
+          goals: data.goals,
+        ),
+      ),
 
       const SectionHeader(title: 'Programs'),
       FadeSlideIn(child: PopularWorkoutsCard(programs: data.programs)),
@@ -664,13 +669,18 @@ class _MiniDivider extends StatelessWidget {
 }
 
 /// ---------------------------------------------------------------------------
-/// Weekly sets per muscle group against the 10–20 sets/week band.
+/// Weekly sets per muscle group against the user's weekly set band.
 /// ---------------------------------------------------------------------------
 class _MuscleBalanceCard extends ConsumerWidget {
   /// The full balance list, highest weekly volume first.
   final List<MuscleBalance> balance;
 
-  const _MuscleBalanceCard({required this.balance});
+  /// The band the bars are scored against. Passed down beside the balance it
+  /// was computed from, so the caption, the shaded strip and the colours can
+  /// never come from different reads of the goal.
+  final TrainingGoals goals;
+
+  const _MuscleBalanceCard({required this.balance, required this.goals});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -679,8 +689,11 @@ class _MuscleBalanceCard extends ConsumerWidget {
     final trained = balance.where((m) => m.totalSets > 0).toList();
     final top = trained.length > 4 ? trained.sublist(0, 4) : trained;
 
-    // The target band must fit inside the bar, so the axis never ends below 24.
-    var axisMax = 24.0;
+    // The shaded strip has to sit fully inside the track, so the axis clears
+    // the top of the band before it starts stretching for the tallest bar.
+    // Both ends move with the user's goal, so a 3–6 band and a 25–35 one draw
+    // the same way whichever of the two is the larger number.
+    var axisMax = goals.setsMax * 1.2;
     for (final group in top) {
       axisMax = math.max(axisMax, group.setsPerWeek * 1.1);
     }
@@ -713,7 +726,7 @@ class _MuscleBalanceCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Shaded band = the 10–20 sets/week target',
+                      'Shaded band = the ${goals.bandLabel} sets/week target',
                       style: AppType.caption(t),
                     ),
                   ],
@@ -746,8 +759,8 @@ class _MuscleBalanceCard extends ConsumerWidget {
                   max: axisMax,
                   valueLabel: '${AppFormat.weight(top[i].setsPerWeek)}/wk',
                   color: _statusColor(t, top[i].status),
-                  targetMin: 10,
-                  targetMax: 20,
+                  targetMin: goals.setsMin,
+                  targetMax: goals.setsMax,
                 ),
               ),
             const SizedBox(height: AppSpacing.sm),
@@ -770,17 +783,18 @@ class _MuscleBalanceCard extends ConsumerWidget {
   String _verdict() {
     final weakest = AnalyticsService.weakestGroups(balance, limit: 1);
     if (weakest.isEmpty) {
-      return 'Every muscle group sits inside the 10–20 sets/week band. '
-          'Nicely balanced.';
+      return 'Every muscle group sits inside the ${goals.bandLabel} '
+          'sets/week band. Nicely balanced.';
     }
     final group = weakest.first;
     if (group.status == VolumeStatus.high) {
       return '${group.group} is your outlier at '
           '${AppFormat.weight(group.setsPerWeek)} sets/week — above the '
-          '10–20 band.';
+          '${goals.bandLabel} band.';
     }
     return '${group.group} is your biggest gap at '
-        '${AppFormat.weight(group.setsPerWeek)} sets/week. Aim for 10 or more.';
+        '${AppFormat.weight(group.setsPerWeek)} sets/week. '
+        'Aim for ${goals.weeklySetsMin} or more.';
   }
 
   Color _statusColor(AppColors t, VolumeStatus status) => switch (status) {

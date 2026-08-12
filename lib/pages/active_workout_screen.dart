@@ -826,9 +826,21 @@ class _ActiveWorkoutHeader extends ConsumerWidget {
   static const double _rowGap = 10;
   static const double _rowB = 40;
 
-  /// 12 + 44 + 10 + 40 + 12 of glass padding and rows, plus the outer gaps.
-  static const double totalHeight =
-      _topGap + AppSpacing.md * 2 + _rowA + _rowGap + _rowB + _bottomGap;
+  /// [GlassSurface] draws a 1px border, and a bordered `Container` insets its
+  /// child by the border on every side — so the glass eats two more pixels of
+  /// height than its padding alone suggests. Leaving it out of the sum makes
+  /// the header two pixels too short for its own content.
+  static const double _glassBorder = 1;
+
+  /// 12 + 44 + 10 + 40 + 12 of glass padding and rows, plus the glass border
+  /// and the outer gaps.
+  static const double totalHeight = _topGap +
+      _glassBorder * 2 +
+      AppSpacing.md * 2 +
+      _rowA +
+      _rowGap +
+      _rowB +
+      _bottomGap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1387,10 +1399,16 @@ class _SetRowState extends ConsumerState<_SetRow>
 
     // A set becoming complete is the moment the rest starts. Warm-up sets are
     // excluded — nobody rests two minutes after an empty bar.
+    //
+    // didUpdateWidget runs inside the build phase and Riverpod rejects provider
+    // writes there, so the rest is started once this frame has been laid out.
     if (!widget.set.isWarmUp &&
         !_isComplete(oldWidget.set) &&
         _isComplete(widget.set)) {
-      ref.read(restTimerProvider.notifier).onSetCompleted();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(restTimerProvider.notifier).onSetCompleted();
+      });
     }
   }
 
