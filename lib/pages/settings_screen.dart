@@ -14,11 +14,11 @@ import '../widgets/theme_selector.dart';
 import '../widgets/training_goal_sheets.dart';
 import '../widgets/ui/ui.dart';
 
-/// The app version, mirrored from `pubspec.yaml` (`version: 1.3.0+15`).
+/// The app version, mirrored from `pubspec.yaml` (`version: 1.3.0+17`).
 /// `package_info_plus` is not a dependency, so this is kept in sync by hand —
 /// bump it whenever the pubspec version changes.
 const String _appVersion = '1.3.0';
-const String _appBuild = '15';
+const String _appBuild = '17';
 
 const String _privacyPolicyUrl =
     'https://gabrielerneving.github.io/gym_application/policy.md';
