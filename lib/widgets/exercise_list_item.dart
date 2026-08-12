@@ -1,84 +1,125 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/exercise_model.dart'; // Se till att sökvägen till din modell är korrekt
+
+import '../models/exercise_model.dart';
 import '../providers/theme_provider.dart';
+import 'ui/ui.dart';
 
-
+/// One exercise row inside the workout builder.
+///
+/// Shows the movement name and a breakdown of its sets as badges. The trailing
+/// slot is either a drag affordance (while the list is in reorder mode) or an
+/// overflow action that opens the per-exercise sheet.
+///
+/// The constructor is part of the app's public surface — do not change it.
 class ExerciseListItem extends ConsumerWidget {
-  // Denna widget tar emot ett Exercise-objekt för att veta vad den ska visa.
+  /// The exercise this row represents.
   final Exercise exercise;
+
+  /// Opens the options sheet for this exercise.
   final VoidCallback onMenuPressed;
-  final bool isReordering; // Ny parameter
 
-
+  /// True while the parent list is in explicit reorder mode.
+  final bool isReordering;
 
   const ExerciseListItem({
-    Key? key,
+    super.key,
     required this.exercise,
     required this.onMenuPressed,
-    this.isReordering = false, // Standardvärde är false
-
-  }) : super(key: key);
+    this.isReordering = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
-    
-    return Card(
-      color: theme.card, // Mörkgrå färg som i din design
-      margin: const EdgeInsets.symmetric(vertical: 8.0), // Lite utrymme mellan varje item
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15.0), // Rundade hörn
+    final t = ref.watch(themeProvider);
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.lg,
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5.0),
-        title: Text(
-          exercise.name,
-          style: TextStyle(
-            color: theme.text,
-            fontWeight: FontWeight.bold,
+      // In reorder mode the whole row belongs to the drag gesture, so taps are
+      // disabled to avoid opening the sheet mid-drag.
+      onTap: isReordering ? null : onMenuPressed,
+      child: Row(
+        children: [
+          const IconBadge(
+            icon: Icons.fitness_center_rounded,
+            size: 42,
+            iconSize: 20,
           ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${exercise.sets} sets total',
-              style: TextStyle(
-                color: theme.textSecondary,
-              ),
-            ),
-            if (exercise.warmUpSets > 0)
-              Row(
-                children: [
-                  Icon(Icons.local_fire_department, 
-                       color: theme.accent, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${exercise.warmUpSets} warm-up + ${exercise.workingSets} working',
-                    style: TextStyle(
-                      color: theme.accent,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              )
-            else
-              Text(
-                '${exercise.workingSets} working sets',
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontSize: 12,
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  exercise.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.heading(t),
                 ),
-              ),
-          ],
-        ),
-        trailing: isReordering
-            ? Icon(Icons.drag_handle, color: theme.text)
-            : IconButton(
-                icon: Icon(Icons.more_vert, color: theme.text),
-                onPressed: onMenuPressed,
-              ),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    AppBadge(
+                      label: '${exercise.workingSets} working',
+                      color: t.primary,
+                      icon: Icons.bolt_rounded,
+                    ),
+                    if (exercise.warmUpSets > 0)
+                      AppBadge(
+                        label: '${exercise.warmUpSets} warm-up',
+                        color: t.warning,
+                        icon: Icons.local_fire_department_rounded,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          if (isReordering)
+            _DragAffordance(theme: t)
+          else
+            AppIconButton(
+              icon: Icons.more_horiz_rounded,
+              onPressed: onMenuPressed,
+              filled: false,
+              size: 38,
+              iconSize: 22,
+              color: t.textSecondary,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The grab handle shown while the list is in reorder mode.
+class _DragAffordance extends StatelessWidget {
+  final AppColors theme;
+
+  const _DragAffordance({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: theme.primaryWash,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: theme.primaryWashOutline),
+      ),
+      child: Icon(
+        Icons.drag_handle_rounded,
+        size: 21,
+        color: theme.primary,
       ),
     );
   }

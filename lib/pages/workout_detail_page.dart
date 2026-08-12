@@ -1,503 +1,641 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
 import '../models/workout_session_model.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_settings_provider.dart';
+import '../services/analytics_service.dart';
+import '../widgets/ui/ui.dart';
 
+/// A single completed session, read-only.
+///
+/// RIR and progression columns are opt-in and follow
+/// `workoutSettingsProvider`; per-set notes stay collapsed until tapped.
 class WorkoutDetailPage extends ConsumerStatefulWidget {
   final WorkoutSession session;
 
-  const WorkoutDetailPage({Key? key, required this.session}) : super(key: key);
+  const WorkoutDetailPage({super.key, required this.session});
 
   @override
   ConsumerState<WorkoutDetailPage> createState() => _WorkoutDetailPageState();
 }
 
 class _WorkoutDetailPageState extends ConsumerState<WorkoutDetailPage> {
-  // Set för att hålla reda på vilka notes som är expanderade
-  // Format: 'exerciseIndex_setIndex'
-  final Set<String> _expandedNotes = {};
+  static final DateFormat _dateFormat = DateFormat('EEEE, MMMM d, yyyy');
+
+  /// Keys of the expanded notes, formatted 'exerciseIndex_setIndex'.
+  final Set<String> _expandedNotes = <String>{};
+
+  _SessionSummary? _summary;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _summarise();
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkoutDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.session, widget.session)) {
+      _expandedNotes.clear();
+      _summarise();
+    }
+  }
+
+  /// Aggregates the session up front. Malformed history (a session saved by an
+  /// older build, say) surfaces as an error state instead of a red screen.
+  void _summarise() {
+    try {
+      _summary = _SessionSummary.from(widget.session);
+      _error = null;
+    } catch (e) {
+      _summary = null;
+      _error = e;
+    }
+  }
+
+  void _toggleNote(int exerciseIndex, int setIndex) {
+    setState(() {
+      final key = '${exerciseIndex}_$setIndex';
+      if (!_expandedNotes.remove(key)) _expandedNotes.add(key);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-    
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
-          onPressed: () => Navigator.pop(context),
+    final session = widget.session;
+    final title = session.programTitle.trim().isEmpty
+        ? 'Workout'
+        : session.programTitle;
+    final subtitle = _dateFormat.format(session.date);
+
+    if (_error != null) {
+      return AppScaffold(
+        title: title,
+        subtitle: subtitle,
+        body: ErrorState(
+          message: 'Could not read this session.',
+          onRetry: () => setState(_summarise),
         ),
-        title: Text(
-          widget.session.programTitle,
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+      );
+    }
+
+    final summary = _summary;
+    if (summary == null) {
+      return AppScaffold(
+        title: title,
+        subtitle: subtitle,
+        body: const LoadingState(message: 'Crunching the numbers…'),
+      );
+    }
+
+    if (summary.exercises.isEmpty) {
+      return AppScaffold(
+        title: title,
+        subtitle: subtitle,
+        body: EmptyState(
+          icon: Icons.fitness_center_rounded,
+          title: 'Nothing logged',
+          message: 'This session was saved without any exercises.',
+          actionLabel: 'Back to history',
+          onAction: () => Navigator.of(context).maybePop(),
+        ),
+      );
+    }
+
+    return AppScaffold(
+      title: title,
+      subtitle: subtitle,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        FadeSlideIn(child: _SummaryCard(summary: summary)),
+        SectionHeader(
+          title: 'Exercises',
+          subtitle: '${summary.exercises.length} '
+              '${summary.exercises.length == 1 ? 'exercise' : 'exercises'} · '
+              '${summary.workingSets} working sets',
+        ),
+        for (var i = 0; i < summary.exercises.length; i++)
+          FadeSlideIn(
+            index: i + 1,
+            child: _ExerciseCard(
+              summary: summary.exercises[i],
+              index: i,
+              isNoteExpanded: (setIndex) =>
+                  _expandedNotes.contains('${i}_$setIndex'),
+              onToggleNote: (setIndex) => _toggleNote(i, setIndex),
+            ),
           ),
-        ),
-        centerTitle: false,
+      ],
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// Header
+/// ---------------------------------------------------------------------------
+
+class _SummaryCard extends ConsumerWidget {
+  final _SessionSummary summary;
+
+  const _SummaryCard({required this.summary});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Overline('Session total'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              CountUp(
+                value: summary.volume,
+                format: AppFormat.compact,
+                style: AppType.metric(t, size: 36),
+              ),
+              const SizedBox(width: 6),
+              Text('kg lifted', style: AppType.secondary(t)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(height: 1, color: t.divider),
+          const SizedBox(height: AppSpacing.xs),
+          MetricRow(
+            label: 'Duration',
+            value: AppFormat.duration(summary.durationMinutes),
+            icon: Icons.schedule_rounded,
+          ),
+          MetricRow(
+            label: 'Exercises',
+            value: '${summary.exercises.length}',
+            icon: Icons.fitness_center_rounded,
+          ),
+          MetricRow(
+            label: 'Working sets',
+            value: '${summary.workingSets}',
+            icon: Icons.repeat_rounded,
+          ),
+          MetricRow(
+            label: 'Warm-up sets',
+            value: '${summary.warmUpSets}',
+            icon: Icons.local_fire_department_rounded,
+          ),
+          MetricRow(
+            label: 'Heaviest set',
+            value: summary.topSet > 0
+                ? '${AppFormat.weight(summary.topSet)} kg'
+                : '—',
+            icon: Icons.arrow_upward_rounded,
+          ),
+          MetricRow(
+            label: 'Avg reps per set',
+            value: summary.workingSets == 0
+                ? '—'
+                : summary.avgReps.toStringAsFixed(1),
+            icon: Icons.bar_chart_rounded,
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.card,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.textSecondary.withOpacity(0.2),
-                  width: 0.5,
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// Exercises
+/// ---------------------------------------------------------------------------
+
+class _ExerciseCard extends ConsumerWidget {
+  final _ExerciseSummary summary;
+  final int index;
+  final bool Function(int setIndex) isNoteExpanded;
+  final void Function(int setIndex) onToggleNote;
+
+  const _ExerciseCard({
+    required this.summary,
+    required this.index,
+    required this.isNoteExpanded,
+    required this.onToggleNote,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final settings = ref.watch(workoutSettingsProvider);
+    final sets = summary.exercise.sets;
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _ExerciseLetter(index: index),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  summary.exercise.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.heading(t),
                 ),
               ),
-              child: Column(
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (sets.isEmpty)
+            Text('No sets logged.', style: AppType.secondary(t))
+          else ...[
+            for (var i = 0; i < sets.length; i++)
+              _SetRow(
+                completedSet: sets[i],
+                number: i + 1,
+                showRir: settings.showRIR,
+                showProgression: settings.showProgression,
+                expanded: isNoteExpanded(i),
+                onToggleNote: () => onToggleNote(i),
+              ),
+          ],
+          if (summary.workingSets > 0) ...[
+            const SizedBox(height: AppSpacing.xs),
+            _ExerciseSubtotals(summary: summary),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The A / B / C marker in front of an exercise name.
+class _ExerciseLetter extends ConsumerWidget {
+  final int index;
+
+  const _ExerciseLetter({required this.index});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final label =
+        index < 26 ? String.fromCharCode(65 + index) : '${index + 1}';
+
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: t.primaryWash,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: t.primaryWashOutline),
+      ),
+      child: Text(
+        label,
+        style: AppType.mono(t, size: 15, weight: FontWeight.w800)
+            .copyWith(color: t.primary),
+      ),
+    );
+  }
+}
+
+/// One line of the set table.
+class _SetRow extends ConsumerWidget {
+  final CompletedSet completedSet;
+  final int number;
+  final bool showRir;
+  final bool showProgression;
+  final bool expanded;
+  final VoidCallback onToggleNote;
+
+  const _SetRow({
+    required this.completedSet,
+    required this.number,
+    required this.showRir,
+    required this.showProgression,
+    required this.expanded,
+    required this.onToggleNote,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    final bool hasRir =
+        showRir && completedSet.rir != null && completedSet.rir! > 0;
+    final int repDelta = showProgression ? (completedSet.progression ?? 0) : 0;
+    final double weightDelta =
+        showProgression ? (completedSet.weightProgression ?? 0.0) : 0.0;
+
+    final String notes = completedSet.notes?.trim() ?? '';
+    final bool hasNotes = notes.isNotEmpty;
+    final bool hasDetail = repDelta != 0 || weightDelta != 0 || hasNotes;
+
+    final weightText = completedSet.weight > 0
+        ? '${AppFormat.weight(completedSet.weight)} kg'
+        : '—';
+    final repsText = completedSet.reps > 0 ? '${completedSet.reps}' : '—';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm + 2,
+      ),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 22,
+                child: Text(
+                  '$number',
+                  style: AppType.mono(t, size: 13)
+                      .copyWith(color: t.textTertiary),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '$weightText × $repsText',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.mono(t, size: 15),
+                ),
+              ),
+              if (completedSet.isWarmUp) ...[
+                const SizedBox(width: AppSpacing.sm),
+                AppBadge(
+                  label: 'Warm-up',
+                  icon: Icons.local_fire_department_rounded,
+                  color: t.warning,
+                  fontSize: 11,
+                ),
+              ],
+              if (hasRir) ...[
+                const SizedBox(width: AppSpacing.sm),
+                AppBadge(
+                  label: 'RIR ${completedSet.rir}',
+                  color: t.textSecondary,
+                  fontSize: 11,
+                ),
+              ],
+            ],
+          ),
+          if (hasDetail) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    DateFormat('EEEE, MMMM d, yyyy').format(widget.session.date),
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
+                  if (repDelta != 0)
+                    DeltaBadge(
+                      delta: repDelta,
+                      unit: repDelta.abs() == 1 ? 'rep' : 'reps',
+                      fontSize: 11.5,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildStatItem(
-                        icon: Icons.timer_outlined,
-                        label: 'Duration',
-                        value: '${widget.session.durationInMinutes} min',
-                        theme: theme,
-                      ),
-                      _buildStatItem(
-                        icon: Icons.fitness_center,
-                        label: 'Exercises',
-                        value: '${widget.session.completedExercises.length}',
-                        theme: theme,
-                      ),
-                      _buildStatItem(
-                        icon: Icons.repeat,
-                        label: 'Working Sets',
-                        value: '${widget.session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => !set.isWarmUp).length)}',
-                        theme: theme,
-                      ),
-                      _buildStatItem(
-                        icon: Icons.local_fire_department,
-                        label: 'Warm-up Sets',
-                        value: '${widget.session.completedExercises.fold<int>(0, (sum, ex) => sum + ex.sets.where((set) => set.isWarmUp).length)}',
-                        theme: theme,
-                      ),
-                    ],
-                  ),
+                  if (weightDelta != 0)
+                    DeltaBadge(
+                      delta: weightDelta,
+                      unit: 'kg',
+                      fontSize: 11.5,
+                    ),
+                  if (hasNotes)
+                    _NoteChip(
+                      text: notes,
+                      expanded: expanded,
+                      onTap: onToggleNote,
+                    ),
                 ],
               ),
             ),
-            
-            const SizedBox(height: 24),
-            Text(
-              'Exercises',
-              style: TextStyle(
-                color: theme.text,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A per-set note, collapsed to one line until tapped.
+class _NoteChip extends ConsumerWidget {
+  final String text;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _NoteChip({
+    required this.text,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Pressable(
+      onTap: onTap,
+      haptic: HapticStrength.selection,
+      scale: 0.97,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 5,
+        ),
+        decoration: BoxDecoration(
+          color: t.primaryWash,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: t.primaryWashOutline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.notes_rounded, size: 13, color: t.primary),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: expanded ? null : 1,
+                overflow:
+                    expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+                style: AppType.caption(t).copyWith(color: t.text, fontSize: 12),
               ),
             ),
-            const SizedBox(height: 16),
-            
-            ...widget.session.completedExercises.asMap().entries.map((entry) {
-              final exerciseIndex = entry.key;
-              final exercise = entry.value;
-              
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.textSecondary.withOpacity(0.2),
-                    width: 0.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Exercise header
-                    Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: theme.primary, // Använd tema-färg istället
-                            borderRadius: BorderRadius.circular(8), // Lite mer rundning
-                          ),
-                          child: Center(
-                            child: Text(
-                              String.fromCharCode(65 + exerciseIndex), // A, B, C...
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            exercise.name,
-                            style: TextStyle(
-                              color: theme.text,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Sets list
-                    ...exercise.sets.asMap().entries.map((setEntry) {
-                      final setIndex = setEntry.key;
-                      final set = setEntry.value;
-                      
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.surface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Första raden: Set number, Weight, Reps, RIR
-                            Row(
-                              children: [
-                                // Set number with warm-up indication
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: set.isWarmUp 
-                                      ? Colors.orange.withOpacity(0.2)
-                                      : Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: set.isWarmUp 
-                                      ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
-                                      : null,
-                                  ),
-                                  child: Center(
-                                    child: set.isWarmUp
-                                      ? Icon(
-                                          Icons.local_fire_department,
-                                          color: Colors.orange,
-                                          size: 12,
-                                        )
-                                      : Text(
-                                          '${setIndex + 1}',
-                                          style: TextStyle(
-                                            color: theme.textSecondary,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                  ),
-                                ),
-                                
-                                const SizedBox(width: 16),
-                                
-                                // Weight
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Weight',
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        set.weight > 0 ? '${set.weight} kg' : '-',
-                                        style: TextStyle(
-                                          color: theme.text,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                // Reps
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Reps',
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        set.reps > 0 ? '${set.reps}' : '-',
-                                        style: TextStyle(
-                                          color: theme.text,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                // RIR (conditionally shown)
-                                if (ref.watch(workoutSettingsProvider).showRIR && set.rir != null && set.rir! > 0)
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'RIR',
-                                          style: TextStyle(
-                                            color: theme.textSecondary,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${set.rir}',
-                                          style: TextStyle(
-                                            color: theme.text,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            
-                            // Andra raden: Progression och/eller Notes (om de finns)
-                            if ((ref.watch(workoutSettingsProvider).showProgression && 
-                                 ((set.progression != null && set.progression != 0) || 
-                                  (set.weightProgression != null && set.weightProgression != 0))) || 
-                                (set.notes != null && set.notes!.isNotEmpty))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 36, top: 8),
-                                child: Row(
-                                  children: [
-                                    // Rep Progression indicator
-                                    if (ref.watch(workoutSettingsProvider).showProgression && set.progression != null && set.progression != 0)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: set.progression! > 0 
-                                            ? Colors.green.withOpacity(0.15) 
-                                            : Colors.red.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(
-                                            color: set.progression! > 0 ? Colors.green : Colors.red,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              set.progression! > 0 
-                                                ? Icons.trending_up 
-                                                : Icons.trending_down,
-                                              size: 14,
-                                              color: set.progression! > 0 ? Colors.green : Colors.red,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${set.progression! > 0 ? '+' : ''}${set.progression} reps',
-                                              style: TextStyle(
-                                                color: set.progression! > 0 ? Colors.green : Colors.red,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    
-                                    // Weight Progression indicator
-                                    if (ref.watch(workoutSettingsProvider).showProgression && set.weightProgression != null && set.weightProgression != 0)
-                                      Padding(
-                                        padding: EdgeInsets.only(
-                                          left: (set.progression != null && set.progression != 0) ? 6 : 0,
-                                        ),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: set.weightProgression! > 0 
-                                              ? theme.primary.withOpacity(0.15) 
-                                              : Colors.orange.withOpacity(0.15),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
-                                              width: 1,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                set.weightProgression! > 0 
-                                                  ? Icons.arrow_upward 
-                                                  : Icons.arrow_downward,
-                                                size: 14,
-                                                color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${set.weightProgression! > 0 ? '+' : ''}${set.weightProgression!.toStringAsFixed(1)} kg',
-                                                style: TextStyle(
-                                                  color: set.weightProgression! > 0 ? theme.primary : Colors.orange,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    
-                                    // Notes - klickbar för att expandera
-                                    if (set.notes != null && set.notes!.isNotEmpty)
-                                      Expanded(
-                                        child: Padding(
-                                          padding: EdgeInsets.only(
-                                            left: ((set.progression != null && set.progression != 0) || 
-                                                   (set.weightProgression != null && set.weightProgression != 0)) ? 8 : 0,
-                                          ),
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                final noteKey = '${exerciseIndex}_$setIndex';
-                                                if (_expandedNotes.contains(noteKey)) {
-                                                  _expandedNotes.remove(noteKey);
-                                                } else {
-                                                  _expandedNotes.add(noteKey);
-                                                }
-                                              });
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                              decoration: BoxDecoration(
-                                                color: theme.primary.withOpacity(0.15),
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(
-                                                  color: theme.primary.withOpacity(0.3),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.note,
-                                                    size: 12,
-                                                    color: theme.primary,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Flexible(
-                                                    child: Text(
-                                                      set.notes!,
-                                                      style: TextStyle(
-                                                        color: theme.text,
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w400,
-                                                      ),
-                                                      maxLines: _expandedNotes.contains('${exerciseIndex}_$setIndex') ? null : 1,
-                                                      overflow: _expandedNotes.contains('${exerciseIndex}_$setIndex') ? null : TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Icon(
-                                                    _expandedNotes.contains('${exerciseIndex}_$setIndex') 
-                                                      ? Icons.expand_less 
-                                                      : Icons.expand_more,
-                                                    size: 14,
-                                                    color: theme.primary,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ],
-                ),
-              );
-            }).toList(),
+            const SizedBox(width: 4),
+            Icon(
+              expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+              size: 14,
+              color: t.primary,
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required theme,
-  }) {
+/// Sets, tonnage and top set for one exercise.
+class _ExerciseSubtotals extends ConsumerWidget {
+  final _ExerciseSummary summary;
+
+  const _ExerciseSubtotals({required this.summary});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: t.primaryWash,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _MiniStat(label: 'Sets', value: '${summary.workingSets}'),
+          ),
+          Expanded(
+            child: _MiniStat(
+              label: 'Volume',
+              value: '${AppFormat.compact(summary.volume)} kg',
+            ),
+          ),
+          Expanded(
+            child: _MiniStat(
+              label: 'Top set',
+              value: summary.topSet > 0
+                  ? '${AppFormat.weight(summary.topSet)} kg'
+                  : '—',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends ConsumerWidget {
+  final String label;
+  final String value;
+
+  const _MiniStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          color: theme.text,
-          size: 26,
-        ),
-        const SizedBox(height: 8),
         Text(
           value,
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.mono(t, size: 15),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
-            color: theme.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption(t).copyWith(fontSize: 11),
         ),
       ],
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// Derived data
+/// ---------------------------------------------------------------------------
+
+class _ExerciseSummary {
+  final CompletedExercise exercise;
+  final int workingSets;
+  final double volume;
+  final double topSet;
+
+  const _ExerciseSummary({
+    required this.exercise,
+    required this.workingSets,
+    required this.volume,
+    required this.topSet,
+  });
+}
+
+class _SessionSummary {
+  final int durationMinutes;
+  final double volume;
+  final int workingSets;
+  final int warmUpSets;
+  final int reps;
+  final double topSet;
+  final List<_ExerciseSummary> exercises;
+
+  const _SessionSummary({
+    required this.durationMinutes,
+    required this.volume,
+    required this.workingSets,
+    required this.warmUpSets,
+    required this.reps,
+    required this.topSet,
+    required this.exercises,
+  });
+
+  double get avgReps => workingSets == 0 ? 0 : reps / workingSets;
+
+  factory _SessionSummary.from(WorkoutSession session) {
+    var warmUpSets = 0;
+    final exercises = <_ExerciseSummary>[];
+
+    for (final exercise in session.completedExercises) {
+      var volume = 0.0;
+      var workingSets = 0;
+      var topSet = 0.0;
+
+      for (final set in exercise.sets) {
+        if (set.isWarmUp) warmUpSets++;
+        if (!AnalyticsService.isWorkingSet(set)) continue;
+        workingSets++;
+        volume += AnalyticsService.setVolume(set);
+        if (set.weight > topSet) topSet = set.weight;
+      }
+
+      exercises.add(_ExerciseSummary(
+        exercise: exercise,
+        workingSets: workingSets,
+        volume: volume,
+        topSet: topSet,
+      ));
+    }
+
+    return _SessionSummary(
+      durationMinutes: session.durationInMinutes,
+      volume: AnalyticsService.sessionVolume(session),
+      workingSets: AnalyticsService.sessionWorkingSets(session),
+      warmUpSets: warmUpSets,
+      reps: AnalyticsService.sessionReps(session),
+      topSet: AnalyticsService.sessionTopSet(session),
+      exercises: exercises,
     );
   }
 }

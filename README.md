@@ -1,120 +1,119 @@
-# 🏋️ Gym App - Comprehensive Workout Tracker
+# 🏋️ Repicore — Workout Tracker
 
-A modern, feature-rich Flutter application for tracking workouts, analyzing progress, and managing training programs with real-time synchronization across devices.
+A Flutter app for logging training, tracking strength over time, and seeing
+whether the work is actually adding up. Real-time sync across devices via
+Firebase.
 
 ## ✨ Features
 
-### 🎯 **Workout Management**
-- Create custom workout programs with multiple exercises
-- Track working sets and warm-up sets separately  
-- Real-time timer during workout sessions
-- Auto-fill previous session data with smart placeholders
-- Visual indicators to distinguish warm-up from working sets
+### 🎯 Workout management
+- Build custom programs with any number of exercises
+- Working sets and warm-up sets tracked separately, everywhere
+- Live session timer that survives app restarts
+- Previous session values pre-filled as placeholders for fast entry
+- Per-set progression (reps and kg) computed against your last session
 
-### 📊 **Advanced Statistics & Analytics**
-- **Exercise Progression**: Interactive charts showing weight progression over time
-- **Muscle Group Analysis**: Radar and bar charts for training distribution
-- **Workout Statistics**: Monthly summaries, total hours, average duration
-- **Popular Programs**: Track most frequently used workout routines
+### 📊 Statistics & analytics
+- **Period comparison** — every headline metric shows its change against the
+  previous equivalent window (7d vs the 7d before, and so on)
+- **Insights** — plain-language observations: volume trends, streaks,
+  lagging muscle groups, plateaued lifts, fresh PRs
+- **Exercise progression** — estimated 1RM, top weight and volume over time,
+  with a trend in kg/week from a least-squares fit
+- **Exercise comparison** — two lifts side by side, normalised so different
+  absolute loads can actually be compared
+- **Personal records** — every lift's best, when it was set, and its curve
+- **Muscle balance** — weekly sets per muscle group scored against the
+  10–20 sets/week hypertrophy band, with concrete "add N sets" guidance
+- **1RM tools** — seven estimation formulas plus a percentage-of-1RM
+  training table
+- **Consistency** — weekly streaks, a training heatmap, and which weekdays
+  you actually show up
 
-### 🎨 **Modern UI/UX**
-- Dark theme optimized for gym environments
-- Material Design 3 with subtle red accents
-- Smooth animations and intuitive navigation
+### 🎨 Design
+- Floating frosted navigation, collapsing large titles, edge-to-edge layout
+- Eight palettes, light and dark, all fully themed — no hardcoded colours
+- Motion on every state change: staggered entrances, press feedback,
+  rolling numbers, spring-animated selection
 
-### 🔥 **Smart Features**
-- **Warm-up Set Support**: Separate tracking for warm-up vs working sets
-- **Auto-complete**: Smart suggestions based on previous workouts
-- **Real-time Sync**: Data syncs instantly across all your devices
-- **Offline Support**: Works without internet, syncs when reconnected
-- **Exercise Library**: Organized by muscle groups (Chest, Back, Shoulders, Biceps, Triceps, Quads, Hamstrings, Glutes, Calf, Abs)
+## 🛠️ Tech stack
 
-## 🛠️ Tech Stack
+**Flutter** · **Riverpod** (state) · **Firebase Auth + Firestore** (backend) ·
+**fl_chart** (visualisation) · **shared_preferences** (local settings)
 
-### **Frontend**
-- **Flutter** - Cross-platform UI framework
-- **Dart** - Programming language
-- **Material Design 3** - Modern UI components
-
-### **State Management**
-- **Riverpod** - Type-safe, compile-time state management
-- Immutable state patterns for reliability
-- Reactive updates across the entire app
-
-### **Backend & Database**
-- **Firebase Firestore** - NoSQL database with real-time updates
-- **Firebase Auth** - User authentication and management
-
-### **Data Visualization**
-- **fl_chart** - Interactive charts and graphs
-- Custom color-coded muscle group visualization
-- Progressive weight tracking with smooth animations
-
-### **Additional Packages**
-- `uuid` - Unique ID generation
-- `intl` - Internationalization and date formatting
-- `firebase_core` - Firebase initialization
-
-
-## 🏗️ Project Architecture
+## 🏗️ Architecture
 
 ```
 lib/
-├── main.dart                 # App entry point with Firebase & Riverpod setup
-├── models/                   # Data models (Workout, Exercise, Session)
-│   ├── exercise_model.dart
-│   ├── master_exercise_model.dart
-│   ├── workout_model.dart
-│   └── workout_session_model.dart
-├── pages/                    # UI screens
-│   ├── main_screen.dart      # Bottom navigation
-│   ├── home_screen.dart      # Dashboard
-│   ├── active_workout_screen.dart
-│   ├── statistics_screen.dart
-│   ├── create_workout.dart
-│   └── ...
-├── providers/                # Riverpod state management
-│   └── workout_provider.dart
-├── services/                 # Business logic
-│   ├── database_service.dart
+├── main.dart                     # Entry point: Firebase, Riverpod, edge-to-edge
+├── theme/
+│   ├── app_theme.dart            # AppColors palettes + semantic colour tokens
+│   ├── design_tokens.dart        # Spacing, radii, motion, type, formatting
+│   └── app_theme_data.dart       # Material ThemeData built from a palette
+├── widgets/ui/                   # The UI kit — every screen is built from this
+│   ├── ui.dart                   # Barrel: one import gets the whole kit
+│   ├── app_scaffold.dart         # Page shell w/ collapsing large title
+│   ├── floating_nav_bar.dart     # The floating frosted nav pill
+│   ├── app_card.dart             # Surfaces, tiles, icon badges
+│   ├── app_buttons.dart          # Buttons, icon buttons, FAB
+│   ├── app_chips.dart            # Segmented control, chips, delta badges
+│   ├── stat_tile.dart            # Stat tiles, bars, sparklines
+│   ├── progress_ring.dart        # Rings and the week strip
+│   ├── app_sheet.dart            # Sheets and dialogs
+│   ├── feedback.dart             # Empty / loading / error / snack bars
+│   ├── section_header.dart
+│   └── motion.dart               # FadeSlideIn, Pressable, CountUp
+├── models/                       # Workout, Exercise, Session
+├── pages/                        # Screens
+├── providers/
+│   ├── theme_provider.dart
+│   ├── workout_provider.dart     # Live workout state machine
+│   ├── workout_settings_provider.dart
+│   └── analytics_provider.dart   # One cached history fetch for all stats
+├── services/
+│   ├── database_service.dart     # Firestore access
+│   ├── analytics_service.dart    # Pure statistics engine (unit tested)
 │   └── auth_service.dart
-└── widgets/                  # Reusable components
-    ├── workout_widget.dart
-    ├── stat_card.dart
-    ├── progression_chart_widget.dart
-    └── ...
+└── utils/one_rm_calculator.dart
 ```
 
+### Statistics data flow
 
-## 🎯 Key Features Deep Dive
+`analytics_service.dart` is pure: it takes `List<WorkoutSession>` and returns
+value objects. `analytics_provider.dart` fetches the session history **once**
+and caches it; every stats screen derives what it needs from that snapshot.
 
-### **Workout Session Management**
-- **Active Session Tracking**: Real-time timer with automatic state persistence
-- **Smart Data Entry**: Previous session data auto-fills for quick entry
-- **Flexible Set Structure**: Support for both warm-up and working sets
-- **Progress Indicators**: Visual feedback showing workout completion status
+Consistent definitions across the whole app:
 
-### **Data Visualization**
-- **Progressive Overload Tracking**: Line charts showing weight increases over time
-- **Muscle Balance Analysis**: Radar charts revealing training imbalances
-- **Volume Metrics**: Track total sets, reps, and training frequency
-- **Time-based Filtering**: View statistics for different time periods
+- **working set** — `!isWarmUp && weight > 0 && reps > 0`
+- **volume / tonnage** — Σ `weight × reps` over working sets
+- **estimated 1RM** — Epley, only from sets of ≤ 12 reps
+- **week** — starts Monday
 
+## 🎨 Contributing to the UI
 
-## 🔒 Security & Privacy
+Read `docs/DESIGN_SYSTEM.md` before changing anything visual. Short version:
+never hardcode a colour, a padding number or an animation duration — every one
+of them has a token.
 
-- **Firebase Security Rules**: Proper user data isolation
-- **Authentication**: Secure login with Firebase Auth
-- **Data Validation**: Client and server-side validation
-- **Privacy First**: No tracking, no ads, user data stays private
+## 🧪 Tests
 
+```bash
+flutter test
+```
+
+`test/analytics_service_test.dart` covers the statistics engine: working-set
+rules, week boundaries, period comparison, streaks, progression, plateau
+detection, muscle-group bucketing and formatting.
+
+## 🔒 Security & privacy
+
+- Firestore security rules isolate each user's data
+- Firebase Auth for sign-in
+- No tracking, no ads
 
 ## 📞 Contact
 
 **Gabriel Erneving**
 - GitHub: [@gabrielerneving](https://github.com/gabrielerneving)
 - Website: https://gabrielerneving.se
-
----
-
-*Built with ❤️ 

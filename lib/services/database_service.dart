@@ -5,11 +5,19 @@ import '../models/master_exercise_model.dart';
 import '../models/exercise_model.dart';
 import '../models/workout_session_model.dart';
 import '../models/standard_workout_template.dart';
-import '../utils/one_rm_calculator.dart';
 
+/// Firestore access for one user.
+///
+/// This is deliberately CRUD-only. Everything derived — volume, streaks,
+/// progression, 1RM, muscle balance — lives in `services/analytics_service.dart`
+/// and runs against a single cached fetch of the session history. The
+/// statistics helpers that used to live here re-read the whole
+/// `workout_sessions` collection once per exercise, and had their own slightly
+/// different idea of what counted as a working set. Do not add derived metrics
+/// back into this class.
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  static bool _legsMigrationDone = false;
+  static bool _legacyCategoryMigrationDone = false;
 
   // Användarens unika ID
   final String uid;
@@ -295,338 +303,6 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     }
   }
 
-  // Hämta träningspass för en specifik tidsperiod
-  Future<List<WorkoutSession>> getWorkoutSessionsInPeriod({
-    required DateTime startDate,
-    required DateTime endDate,
-  }) async {
-    try {
-      final querySnapshot = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workout_sessions')
-          .where('date', isGreaterThanOrEqualTo: startDate)
-          .where('date', isLessThanOrEqualTo: endDate)
-          .orderBy('date', descending: true)
-          .get();
-
-      return querySnapshot.docs
-          .map((doc) => WorkoutSession.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      debugPrint("Error fetching workout sessions in period: $e");
-      return [];
-    }
-  }
-
-  // Räkna träningspass denna månad
-  Future<int> getWorkoutsThisMonth() async {
-    final now = DateTime.now();
-    final startOfMonth = DateTime(now.year, now.month, 1);
-    final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-    
-    final sessions = await getWorkoutSessionsInPeriod(
-      startDate: startOfMonth,
-      endDate: endOfMonth,
-    );
-    
-    return sessions.length;
-  }
-
-  // Räkna totala antal träningspass
-  Future<int> getTotalWorkouts() async {
-    try {
-      final querySnapshot = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workout_sessions')
-          .get();
-
-      return querySnapshot.docs.length;
-    } catch (e) {
-      debugPrint("Error counting total workouts: $e");
-      return 0;
-    }
-  }
-
-  // Räkna total träningstid i timmar
-  Future<double> getTotalTrainingHours() async {
-    final sessions = await getAllWorkoutSessions();
-    final totalMinutes = sessions.fold<int>(
-      0, 
-      (sum, session) => sum + session.durationInMinutes,
-    );
-    return totalMinutes / 60.0;
-  }
-
-  // Hämta mest tränade program
-  Future<Map<String, int>> getMostTrainedPrograms() async {
-    final sessions = await getAllWorkoutSessions();
-    final programCounts = <String, int>{};
-    
-    for (final session in sessions) {
-      programCounts[session.programTitle] = 
-          (programCounts[session.programTitle] ?? 0) + 1;
-    }
-    
-    // Sortera efter antal träningar och ta bara top 5
-    final sortedEntries = programCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    // Returnera bara de första 5
-    final top5Entries = sortedEntries.take(5);
-    return Map.fromEntries(top5Entries);
-  }
-
-  // Beräkna genomsnittlig träningstid
-  Future<double> getAverageWorkoutDuration() async {
-    final sessions = await getAllWorkoutSessions();
-    if (sessions.isEmpty) return 0.0;
-    
-    final totalMinutes = sessions.fold<int>(
-      0, 
-      (sum, session) => sum + session.durationInMinutes,
-    );
-    
-    return totalMinutes / sessions.length;
-  }
-
-  // PROGRESSION METODER FÖR GRAFER
-
-  // Hämta alla unika övningsnamn från historiken
-  Future<List<String>> getAllExerciseNames() async {
-    final sessions = await getAllWorkoutSessions();
-    final exerciseNames = <String>{};
-    
-    for (final session in sessions) {
-      for (final exercise in session.completedExercises) {
-        exerciseNames.add(exercise.name);
-      }
-    }
-    
-    return exerciseNames.toList()..sort();
-  }
-
-  // Hämta alla unika programtitlar från historiken
-  Future<List<String>> getAllProgramTitles() async {
-    final sessions = await getAllWorkoutSessions();
-    final programTitles = <String>{};
-    
-    for (final session in sessions) {
-      programTitles.add(session.programTitle);
-    }
-    
-    return programTitles.toList()..sort();
-  }
-
-  // Hämta viktprogression för en specifik övning över tid
-  // Visar både max vikt och max volym för varje träningspass
-  Future<List<ProgressionDataPoint>> getExerciseProgression(String exerciseName, {String? programTitle}) async {
-    var sessions = await getAllWorkoutSessions();
-    
-    // Filter by program title if provided
-    if (programTitle != null) {
-      sessions = sessions.where((s) => s.programTitle == programTitle).toList();
-    }
-    
-    final progressionData = <ProgressionDataPoint>[];
-    
-    for (final session in sessions) {
-      // Leta efter övningen i denna session
-      final exercise = session.completedExercises
-          .where((ex) => ex.name == exerciseName)
-          .firstOrNull;
-      
-      if (exercise != null && exercise.sets.isNotEmpty) {
-        // Filtrera bort warm-up sets och tomma sets
-        final completedWorkingSets = exercise.sets
-            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
-            .toList();
-        
-        if (completedWorkingSets.isNotEmpty) {
-          // Hitta setet med högst vikt
-          var maxWeightSet = completedWorkingSets.first;
-          for (final set in completedWorkingSets) {
-            if (set.weight > maxWeightSet.weight) {
-              maxWeightSet = set;
-            }
-          }
-          
-          // Beräkna total volym (summa av vikt × reps för alla arbetssets)
-          double totalVolume = 0;
-          for (final set in completedWorkingSets) {
-            totalVolume += set.weight * set.reps;
-          }
-        
-          progressionData.add(
-            ProgressionDataPoint(
-              date: session.date,
-              maxWeight: maxWeightSet.weight,
-              maxWeightReps: maxWeightSet.reps,
-              totalVolume: totalVolume,
-              sessionId: session.id,
-            ),
-          );
-        }
-      }
-    }
-    
-    // Sortera efter datum (äldst först)
-    progressionData.sort((a, b) => a.date.compareTo(b.date));
-    
-    return progressionData;
-  }
-
-  // Hämta volymprogression (weight * reps * sets) för en övning
-  Future<List<VolumeDataPoint>> getExerciseVolumeProgression(String exerciseName, {String? programTitle}) async {
-    var sessions = await getAllWorkoutSessions();
-    
-    // Filter by program title if provided
-    if (programTitle != null) {
-      sessions = sessions.where((s) => s.programTitle == programTitle).toList();
-    }
-    
-    final volumeData = <VolumeDataPoint>[];
-    
-    for (final session in sessions) {
-      final exercise = session.completedExercises
-          .where((ex) => ex.name == exerciseName)
-          .firstOrNull;
-      
-      if (exercise != null && exercise.sets.isNotEmpty) {
-        // Beräkna total volym för denna övning i denna session (bara genomförda working sets)
-        double totalVolume = 0;
-        for (final set in exercise.sets) {
-          // Räkna bara genomförda working sets med faktisk data
-          if (!set.isWarmUp && set.weight > 0 && set.reps > 0) {
-            totalVolume += set.weight * set.reps;
-          }
-        }
-        
-        // Lägg bara till om det finns faktisk volym
-        if (totalVolume > 0) {
-          volumeData.add(
-            VolumeDataPoint(
-              date: session.date,
-              volume: totalVolume,
-              sessionId: session.id,
-            ),
-          );
-        }
-      }
-    }
-    
-    volumeData.sort((a, b) => a.date.compareTo(b.date));
-    return volumeData;
-  }
-
-  // 1RM METODER
-  
-  // Hämta 1RM progression för en specifik övning
-  Future<List<OneRMDataPoint>> getOneRMProgression(
-    String exerciseName, 
-    {OneRMFormula formula = OneRMFormula.epley}
-  ) async {
-    final sessions = await getAllWorkoutSessions();
-    final oneRMData = <OneRMDataPoint>[];
-    
-    for (final session in sessions) {
-      final exercise = session.completedExercises
-          .where((ex) => ex.name == exerciseName)
-          .firstOrNull;
-      
-      if (exercise != null && exercise.sets.isNotEmpty) {
-        // Hitta det bästa setet för 1RM beräkning (exklusive warm-up och tomma sets)
-        final validSets = exercise.sets
-            .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0 && set.reps <= 12);
-        
-        if (validSets.isNotEmpty) {
-          // Beräkna 1RM för alla sets och ta högsta
-          double maxOneRM = 0;
-          double bestWeight = 0;
-          int bestReps = 0;
-          
-          for (final set in validSets) {
-            final calculatedOneRM = OneRMCalculator.calculate(
-              set.weight, 
-              set.reps, 
-              formula
-            );
-            if (calculatedOneRM > maxOneRM) {
-              maxOneRM = calculatedOneRM;
-              bestWeight = set.weight;
-              bestReps = set.reps;
-            }
-          }
-          
-          oneRMData.add(
-            OneRMDataPoint(
-              date: session.date,
-              oneRM: maxOneRM,
-              weight: bestWeight,
-              reps: bestReps,
-              sessionId: session.id,
-              formula: formula.displayName,
-            ),
-          );
-        }
-      }
-    }
-    
-    oneRMData.sort((a, b) => a.date.compareTo(b.date));
-    return oneRMData;
-  }
-
-  // Hämta nuvarande estimated 1RM för en övning
-  Future<double?> getCurrentOneRM(
-    String exerciseName,
-    {OneRMFormula formula = OneRMFormula.epley}
-  ) async {
-    final progression = await getOneRMProgression(exerciseName, formula: formula);
-    if (progression.isEmpty) return null;
-    return progression.last.oneRM;
-  }
-
-  // Hämta alla övningars nuvarande 1RM
-  Future<Map<String, double>> getAllCurrentOneRMs({
-    OneRMFormula formula = OneRMFormula.epley
-  }) async {
-    final exerciseNames = await getAllExerciseNames();
-    final oneRMs = <String, double>{};
-    
-    for (final exerciseName in exerciseNames) {
-      final oneRM = await getCurrentOneRM(exerciseName, formula: formula);
-      if (oneRM != null) {
-        oneRMs[exerciseName] = oneRM;
-      }
-    }
-    
-    return oneRMs;
-  }
-
-  // Hämta personliga rekord för alla övningar
-  Future<Map<String, PersonalRecord>> getAllPersonalRecords() async {
-    final exerciseNames = await getAllExerciseNames();
-    final personalRecords = <String, PersonalRecord>{};
-    
-    for (final exerciseName in exerciseNames) {
-      final progression = await getExerciseProgression(exerciseName);
-      if (progression.isNotEmpty) {
-        // Hitta det tyngsta lyftet för denna övning
-        final maxWeightPoint = progression
-            .reduce((a, b) => a.maxWeight > b.maxWeight ? a : b);
-        
-        personalRecords[exerciseName] = PersonalRecord(
-          exerciseName: exerciseName,
-          weight: maxWeightPoint.maxWeight,
-          date: maxWeightPoint.date,
-          sessionId: maxWeightPoint.sessionId,
-        );
-      }
-    }
-    
-    return personalRecords;
-  }
 
   // MUSKELGRUPP STATISTIK METODER
 
@@ -664,26 +340,29 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         }
       }
       
-      // Also check for legacy "Legs" category and map to "Quads"
-      final legsSnapshot = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('master_exercises')
-          .where('category', isEqualTo: 'Legs')
-          .get();
-          
-      for (final doc in legsSnapshot.docs) {
-        final exerciseData = doc.data();
-        final exerciseName = exerciseData['name'] as String;
-        exerciseToMuscleGroup[exerciseName] = 'Quads'; // Map legacy "Legs" to "Quads"
+      // Läs in kategorinamn som appen inte längre använder, så att gamla
+      // övningar fortfarande räknas i statistiken.
+      for (final entry in legacyCategoryAliases.entries) {
+        final snapshot = await _db
+            .collection('users')
+            .doc(uid)
+            .collection('master_exercises')
+            .where('category', isEqualTo: entry.key)
+            .get();
+
+        for (final doc in snapshot.docs) {
+          final exerciseData = doc.data();
+          final exerciseName = exerciseData['name'] as String;
+          exerciseToMuscleGroup[exerciseName] = entry.value;
+        }
       }
-      
+
       // Migration: Run only once per app session to avoid repeated writes on every read
-      if (!_legsMigrationDone) {
-        await _migrateLegsCategory();
-        _legsMigrationDone = true;
+      if (!_legacyCategoryMigrationDone) {
+        await _migrateLegacyCategories();
+        _legacyCategoryMigrationDone = true;
       }
-      
+
       return exerciseToMuscleGroup;
     } catch (e) {
       debugPrint('Error fetching exercise to muscle group mapping: $e');
@@ -691,223 +370,36 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     }
   }
 
-  // Migration method to convert "Legs" to "Quads"
-  Future<void> _migrateLegsCategory() async {
-    try {
-      final snapshot = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('master_exercises')
-          .where('category', isEqualTo: 'Legs')
-          .get();
-          
-      for (final doc in snapshot.docs) {
-        await doc.reference.update({'category': 'Quads'});
+  /// Kategorinamn som har använts tidigare, och vad de heter idag.
+  ///
+  /// Nycklarna får ALDRIG tas bort: en övning som ligger kvar under ett gammalt
+  /// namn hittas annars inte av `muscleGroups`-frågorna, och all träning för den
+  /// muskelgruppen försvinner tyst ur statistiken.
+  static const Map<String, String> legacyCategoryAliases = {
+    'Legs': 'Quads',
+    'Calf': 'Calves',
+  };
+
+  // Skriver om gamla kategorinamn till de nuvarande.
+  Future<void> _migrateLegacyCategories() async {
+    for (final entry in legacyCategoryAliases.entries) {
+      try {
+        final snapshot = await _db
+            .collection('users')
+            .doc(uid)
+            .collection('master_exercises')
+            .where('category', isEqualTo: entry.key)
+            .get();
+
+        for (final doc in snapshot.docs) {
+          await doc.reference.update({'category': entry.value});
+        }
+      } catch (e) {
+        debugPrint('Error migrating ${entry.key} category: $e');
       }
-    } catch (e) {
-      debugPrint('Error migrating Legs category: $e');
     }
   }
 
-  // Räkna sets per muskelgrupp från träningshistorik
-  Future<Map<String, int>> getMuscleGroupSetCounts() async {
-    try {
-      final sessions = await getAllWorkoutSessions();
-      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
-      final muscleGroupCounts = <String, int>{};
-      
-      // Initialisera alla muskelgrupper med 0
-      for (final muscleGroup in muscleGroups) {
-        muscleGroupCounts[muscleGroup] = 0;
-      }
-      
-      // Räkna sets för varje session
-      for (final session in sessions) {
-        for (final completedExercise in session.completedExercises) {
-          final exerciseName = completedExercise.name;
-          final muscleGroup = exerciseToMuscleGroup[exerciseName];
-          
-          if (muscleGroup != null) {
-            // Räkna bara genomförda working sets (med weight > 0 och reps > 0)
-            final completedWorkingSetsCount = completedExercise.sets
-                .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
-                .length;
-            muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + completedWorkingSetsCount;
-          }
-        }
-      }
-      
-      return muscleGroupCounts;
-    } catch (e) {
-      debugPrint('Error calculating muscle group set counts: $e');
-      return {};
-    }
-  }
-
-  // Räkna sets per muskelgrupp för en specifik tidsperiod
-  Future<Map<String, int>> getMuscleGroupSetCountsInPeriod({
-    required DateTime startDate,
-    required DateTime endDate,
-  }) async {
-    try {
-      final sessions = await getWorkoutSessionsInPeriod(
-        startDate: startDate,
-        endDate: endDate,
-      );
-      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
-      final muscleGroupCounts = <String, int>{};
-      
-      // Initialisera alla muskelgrupper med 0
-      for (final muscleGroup in muscleGroups) {
-        muscleGroupCounts[muscleGroup] = 0;
-      }
-      
-      // Räkna sets för varje session i perioden
-      for (final session in sessions) {
-        for (final completedExercise in session.completedExercises) {
-          final exerciseName = completedExercise.name;
-          final muscleGroup = exerciseToMuscleGroup[exerciseName];
-          
-          if (muscleGroup != null) {
-            // Räkna bara genomförda working sets (med weight > 0 och reps > 0)
-            final completedWorkingSetsCount = completedExercise.sets
-                .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
-                .length;
-            muscleGroupCounts[muscleGroup] = 
-                (muscleGroupCounts[muscleGroup] ?? 0) + completedWorkingSetsCount;
-          }
-        }
-      }
-      
-      return muscleGroupCounts;
-    } catch (e) {
-      debugPrint('Error calculating muscle group set counts for period: $e');
-      return {};
-    }
-  }
-
-  // Räkna working sets per muskelgrupp, uppdelat i tidsbuckets.
-  // Returnerar en lista där varje element är en Map<muscleGroup, count>
-  // för motsvarande bucket (i samma ordning som bucketsStarts/bucketsEnds).
-  // Endast EN hämtning av sessions + exercise map, bucketindelning görs i minnet.
-  Future<List<Map<String, int>>> getMuscleGroupCountsByBuckets({
-    required List<DateTime> bucketStarts,
-    required List<DateTime> bucketEnds,
-  }) async {
-    assert(bucketStarts.length == bucketEnds.length);
-    try {
-      if (bucketStarts.isEmpty) return [];
-
-      final overallStart = bucketStarts.reduce((a, b) => a.isBefore(b) ? a : b);
-      final overallEnd = bucketEnds.reduce((a, b) => a.isAfter(b) ? a : b);
-
-      final sessions = await getWorkoutSessionsInPeriod(
-        startDate: overallStart,
-        endDate: overallEnd,
-      );
-      final exerciseToMuscleGroup = await getExerciseToMuscleGroupMap();
-
-      final result = List<Map<String, int>>.generate(bucketStarts.length, (_) {
-        final m = <String, int>{};
-        for (final mg in muscleGroups) {
-          m[mg] = 0;
-        }
-        return m;
-      });
-
-      for (final session in sessions) {
-        final sessionDate = session.date;
-        int bucketIndex = -1;
-        for (int i = 0; i < bucketStarts.length; i++) {
-          if (!sessionDate.isBefore(bucketStarts[i]) &&
-              !sessionDate.isAfter(bucketEnds[i])) {
-            bucketIndex = i;
-            break;
-          }
-        }
-        if (bucketIndex == -1) continue;
-
-        for (final completedExercise in session.completedExercises) {
-          final muscleGroup = exerciseToMuscleGroup[completedExercise.name];
-          if (muscleGroup == null) continue;
-
-          final workingSetsCount = completedExercise.sets
-              .where((set) => !set.isWarmUp && set.weight > 0 && set.reps > 0)
-              .length;
-          result[bucketIndex][muscleGroup] =
-              (result[bucketIndex][muscleGroup] ?? 0) + workingSetsCount;
-        }
-      }
-
-      return result;
-    } catch (e) {
-      debugPrint('Error calculating muscle group counts by buckets: $e');
-      return List.generate(bucketStarts.length, (_) {
-        final m = <String, int>{};
-        for (final mg in muscleGroups) {
-          m[mg] = 0;
-        }
-        return m;
-      });
-    }
-  }
-
-  // Hitta mest tränade muskelgrupper (sorterat)
-  Future<List<MuscleGroupStat>> getMostTrainedMuscleGroups() async {
-    final setCounts = await getMuscleGroupSetCounts();
-    final stats = <MuscleGroupStat>[];
-    
-    for (final entry in setCounts.entries) {
-      stats.add(MuscleGroupStat(
-        muscleGroup: entry.key,
-        setCount: entry.value,
-      ));
-    }
-    
-    // Sortera efter antal sets (högst först)
-    stats.sort((a, b) => b.setCount.compareTo(a.setCount));
-    
-    return stats;
-  }
-
-  // Heatmap Data
-  Future<Map<DateTime, int>> getWorkoutHeatmapData() async {
-    try {
-      final sessions = await getAllWorkoutSessions();
-      final Map<DateTime, int> heatmapData = {};
-
-      for (final session in sessions) {
-        // Normalize date to remove time
-        final dateKey = DateTime(session.date.year, session.date.month, session.date.day);
-        
-        if (heatmapData.containsKey(dateKey)) {
-          heatmapData[dateKey] = heatmapData[dateKey]! + 1;
-        } else {
-          heatmapData[dateKey] = 1;
-        }
-      }
-      return heatmapData;
-    } catch (e) {
-      debugPrint('Error fetching heatmap data: $e');
-      return {};
-    }
-  }
-
-  // Beräkna muskelgrupp fördelning i procent
-  Future<Map<String, double>> getMuscleGroupPercentages() async {
-    final setCounts = await getMuscleGroupSetCounts();
-    final totalSets = setCounts.values.fold<int>(0, (sum, count) => sum + count);
-    
-    if (totalSets == 0) return {};
-    
-    final percentages = <String, double>{};
-    for (final entry in setCounts.entries) {
-      percentages[entry.key] = (entry.value / totalSets) * 100;
-    }
-    
-    return percentages;
-  }
 
   // Save standard workout as user's own workout
   Future<void> saveStandardWorkoutAsOwn(StandardWorkoutTemplate template) async {
@@ -1008,9 +500,10 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     // Glutes exercises
     if (name.contains('thrust') || name.contains('glute') || name.contains('hip')) return 'Glutes';
     
-    // Calf exercises
+    // Calf exercises — must return 'Calves' to match `muscleGroups`, otherwise
+    // the sets land in a category nothing queries and vanish from statistics.
     if (name.contains('calf') || (name.contains('raise') && (name.contains('standing') || name.contains('seated')))) {
-      return 'Calf';
+      return 'Calves';
     }
     
     // Abs exercises
@@ -1083,77 +576,6 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
 
 }
 
-// Dataklasser för progression
-class ProgressionDataPoint {
-  final DateTime date;
-  final double maxWeight; // Högsta vikten oavsett reps
-  final int maxWeightReps; // Reps för högsta vikten
-  final double totalVolume; // Total volym för alla arbetssets (summa av vikt × reps)
-  final String sessionId;
-
-  ProgressionDataPoint({
-    required this.date,
-    required this.maxWeight,
-    required this.maxWeightReps,
-    required this.totalVolume,
-    required this.sessionId,
-  });
-}
-
-class VolumeDataPoint {
-  final DateTime date;
-  final double volume;
-  final String sessionId;
-
-  VolumeDataPoint({
-    required this.date,
-    required this.volume,
-    required this.sessionId,
-  });
-}
-
-class PersonalRecord {
-  final String exerciseName;
-  final double weight;
-  final DateTime date;
-  final String sessionId;
-
-  PersonalRecord({
-    required this.exerciseName,
-    required this.weight,
-    required this.date,
-    required this.sessionId,
-  });
-}
-
-class MuscleGroupStat {
-  final String muscleGroup;
-  final int setCount;
-
-  MuscleGroupStat({
-    required this.muscleGroup,
-    required this.setCount,
-  });
-}
-
-// 1RM (One Rep Max) data point
-class OneRMDataPoint {
-  final DateTime date;
-  final double oneRM;
-  final double weight;
-  final int reps;
-  final String sessionId;
-  final String formula; // Vilken formel som användes
-
-  OneRMDataPoint({
-    required this.date,
-    required this.oneRM,
-    required this.weight,
-    required this.reps,
-    required this.sessionId,
-    required this.formula,
-  });
-}
 
 // Static methods for standard workout templates (no uid needed)
 class StandardWorkoutService {

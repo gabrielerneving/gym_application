@@ -1,348 +1,231 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../providers/theme_provider.dart';
-import '../providers/workout_settings_provider.dart';
+
 import '../models/workout_session_model.dart';
 import '../pages/workout_detail_page.dart';
-import '../services/database_service.dart';
+import '../providers/theme_provider.dart';
+import '../providers/workout_settings_provider.dart';
+import '../services/analytics_service.dart';
+import 'ui/ui.dart';
 
+/// One completed session in the History list.
+///
+/// Purely presentational: every number comes from [AnalyticsService] so the
+/// card, the statistics screens and the detail page agree on what a working
+/// set and a tonne of volume are.
+///
+/// Tapping opens the detail page unless [onTap] overrides it. Deletion is owned
+/// by the screen — it wires [onDelete] to the same confirm flow the swipe uses.
 class WorkoutHistoryWidget extends ConsumerWidget {
   final WorkoutSession session;
 
-  const WorkoutHistoryWidget({Key? key, required this.session}) : super(key: key);
+  /// Defaults to pushing [WorkoutDetailPage].
+  final VoidCallback? onTap;
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref, dynamic theme) {
-    HapticFeedback.mediumImpact(); // Haptic när dialogen öppnas
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: theme.card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Delete Workout',
-            style: TextStyle(color: theme.text, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Are you sure you want to delete this workout? This action cannot be undone.',
-            style: TextStyle(color: theme.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-                HapticFeedback.heavyImpact(); // Starkare haptic för delete
-                Navigator.of(dialogContext).pop();
-                await _deleteWorkout(context);
-              },
-              child: Text(
-                'Delete',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  /// Long-press handler. Null hides the gesture entirely.
+  final VoidCallback? onDelete;
 
-  Future<void> _deleteWorkout(BuildContext context) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  const WorkoutHistoryWidget({
+    super.key,
+    required this.session,
+    this.onTap,
+    this.onDelete,
+  });
 
-    try {
-      final dbService = DatabaseService(uid: uid);
-      await dbService.deleteWorkoutSession(session.id);
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Workout deleted successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting workout: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
+  static final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
 
-  bool _hasProgression() {
+  /// Sets that beat the previous session — in reps or in load.
+  static int progressionWins(WorkoutSession session) {
+    var wins = 0;
     for (final exercise in session.completedExercises) {
       for (final set in exercise.sets) {
-        if ((set.progression != null && set.progression != 0) ||
-            (set.weightProgression != null && set.weightProgression != 0)) {
-          return true;
-        }
+        final reps = set.progression ?? 0;
+        final weight = set.weightProgression ?? 0.0;
+        if (reps > 0 || weight > 0) wins++;
       }
     }
-    return false;
-  }
-
-  List<Widget> _buildProgressionIndicators(dynamic theme) {
-    final indicators = <Widget>[];
-    
-    for (final exercise in session.completedExercises) {
-      for (final set in exercise.sets) {
-        // Rep progression indicator
-        if (set.progression != null && set.progression != 0) {
-          final isPositive = set.progression! > 0;
-          indicators.add(
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: isPositive 
-                  ? Colors.green.withOpacity(0.15) 
-                  : Colors.red.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isPositive ? Colors.green : Colors.red,
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                '${isPositive ? '+' : ''}${set.progression} reps',
-                style: TextStyle(
-                  color: isPositive ? Colors.green : Colors.red,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          );
-        }
-        
-        // Weight progression indicator
-        if (set.weightProgression != null && set.weightProgression != 0) {
-          final isPositive = set.weightProgression! > 0;
-          final color = isPositive ? theme.primary : Colors.orange;
-          indicators.add(
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: color,
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                '${isPositive ? '+' : ''}${set.weightProgression!.toStringAsFixed(1)} kg',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          );
-        }
-      }
-    }
-    
-    return indicators;
+    return wins;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
-    final themeIndex = ref.watch(themeIndexProvider);
-    final isPinkMode = themeIndex == 1; // Pink theme is at index 1
-    
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => WorkoutDetailPage(session: session),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
-        padding: const EdgeInsets.all(18.0),
-        decoration: BoxDecoration(
-          color: theme.card,
-          borderRadius: BorderRadius.circular(12), // Mindre rundning för Android-stil
-          border: Border.all(
-            color: Colors.grey.withOpacity(0.2),
-            width: 1,
-          ),
-          boxShadow: isPinkMode ? [
-            BoxShadow(
-              color: const Color(0xFFFCE7F3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-              spreadRadius: 0,
-            ),
-          ] : null,
+    final t = ref.watch(themeProvider);
+    final showProgression = ref.watch(workoutSettingsProvider).showProgression;
+
+    final volume = AnalyticsService.sessionVolume(session);
+    final workingSets = AnalyticsService.sessionWorkingSets(session);
+    final topSet = AnalyticsService.sessionTopSet(session);
+    final wins = showProgression ? progressionWins(session) : 0;
+
+    final names = session.completedExercises.map((e) => e.name).toList();
+    final preview = names.isEmpty
+        ? ''
+        : names.take(3).join(' · ') +
+            (names.length > 3 ? '   +${names.length - 3} more' : '');
+
+    void open() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WorkoutDetailPage(session: session),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row med titel och delete-ikon
+      );
+    }
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      onTap: onTap ?? open,
+      onLongPress: onDelete,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const IconBadge(
+                icon: Icons.fitness_center_rounded,
+                size: 42,
+                iconSize: 20,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      session.programTitle.trim().isEmpty
+                          ? 'Workout'
+                          : session.programTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.heading(t),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${AppFormat.relativeDate(session.date)} · '
+                      '${_dateFormat.format(session.date)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.caption(t),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: t.textTertiary,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(height: 1, color: t.divider),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.schedule_rounded,
+                  value: AppFormat.duration(session.durationInMinutes),
+                  label: 'Time',
+                ),
+              ),
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.repeat_rounded,
+                  value: '$workingSets',
+                  label: 'Sets',
+                ),
+              ),
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.bolt_rounded,
+                  value: '${AppFormat.compact(volume)} kg',
+                  label: 'Volume',
+                ),
+              ),
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.arrow_upward_rounded,
+                  value: topSet > 0 ? '${AppFormat.weight(topSet)} kg' : '—',
+                  label: 'Top set',
+                ),
+              ),
+            ],
+          ),
+          if (preview.isNotEmpty || wins > 0) ...[
+            const SizedBox(height: AppSpacing.md),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Vänster sida - titel, datum och stats
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        session.programTitle,
-                        style: TextStyle(
-                          color: theme.text,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('MMM d, yyyy').format(session.date),
-                        style: TextStyle(
-                          color: theme.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Stats chips under datumet
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          // Timer chip
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.timer,
-                                  size: 12,
-                                  color: theme.textSecondary,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  '${session.durationInMinutes}m',
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Exercises count
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.fitness_center,
-                                  size: 12,
-                                  color: theme.textSecondary,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  '${session.completedExercises.length}',
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Progression chips direkt efter
-                          if (ref.watch(workoutSettingsProvider).showProgression && _hasProgression())
-                            ..._buildProgressionIndicators(theme),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.secondary(t).copyWith(fontSize: 13),
                   ),
                 ),
-                
-                // Höger sida - bara delete-ikon
-                IconButton(
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: theme.textSecondary,
-                    size: 20,
+                if (wins > 0) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  AppBadge(
+                    label: '$wins up',
+                    icon: Icons.trending_up_rounded,
+                    color: t.success,
+                    fontSize: 11,
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _showDeleteDialog(context, ref, theme),
-                ),
+                ],
               ],
             ),
-            
-            const SizedBox(height: 12),
-            
-            // Övningar preview - bara namnen
-            Text(
-              session.completedExercises.take(3).map((e) => e.name).join(' • '),
-              style: TextStyle(
-                color: theme.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A small icon + number + label stat, sized to sit four-across in a card.
+class _MiniStat extends ConsumerWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _MiniStat({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 13, color: t.textTertiary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.mono(t, size: 14),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-            
-            if (session.completedExercises.length > 3)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '+${session.completedExercises.length - 3} more',
-                  style: TextStyle(
-                    color: theme.textSecondary,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
           ],
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption(t).copyWith(fontSize: 11),
+        ),
+      ],
     );
   }
 }
