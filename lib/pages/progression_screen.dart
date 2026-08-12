@@ -1,478 +1,1112 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/database_service.dart';
-import '../widgets/progression_chart_widget.dart';
-import '../providers/theme_provider.dart';
-import '../theme/app_theme.dart';
 
+import '../providers/analytics_provider.dart';
+import '../providers/theme_provider.dart';
+import '../services/analytics_service.dart';
+import '../widgets/progression_chart_widget.dart';
+import '../widgets/ui/ui.dart';
+import 'exercise_compare_screen.dart';
+
+/// The three ways of looking at one lift over time.
+enum _ProgressionMetric {
+  oneRm(
+    'Est. 1RM',
+    'Estimated 1RM',
+    'Epley estimate from your heaviest set of 12 reps or fewer',
+    'kg',
+  ),
+  weight(
+    'Top weight',
+    'Top weight',
+    'The heaviest working set in each session',
+    'kg',
+  ),
+  volume(
+    'Volume',
+    'Session volume',
+    'Weight × reps across every working set',
+    'kg',
+  );
+
+  const _ProgressionMetric(this.label, this.title, this.description, this.unit);
+
+  /// Segment label — kept short so three fit on one row.
+  final String label;
+
+  /// Heading above the chart.
+  final String title;
+
+  final String description;
+  final String unit;
+
+  double valueOf(ExercisePoint point) => switch (this) {
+        _ProgressionMetric.oneRm => point.estimatedOneRm,
+        _ProgressionMetric.weight => point.topWeight,
+        _ProgressionMetric.volume => point.volume,
+      };
+
+  double bestOf(ExerciseProgress progress) => switch (this) {
+        _ProgressionMetric.oneRm => progress.bestOneRm,
+        _ProgressionMetric.weight => progress.bestWeight,
+        _ProgressionMetric.volume => progress.bestVolume,
+      };
+
+  List<double> seriesOf(ExerciseProgress progress) => switch (this) {
+        _ProgressionMetric.oneRm => progress.oneRmSeries,
+        _ProgressionMetric.weight => progress.weightSeries,
+        _ProgressionMetric.volume => progress.volumeSeries,
+      };
+
+  /// Change from the first session in view to the latest, as a percentage.
+  double gainOf(ExerciseProgress progress) {
+    if (this == _ProgressionMetric.oneRm) return progress.totalGainPercent;
+    if (progress.points.length < 2) return 0.0;
+    final first = valueOf(progress.points.first);
+    if (first <= 0) return 0.0;
+    return ((valueOf(progress.points.last) - first) / first) * 100;
+  }
+
+  /// Tonnage gets compacted ("12.5k"); weights keep one decimal.
+  String format(double value) => this == _ProgressionMetric.volume
+      ? AppFormat.compact(value)
+      : AppFormat.weight(value);
+
+  /// Session-to-session change reads better as a percentage for volume, which
+  /// swings by hundreds of kilos, and as absolute kilos for the two strength
+  /// metrics.
+  bool get deltaAsPercent => this == _ProgressionMetric.volume;
+}
+
+/// ---------------------------------------------------------------------------
+/// Progression — one exercise, three metrics, every session behind it.
+///
+/// Reads the cached [trainingDataProvider] snapshot; nothing here touches
+/// Firestore directly.
+/// ---------------------------------------------------------------------------
 class ProgressionScreen extends ConsumerStatefulWidget {
-  const ProgressionScreen({Key? key}) : super(key: key);
+  const ProgressionScreen({super.key});
 
   @override
   ConsumerState<ProgressionScreen> createState() => _ProgressionScreenState();
 }
 
 class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
-  DatabaseService? _dbService;
-  List<String> exerciseNames = [];
-  List<String> programTitles = [];
-  Map<String, PersonalRecord> personalRecords = {};
-  String? selectedExercise;
-  String? selectedProgram; // Null means "All Workouts"
-  bool isLoading = true;
+  static const String _title = 'Progression';
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeAndLoadData();
+  /// Maximum number of session rows rendered — the list is not lazy.
+  static const int _maxRows = 40;
+
+  String? _exercise;
+
+  /// Program-title filter. Null means "every workout".
+  String? _program;
+
+  _ProgressionMetric _metric = _ProgressionMetric.oneRm;
+
+  Future<void> _refresh() async {
+    ref.invalidate(workoutSessionsProvider);
+    await ref.read(trainingDataProvider.future);
   }
 
-  Future<void> _initializeAndLoadData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _dbService = DatabaseService(uid: user.uid);
-      await _loadProgressionData();
-    } else {
-      setState(() {
-        isLoading = false;
-      });
-    }
+  /// Exercises that actually have working sets behind them, newest first.
+  List<String> _plottableNames(TrainingData data) {
+    final names = data.exerciseNames
+        .where((name) => (data.exerciseProgress[name]?.points.length ?? 0) > 0)
+        .toList();
+    return names;
   }
 
-  Future<void> _loadProgressionData() async {
-    if (_dbService == null) return;
+  Future<void> _pickExercise(
+    BuildContext context,
+    List<String> names,
+    Map<String, int> counts,
+    String current,
+  ) async {
+    final picked = await ExercisePickerSheet.show(
+      context: context,
+      ref: ref,
+      names: names,
+      sessionCounts: counts,
+      selected: current,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _exercise = picked;
+      // The old program filter rarely applies to a different lift.
+      _program = null;
+    });
+  }
 
-    try {
-      final results = await Future.wait([
-        _dbService!.getAllExerciseNames(),
-        _dbService!.getAllPersonalRecords(),
-        _dbService!.getAllProgramTitles(),
-      ]);
-
-      if (mounted) {
-        setState(() {
-          exerciseNames = results[0] as List<String>;
-          personalRecords = results[1] as Map<String, PersonalRecord>;
-          programTitles = results[2] as List<String>;
-          // Välj första övningen som default
-          if (exerciseNames.isNotEmpty) {
-            selectedExercise = exerciseNames.first;
-          }
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading progression data: $e');
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
+  void _openCompare(BuildContext context, String exercise) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ExerciseCompareScreen(initialA: exercise),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
-          onPressed: () => Navigator.pop(context),
+    final async = ref.watch(trainingDataProvider);
+
+    return async.when(
+      loading: () => const AppScaffold(
+        title: _title,
+        children: [
+          SkeletonCard(height: 84),
+          SizedBox(height: AppSpacing.lg),
+          SkeletonBox(height: 42, radius: AppRadius.pill),
+          SizedBox(height: AppSpacing.lg),
+          SkeletonCard(height: 148),
+          SizedBox(height: AppSpacing.md),
+          SkeletonCard(height: 300),
+        ],
+      ),
+      error: (error, _) => AppScaffold(
+        title: _title,
+        body: ErrorState(
+          message: 'Could not load your training history.\n$error',
+          onRetry: () => ref.invalidate(workoutSessionsProvider),
         ),
-        title: Text(
-          'Progression',
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+      ),
+      data: (data) => _buildContent(context, data),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, TrainingData data) {
+    final names = _plottableNames(data);
+
+    if (names.isEmpty) {
+      return AppScaffold(
+        title: _title,
+        onRefresh: _refresh,
+        body: EmptyState(
+          icon: Icons.timeline_rounded,
+          title: 'No progression yet',
+          message: 'Finish a workout with at least one working set and every '
+              'lift you train shows up here.',
+          actionLabel: 'Go back',
+          onAction: () => Navigator.of(context).maybePop(),
+        ),
+      );
+    }
+
+    final exercise =
+        (_exercise != null && names.contains(_exercise)) ? _exercise! : names.first;
+
+    final all = data.progressFor(exercise);
+    final programs = _programsOf(all);
+    final program =
+        (_program != null && programs.contains(_program)) ? _program : null;
+
+    final progress = program == null
+        ? all
+        : ExerciseProgress(
+            name: exercise,
+            points: all.points
+                .where((point) => point.programTitle == program)
+                .toList(),
+          );
+
+    final counts = <String, int>{
+      for (final name in names)
+        name: data.exerciseProgress[name]?.points.length ?? 0,
+    };
+
+    return AppScaffold(
+      title: _title,
+      subtitle: exercise,
+      onRefresh: _refresh,
+      actions: [
+        AppIconButton(
+          icon: Icons.compare_arrows_rounded,
+          tooltip: 'Compare two exercises',
+          onPressed: () => _openCompare(context, exercise),
+        ),
+      ],
+      children: [
+        _ExerciseSelectorCard(
+          exercise: exercise,
+          sessionCount: all.points.length,
+          lastPerformed: all.latest?.date,
+          onTap: () => _pickExercise(context, names, counts, exercise),
+        ),
+        if (programs.length > 1) ...[
+          const SizedBox(height: AppSpacing.md),
+          _ProgramFilterRow(
+            programs: programs,
+            selected: program,
+            onChanged: (value) => setState(() => _program = value),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        AppSegmented<_ProgressionMetric>(
+          value: _metric,
+          segments: const [
+            AppSegment(
+              value: _ProgressionMetric.oneRm,
+              label: 'Est. 1RM',
+            ),
+            AppSegment(
+              value: _ProgressionMetric.weight,
+              label: 'Top weight',
+            ),
+            AppSegment(
+              value: _ProgressionMetric.volume,
+              label: 'Volume',
+            ),
+          ],
+          onChanged: (value) => setState(() => _metric = value),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (progress.points.isEmpty)
+          _FilteredEmptyCard(
+            exercise: exercise,
+            program: program,
+            onClear: () => setState(() => _program = null),
+          )
+        else ...[
+          _SummaryCard(progress: progress, metric: _metric),
+          const SizedBox(height: AppSpacing.md),
+          _ChartCard(progress: progress, metric: _metric),
+          if (progress.isStalled) ...[
+            const SizedBox(height: AppSpacing.md),
+            _PlateauCard(progress: progress),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          _CompareCta(onTap: () => _openCompare(context, exercise)),
+          SectionHeader(
+            title: 'Sessions',
+            subtitle: _sessionsSubtitle(progress.points.length, program),
+          ),
+          ..._sessionRows(progress),
+        ],
+      ],
+    );
+  }
+
+  String _sessionsSubtitle(int count, String? program) {
+    final noun = count == 1 ? 'session' : 'sessions';
+    return program == null
+        ? '$count $noun logged'
+        : '$count $noun in $program';
+  }
+
+  /// Programs this exercise has actually been performed in.
+  List<String> _programsOf(ExerciseProgress progress) {
+    final titles = <String>{};
+    for (final point in progress.points) {
+      if (point.programTitle.isNotEmpty) titles.add(point.programTitle);
+    }
+    final list = titles.toList();
+    list.sort();
+    return list;
+  }
+
+  List<Widget> _sessionRows(ExerciseProgress progress) {
+    final points = progress.points;
+    final total = points.length;
+    final limit = total > _maxRows ? _maxRows : total;
+
+    final rows = <Widget>[];
+    for (var i = 0; i < limit; i++) {
+      // Newest first.
+      final index = total - 1 - i;
+      rows.add(
+        FadeSlideIn(
+          index: i,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: _SessionRow(
+              point: points[index],
+              previous: index > 0 ? points[index - 1] : null,
+              metric: _metric,
+            ),
           ),
         ),
-        centerTitle: false,
+      );
+    }
+
+    if (total > limit) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          child: Text(
+            'Showing the $limit most recent of $total sessions.',
+            textAlign: TextAlign.center,
+            style: AppType.caption(ref.watch(themeProvider)),
+          ),
+        ),
+      );
+    }
+
+    return rows;
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// The exercise picker. Lives here because Progression owns it, and is shared
+/// with the compare screen so both pickers behave identically.
+/// ---------------------------------------------------------------------------
+class ExercisePickerSheet extends ConsumerStatefulWidget {
+  final List<String> names;
+  final Map<String, int> sessionCounts;
+  final String? selected;
+
+  /// Tint for the selected row — the compare screen colours A and B.
+  final Color? accent;
+
+  const ExercisePickerSheet({
+    super.key,
+    required this.names,
+    required this.sessionCounts,
+    this.selected,
+    this.accent,
+  });
+
+  /// Opens the picker and resolves to the chosen exercise, or null.
+  static Future<String?> show({
+    required BuildContext context,
+    required WidgetRef ref,
+    required List<String> names,
+    required Map<String, int> sessionCounts,
+    String? selected,
+    String title = 'Choose exercise',
+    Color? accent,
+  }) {
+    return AppSheet.show<String>(
+      context: context,
+      ref: ref,
+      title: title,
+      subtitle: '${names.length} '
+          '${names.length == 1 ? 'exercise' : 'exercises'} in your history',
+      builder: (context) => ExercisePickerSheet(
+        names: names,
+        sessionCounts: sessionCounts,
+        selected: selected,
+        accent: accent,
       ),
-      body: isLoading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: theme.primary,
+    );
+  }
+
+  @override
+  ConsumerState<ExercisePickerSheet> createState() =>
+      _ExercisePickerSheetState();
+}
+
+class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
+  final TextEditingController _controller = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ref.watch(themeProvider);
+    final accent = widget.accent ?? t.primary;
+    final query = _query.trim().toLowerCase();
+
+    final matches = query.isEmpty
+        ? widget.names
+        : widget.names
+            .where((name) => name.toLowerCase().contains(query))
+            .toList();
+
+    return Padding(
+      // The sheet sits above the keyboard rather than behind it.
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SearchField(
+            controller: _controller,
+            onChanged: (value) => setState(() => _query = value),
+            onClear: () {
+              _controller.clear();
+              setState(() => _query = '');
+            },
+            hasText: _query.isNotEmpty,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (matches.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+              child: Text(
+                'Nothing matches "${_query.trim()}".',
+                textAlign: TextAlign.center,
+                style: AppType.secondary(t),
               ),
             )
-          : exerciseNames.isEmpty
-              ? _buildEmptyState(theme)
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildExerciseSelector(theme),
-                      const SizedBox(height: 16),
-                      _buildProgramFilter(theme),
-                      const SizedBox(height: 24),
-                      if (selectedExercise != null && personalRecords.containsKey(selectedExercise))
-                        _buildPersonalRecordCard(theme),
-                      const SizedBox(height: 24),
-                      if (selectedExercise != null)
-                        _buildWeightProgressionChart(theme),
-                      const SizedBox(height: 24),
-                      if (selectedExercise != null)
-                        _buildVolumeProgressionChart(theme),
-                    ],
+          else
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: matches.length,
+                itemBuilder: (context, index) {
+                  final name = matches[index];
+                  final count = widget.sessionCounts[name] ?? 0;
+                  final isSelected = name == widget.selected;
+
+                  return Pressable(
+                    scale: 0.99,
+                    onTap: () => Navigator.of(context).pop(name),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isSelected
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            size: 20,
+                            color: isSelected ? accent : t.textTertiary,
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppType.body(t).copyWith(
+                                color: isSelected ? accent : t.text,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            '$count',
+                            style: AppType.mono(t, size: 13)
+                                .copyWith(color: t.textSecondary),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            count == 1 ? 'session' : 'sessions',
+                            style: AppType.caption(t),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchField extends ConsumerWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+  final bool hasText;
+
+  const _SearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+    required this.hasText,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: t.outline),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, size: 18, color: t.textTertiary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              cursorColor: t.primary,
+              textInputAction: TextInputAction.search,
+              style: AppType.body(t),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: 'Search exercises',
+                hintStyle: AppType.secondary(t),
+              ),
+            ),
+          ),
+          if (hasText)
+            Pressable(
+              onTap: onClear,
+              scale: 0.9,
+              child: Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.sm),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: t.textTertiary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// Pieces of the page
+/// ---------------------------------------------------------------------------
+
+class _ExerciseSelectorCard extends ConsumerWidget {
+  final String exercise;
+  final int sessionCount;
+  final DateTime? lastPerformed;
+  final VoidCallback onTap;
+
+  const _ExerciseSelectorCard({
+    required this.exercise,
+    required this.sessionCount,
+    required this.lastPerformed,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final date = lastPerformed;
+
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          const IconBadge(icon: Icons.fitness_center_rounded, filled: true),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('EXERCISE', style: AppType.overline(t)),
+                const SizedBox(height: 4),
+                Text(
+                  exercise,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.heading(t).copyWith(fontSize: 18),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  date == null
+                      ? '$sessionCount sessions'
+                      : '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'} · '
+                          '${AppFormat.relativeDate(date)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption(t),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.unfold_more_rounded, size: 20, color: t.textTertiary),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgramFilterRow extends ConsumerWidget {
+  final List<String> programs;
+  final String? selected;
+  final ValueChanged<String?> onChanged;
+
+  const _ProgramFilterRow({
+    required this.programs,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SizedBox(
+      height: 42,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        children: [
+          AppChip(
+            label: 'All workouts',
+            icon: Icons.all_inclusive_rounded,
+            selected: selected == null,
+            onTap: () => onChanged(null),
+          ),
+          for (final program in programs) ...[
+            const SizedBox(width: AppSpacing.sm),
+            AppChip(
+              label: program,
+              selected: selected == program,
+              onTap: () => onChanged(program),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends ConsumerWidget {
+  final ExerciseProgress progress;
+  final _ProgressionMetric metric;
+
+  const _SummaryCard({required this.progress, required this.metric});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    final current = metric.valueOf(progress.points.last);
+    final best = metric.bestOf(progress);
+    final gain = metric.gainOf(progress);
+    final trend = progress.oneRmPerWeek;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('LATEST SESSION', style: AppType.overline(t)),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Flexible(
+                          child: CountUp(
+                            value: current,
+                            format: metric.format,
+                            style: AppType.metric(t, size: 34),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(metric.unit, style: AppType.caption(t)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DeltaBadge(delta: gain, percent: true),
+                  const SizedBox(height: 5),
+                  Text('since first session', style: AppType.caption(t)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Divider(height: 1, thickness: 1, color: t.divider),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.emoji_events_rounded,
+                  label: 'All-time best',
+                  value: '${metric.format(best)} ${metric.unit}',
+                ),
+              ),
+              Container(width: 1, height: 34, color: t.divider),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.lg),
+                  child: _MiniStat(
+                    icon: trend < 0
+                        ? Icons.trending_down_rounded
+                        : Icons.trending_up_rounded,
+                    label: '1RM trend',
+                    value: AppFormat.delta(trend, unit: 'kg/week'),
+                    color: t.deltaColor(trend),
                   ),
                 ),
-    );
-  }
-
-  Widget _buildEmptyState(AppColors theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.show_chart,
-            size: 64,
-            color: theme.textSecondary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No workout data yet',
-            style: TextStyle(
-              color: theme.text,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Complete some workouts to see your progression',
-            style: TextStyle(
-              color: theme.textSecondary,
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildExerciseSelector(AppColors theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Select Exercise',
-            style: TextStyle(
-              color: theme.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedExercise,
-              isExpanded: true,
-              dropdownColor: theme.card,
-              icon: Icon(Icons.arrow_drop_down, color: theme.textSecondary),
-              style: TextStyle(
-                color: theme.text,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+class _MiniStat extends ConsumerWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? color;
+
+  const _MiniStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final tone = color ?? t.text;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: color ?? t.textTertiary),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.caption(t),
               ),
-              items: exerciseNames.map((String exercise) {
-                return DropdownMenuItem<String>(
-                  value: exercise,
-                  child: Text(exercise, style: TextStyle(color: theme.text)),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    selectedExercise = newValue;
-                  });
-                }
-              },
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.mono(t, size: 16).copyWith(color: tone),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildProgramFilter(AppColors theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
+class _ChartCard extends ConsumerWidget {
+  final ExerciseProgress progress;
+  final _ProgressionMetric metric;
+
+  const _ChartCard({required this.progress, required this.metric});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    final series = ProgressionSeries(
+      label: progress.name,
+      dates: [for (final point in progress.points) point.date],
+      values: metric.seriesOf(progress),
+      color: t.primary,
+      unit: metric.unit,
+    );
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.md,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Filter by Workout',
-            style: TextStyle(
-              color: theme.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: selectedProgram,
-              isExpanded: true,
-              dropdownColor: theme.card,
-              icon: Icon(Icons.filter_list, color: theme.textSecondary),
-              style: TextStyle(
-                color: theme.text,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              hint: Text(
-                'All Workouts',
-                style: TextStyle(
-                  color: theme.text,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('All Workouts', style: TextStyle(color: theme.text)),
-                ),
-                ...programTitles.map((String title) {
-                  return DropdownMenuItem<String?>(
-                    value: title,
-                    child: Text(title, style: TextStyle(color: theme.text)),
-                  );
-                }).toList(),
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(metric.title, style: AppType.heading(t)),
+                const SizedBox(height: 3),
+                Text(metric.description, style: AppType.caption(t)),
               ],
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedProgram = newValue;
-                });
-              },
             ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          ProgressionChartWidget(
+            key: ValueKey<String>('${progress.name}|${metric.name}'),
+            series: [series],
+            height: 226,
+            emptyMessage: 'No sessions to plot yet',
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPersonalRecordCard(AppColors theme) {
-    final record = personalRecords[selectedExercise!]!;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.primary,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
+class _PlateauCard extends ConsumerWidget {
+  final ExerciseProgress progress;
+
+  const _PlateauCard({required this.progress});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    final best = progress.bestOneRm;
+    // Back off to ~90% of the estimate, rounded to the nearest plate jump.
+    final target = ((best * 0.9) / 2.5).round() * 2.5;
+
+    return AppCard(
+      color: t.warning.withValues(alpha: t.isDark ? 0.10 : 0.07),
+      border: Border.all(color: t.warning.withValues(alpha: 0.28)),
+      shadow: const [],
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.emoji_events,
-                color: Colors.white,
-                size: 24,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Personal Record',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          IconBadge(
+            icon: Icons.trending_flat_rounded,
+            color: t.warning,
           ),
-          const SizedBox(height: 12),
-          Text(
-            '${record.weight.toStringAsFixed(1)} kg',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            'Set on ${_formatDate(record.date)}',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeightProgressionChart(AppColors theme) {
-    return Container(
-      height: 350,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Max Weight Progression',
-                style: TextStyle(
-                  color: theme.text,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Tooltip(
-                message: 'Shows the heaviest weight lifted in each workout',
-                child: Icon(
-                  Icons.info_outline,
-                  size: 18,
-                  color: theme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: theme.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Max Weight (kg)',
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
-            child: ProgressionChartWidget(
-              exerciseName: selectedExercise!,
-              dbService: _dbService!,
-              showWeight: true,
-              filterProgramTitle: selectedProgram,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Progress has stalled', style: AppType.heading(t)),
+                const SizedBox(height: 4),
+                Text(
+                  'Four sessions without beating '
+                  '${AppFormat.weight(best)} kg estimated. Next time drop to '
+                  '${AppFormat.weight(target)} kg for 4×5, then add 2.5 kg a '
+                  'week — or swap in a close variation for a month and come '
+                  'back to it.',
+                  style: AppType.secondary(t),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildVolumeProgressionChart(AppColors theme) {
-    return Container(
-      height: 350,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+class _CompareCta extends ConsumerWidget {
+  final VoidCallback onTap;
+
+  const _CompareCta({required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return AppCard(
+      gradient: true,
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text(
-                'Total Volume Progression',
-                style: TextStyle(
-                  color: theme.text,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Tooltip(
-                message: 'Shows total volume (sum of weight × reps for all sets) in each workout',
-                child: Icon(
-                  Icons.info_outline,
-                  size: 18,
-                  color: theme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                width: 12,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: theme.accent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Total Volume (kg)',
-                style: TextStyle(
-                  color: theme.textSecondary,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: ProgressionChartWidget(
-              exerciseName: selectedExercise!,
-              dbService: _dbService!,
-              showWeight: false,
-              filterProgramTitle: selectedProgram,
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: t.onPrimary.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
+            child: Icon(
+              Icons.compare_arrows_rounded,
+              size: 22,
+              color: t.onPrimary,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Compare two lifts',
+                  style: AppType.heading(t).copyWith(color: t.onPrimary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'See which one is actually moving faster',
+                  style: AppType.secondary(t)
+                      .copyWith(color: t.onPrimary.withValues(alpha: 0.82)),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: t.onPrimary, size: 22),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilteredEmptyCard extends ConsumerWidget {
+  final String exercise;
+  final String? program;
+  final VoidCallback onClear;
+
+  const _FilteredEmptyCard({
+    required this.exercise,
+    required this.program,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return AppCard(
+      child: Column(
+        children: [
+          Icon(Icons.filter_alt_rounded, size: 28, color: t.textTertiary),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Nothing to plot',
+            textAlign: TextAlign.center,
+            style: AppType.heading(t),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            program == null
+                ? '$exercise has no working sets logged yet.'
+                : '$exercise has no logged sets in $program.',
+            textAlign: TextAlign.center,
+            style: AppType.secondary(t),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppButton.secondary(
+            label: 'Show all workouts',
+            onPressed: onClear,
+            icon: Icons.all_inclusive_rounded,
+            size: AppButtonSize.small,
           ),
         ],
       ),
     );
   }
+}
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+class _SessionRow extends ConsumerWidget {
+  final ExercisePoint point;
+  final ExercisePoint? previous;
+  final _ProgressionMetric metric;
+
+  const _SessionRow({
+    required this.point,
+    required this.previous,
+    required this.metric,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    double? delta;
+    final before = previous;
+    if (before != null) {
+      final past = metric.valueOf(before);
+      final now = metric.valueOf(point);
+      if (metric.deltaAsPercent) {
+        delta = past > 0 ? ((now - past) / past) * 100 : 0.0;
+      } else {
+        delta = now - past;
+      }
+    }
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md + 2,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppFormat.dayMonth(point.date),
+                  style: AppType.heading(t).copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AppFormat.relativeDate(point.date),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption(t),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${AppFormat.weight(point.topWeight)} kg × '
+                  '${point.topWeightReps}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.mono(t, size: 14.5),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${AppFormat.compact(point.volume)} kg · ${point.sets} '
+                  '${point.sets == 1 ? 'set' : 'sets'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption(t),
+                ),
+              ],
+            ),
+          ),
+          if (delta != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            DeltaBadge(
+              delta: delta,
+              unit: 'kg',
+              percent: metric.deltaAsPercent,
+              compact: true,
+              fontSize: 11.5,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

@@ -1,317 +1,556 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/database_service.dart';
+
 import '../providers/theme_provider.dart';
+import 'ui/ui.dart';
 
-class ProgressionChartWidget extends ConsumerStatefulWidget {
-  final String exerciseName;
-  final DatabaseService dbService;
-  final bool showWeight; // true = visa vikt, false = visa volym
-  final String? filterProgramTitle;
+/// ---------------------------------------------------------------------------
+/// The shared progression line chart.
+///
+/// It plots one or more [ProgressionSeries] against a real time axis, so two
+/// exercises logged on different days line up honestly instead of being forced
+/// onto a shared session index.
+///
+/// Everything visual comes from the theme: the line takes the series colour,
+/// the area fill uses [AppColors.chartFillGradient], grid lines are hairlines
+/// in [AppColors.outline] and axis labels sit in [AppColors.textTertiary], so
+/// the chart stays legible on the light and the dark palettes alike.
+/// ---------------------------------------------------------------------------
+class ProgressionSeries {
+  /// Shown in the legend and in the tooltip when more than one line is drawn.
+  final String label;
 
-  const ProgressionChartWidget({
-    Key? key,
-    required this.exerciseName,
-    required this.dbService,
-    this.showWeight = true,
-    this.filterProgramTitle,
-  }) : super(key: key);
+  /// One entry per session, oldest first. Must line up with [values].
+  final List<DateTime> dates;
+  final List<double> values;
 
-  @override
-  _ProgressionChartWidgetState createState() => _ProgressionChartWidgetState();
+  final Color color;
+
+  /// Appended to tooltip values — 'kg', '%', 'reps'.
+  final String unit;
+
+  const ProgressionSeries({
+    required this.label,
+    required this.dates,
+    required this.values,
+    required this.color,
+    this.unit = 'kg',
+  });
+
+  /// Defensive: never read past the shorter of the two lists.
+  int get length => math.min(dates.length, values.length);
+
+  bool get isEmpty => length == 0;
+  bool get isNotEmpty => length > 0;
 }
 
-class _ProgressionChartWidgetState
-    extends ConsumerState<ProgressionChartWidget> {
-  List<ProgressionDataPoint> progressionData = [];
-  bool isLoading = true;
+class ProgressionChartWidget extends ConsumerStatefulWidget {
+  final List<ProgressionSeries> series;
+
+  /// Height of the plot area (the legend adds to this).
+  final double height;
+
+  /// Drawn above the chart when there is more than one series.
+  final bool showLegend;
+
+  /// Gradient area under the line. Only ever painted for a single series —
+  /// two overlapping fills turn to mud.
+  final bool showArea;
+
+  /// Grows the line up from the baseline on first build.
+  final bool animate;
+
+  final String emptyMessage;
+
+  /// Overrides the left axis label format. Defaults to compact numbers.
+  final String Function(double value)? axisLabel;
+
+  const ProgressionChartWidget({
+    super.key,
+    required this.series,
+    this.height = 220,
+    this.showLegend = true,
+    this.showArea = true,
+    this.animate = true,
+    this.emptyMessage = 'No sessions to plot yet',
+    this.axisLabel,
+  });
+
+  @override
+  ConsumerState<ProgressionChartWidget> createState() =>
+      _ProgressionChartWidgetState();
+}
+
+class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.lazy,
+  );
+
+  late final Animation<double> _reveal = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.enter,
+  );
 
   @override
   void initState() {
     super.initState();
-    _loadProgressionData();
+    if (widget.animate) {
+      _controller.forward();
+    } else {
+      _controller.value = 1;
+    }
   }
 
   @override
-  void didUpdateWidget(ProgressionChartWidget oldWidget) {
+  void didUpdateWidget(covariant ProgressionChartWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.exerciseName != widget.exerciseName ||
-        oldWidget.filterProgramTitle != widget.filterProgramTitle) {
-      _loadProgressionData();
+    // Replay the entrance when the plotted data actually changes (a different
+    // exercise, a different metric) — not on every incidental rebuild.
+    if (widget.animate &&
+        _signature(oldWidget.series) != _signature(widget.series)) {
+      _controller.forward(from: 0);
     }
   }
 
-  Future<void> _loadProgressionData() async {
-    setState(() {
-      isLoading = true;
-    });
-
-    try {
-      final data = await widget.dbService.getExerciseProgression(
-        widget.exerciseName,
-        programTitle: widget.filterProgramTitle,
-      );
-      if (mounted) {
-        setState(() {
-          progressionData = data;
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading progression data: $e');
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+
+  static String _signature(List<ProgressionSeries> series) =>
+      series.map((s) => '${s.label}#${s.length}#${s.unit}').join('|');
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
+    final t = ref.watch(themeProvider);
+    final series = widget.series.where((s) => s.isNotEmpty).toList();
 
-    if (isLoading) {
-      return Center(child: CircularProgressIndicator(color: theme.primary));
-    }
-
-    if (progressionData.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.show_chart, size: 48, color: theme.textSecondary),
-            const SizedBox(height: 12),
-            Text(
-              'No data for this exercise',
-              style: TextStyle(color: theme.textSecondary, fontSize: 16),
-            ),
-          ],
+    if (series.isEmpty) {
+      return SizedBox(
+        height: widget.height,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.show_chart_rounded, size: 26, color: t.textTertiary),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                widget.emptyMessage,
+                textAlign: TextAlign.center,
+                style: AppType.secondary(t),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return _buildChart(theme);
+    final geometry = _ChartGeometry.of(series);
+    final showDots = geometry.totalPoints <= 30;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.showLegend && series.length > 1) ...[
+          _ChartLegend(series: series),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+        SizedBox(
+          height: widget.height,
+          child: AnimatedBuilder(
+            animation: _reveal,
+            builder: (context, _) {
+              final progress = _reveal.value.clamp(0.0, 1.0);
+              return Opacity(
+                opacity: (progress * 1.8).clamp(0.0, 1.0),
+                child: LineChart(
+                  _chartData(t, series, geometry, progress, showDots),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
-  Widget _buildChart(dynamic theme) {
-    // Kontrollera om vi har data
-    if (progressionData.isEmpty) {
-      return const Center(
-        child: Text(
-          'No progression data available',
-          style: TextStyle(color: Colors.grey),
+  // --- Chart configuration ---------------------------------------------------
+
+  LineChartData _chartData(
+    AppColors t,
+    List<ProgressionSeries> series,
+    _ChartGeometry g,
+    double progress,
+    bool showDots,
+  ) {
+    final labelStyle = AppType.caption(t).copyWith(
+      fontSize: 10.5,
+      color: t.textTertiary,
+      fontWeight: FontWeight.w600,
+    );
+
+    return LineChartData(
+      minX: g.minX,
+      maxX: g.maxX,
+      minY: g.minY,
+      maxY: g.maxY,
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        drawHorizontalLine: true,
+        horizontalInterval: g.yInterval,
+        getDrawingHorizontalLine: (value) => FlLine(
+          color: t.outline,
+          strokeWidth: 1,
         ),
-      );
-    }
-
-    // Skapa punkter baserat på vilken typ av data vi vill visa
-    final spots =
-        progressionData.asMap().entries.map((entry) {
-          final index = entry.key;
-          final dataPoint = entry.value;
-          final value =
-              widget.showWeight ? dataPoint.maxWeight : dataPoint.totalVolume;
-          return FlSpot(index.toDouble(), value);
-        }).toList();
-
-    // Hitta min och max värden för y-axeln
-    final values =
-        progressionData
-            .map((p) => widget.showWeight ? p.maxWeight : p.totalVolume)
-            .toList();
-
-    final minValue = values.reduce((a, b) => a < b ? a : b);
-    final maxValue = values.reduce((a, b) => a > b ? a : b);
-
-    // Lägg till lite marginal
-    final valueRange = maxValue - minValue;
-    final margin =
-        valueRange > 0
-            ? valueRange * 0.1
-            : (maxValue > 0 ? maxValue * 0.1 : 1.0);
-    final yMin = (minValue - margin).clamp(0.0, double.infinity);
-    final yMax = maxValue + margin;
-
-    // Säkerställ att horizontalInterval aldrig är 0
-    final yRange = yMax - yMin;
-    final horizontalInterval = yRange > 0 ? yRange / 4 : 1.0;
-
-    return LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          drawHorizontalLine: true,
-          horizontalInterval: horizontalInterval,
-          getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: theme.textSecondary.withOpacity(0.3),
-              strokeWidth: 0.5,
-            );
-          },
+      ),
+      titlesData: FlTitlesData(
+        show: true,
+        topTitles: const AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
         ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              interval:
-                  progressionData.length > 6
-                      ? (progressionData.length / 4).ceilToDouble()
-                      : 1,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                final index = value.toInt();
-                if (index >= 0 && index < progressionData.length) {
-                  final date = progressionData[index].date;
-                  return SideTitleWidget(
-                    axisSide: meta.axisSide,
-                    child: Text(
-                      '${date.day}/${date.month}',
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                  );
-                }
-                return const Text('');
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: (yMax - yMin) / 4,
-              reservedSize: 45,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                return Text(
-                  '${value.toStringAsFixed(0)}',
-                  style: TextStyle(color: theme.textSecondary, fontSize: 10),
-                );
-              },
-            ),
-          ),
+        rightTitles: const AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
         ),
-        borderData: FlBorderData(show: false),
-        minX: 0,
-        maxX: (progressionData.length - 1).toDouble(),
-        minY: yMin,
-        maxY: yMax,
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            gradient: LinearGradient(
-              colors:
-                  widget.showWeight
-                      ? [theme.primary, theme.primaryLight]
-                      : [theme.accent, theme.accent.withOpacity(0.7)],
-            ),
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) {
-                return FlDotCirclePainter(
-                  radius: 4,
-                  color: widget.showWeight ? theme.primary : theme.accent,
-                  strokeWidth: 2,
-                  strokeColor: theme.background,
-                );
-              },
-            ),
-            belowBarData: BarAreaData(
-              show: !widget.showWeight,
-              gradient: LinearGradient(
-                colors: [
-                  theme.accent.withOpacity(0.1),
-                  theme.accent.withOpacity(0.02),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 46,
+            interval: g.yInterval,
+            getTitlesWidget: (value, meta) => Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: Text(
+                _formatAxis(value),
+                textAlign: TextAlign.right,
+                style: labelStyle,
               ),
             ),
           ),
-        ],
-        lineTouchData: LineTouchData(
-          enabled: true,
-          touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-            // Endast haptic vid initial touch, inte vid drag
-            if (event is FlTapDownEvent &&
-                response?.lineBarSpots != null &&
-                response!.lineBarSpots!.isNotEmpty) {
-              HapticFeedback.lightImpact();
-            }
-          },
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (touchedSpot) => theme.card,
-            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-              return touchedBarSpots.map((barSpot) {
-                final index = barSpot.x.toInt();
-                if (index >= 0 && index < progressionData.length) {
-                  final dataPoint = progressionData[index];
-
-                  if (widget.showWeight) {
-                    return LineTooltipItem(
-                      'Max Weight: ${dataPoint.maxWeight.toStringAsFixed(1)}kg × ${dataPoint.maxWeightReps}\n${_formatDate(dataPoint.date)}',
-                      TextStyle(
-                        color: theme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    );
-                  } else {
-                    return LineTooltipItem(
-                      'Total Volume: ${dataPoint.totalVolume.toStringAsFixed(0)} kg\n${_formatDate(dataPoint.date)}',
-                      TextStyle(
-                        color: theme.accent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    );
-                  }
-                }
-                return null;
-              }).toList();
-            },
-          ),
-          handleBuiltInTouches: true,
-          getTouchedSpotIndicator: (
-            LineChartBarData barData,
-            List<int> spotIndexes,
-          ) {
-            return spotIndexes.map((spotIndex) {
-              final color = widget.showWeight ? theme.primary : theme.accent;
-              return TouchedSpotIndicatorData(
-                FlLine(color: color.withOpacity(0.5), strokeWidth: 2),
-                FlDotData(
-                  getDotPainter: (spot, percent, barData, index) {
-                    return FlDotCirclePainter(
-                      radius: 6,
-                      color: color,
-                      strokeWidth: 2,
-                      strokeColor: theme.background,
-                    );
-                  },
+        ),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 30,
+            interval: g.xInterval,
+            getTitlesWidget: (value, meta) {
+              // A single session has no span to label — one date is enough.
+              if (g.singlePoint && value.abs() > 0.01) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Text(
+                  AppFormat.dayMonth(g.dateAt(value)),
+                  style: labelStyle,
                 ),
               );
-            }).toList();
-          },
+            },
+          ),
         ),
+      ),
+      borderData: FlBorderData(show: false),
+      lineBarsData: [
+        for (var i = 0; i < series.length; i++)
+          _barData(
+            t,
+            series[i],
+            g,
+            progress,
+            showDots,
+            fill: widget.showArea && series.length == 1,
+          ),
+      ],
+      lineTouchData: _touchData(t, series, g),
+    );
+  }
+
+  String _formatAxis(double value) {
+    final formatter = widget.axisLabel;
+    if (formatter != null) return formatter(value);
+    return AppFormat.compact(value);
+  }
+
+  LineChartBarData _barData(
+    AppColors t,
+    ProgressionSeries s,
+    _ChartGeometry g,
+    double progress,
+    bool showDots, {
+    required bool fill,
+  }) {
+    // Grow every point up from the floor of the chart as the entrance plays.
+    final spots = <FlSpot>[
+      for (var i = 0; i < s.length; i++)
+        FlSpot(
+          g.xOf(s.dates[i]),
+          g.minY + (s.values[i] - g.minY) * progress,
+        ),
+    ];
+
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: s.color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: FlDotData(
+        show: showDots && progress > 0.995,
+        getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+          radius: 3.4,
+          color: s.color,
+          strokeWidth: 2,
+          strokeColor: t.card,
+        ),
+      ),
+      belowBarData: BarAreaData(
+        show: fill,
+        gradient: s.color == t.primary
+            ? t.chartFillGradient
+            : _fillGradient(s.color, t.isDark),
       ),
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+  LinearGradient _fillGradient(Color color, bool isDark) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          color.withValues(alpha: isDark ? 0.32 : 0.24),
+          color.withValues(alpha: 0.0),
+        ],
+      );
+
+  LineTouchData _touchData(
+    AppColors t,
+    List<ProgressionSeries> series,
+    _ChartGeometry g,
+  ) {
+    return LineTouchData(
+      enabled: true,
+      handleBuiltInTouches: true,
+      touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+        if (event is FlTapDownEvent &&
+            response?.lineBarSpots != null &&
+            response!.lineBarSpots!.isNotEmpty) {
+          HapticFeedback.selectionClick();
+        }
+      },
+      touchTooltipData: LineTouchTooltipData(
+        getTooltipColor: (touchedSpot) => t.elevated,
+        tooltipRoundedRadius: AppRadius.sm,
+        tooltipPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        fitInsideHorizontally: true,
+        fitInsideVertically: true,
+        getTooltipItems: (List<LineBarSpot> touchedSpots) {
+          return <LineTooltipItem?>[
+            for (final spot in touchedSpots) _tooltipItem(t, series, g, spot),
+          ];
+        },
+      ),
+      getTouchedSpotIndicator: (barData, spotIndexes) {
+        final tone = barData.color ?? t.primary;
+        return spotIndexes.map((spotIndex) {
+          return TouchedSpotIndicatorData(
+            FlLine(color: tone.withValues(alpha: 0.35), strokeWidth: 1.5),
+            FlDotData(
+              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                radius: 5,
+                color: tone,
+                strokeWidth: 2,
+                strokeColor: t.card,
+              ),
+            ),
+          );
+        }).toList();
+      },
+    );
+  }
+
+  LineTooltipItem _tooltipItem(
+    AppColors t,
+    List<ProgressionSeries> series,
+    _ChartGeometry g,
+    LineBarSpot spot,
+  ) {
+    final barIndex =
+        (spot.barIndex < 0 || spot.barIndex >= series.length) ? 0 : spot.barIndex;
+    final s = series[barIndex];
+    final index = g.nearestIndex(s, spot.x);
+    final value = s.values[index];
+    final date = s.dates[index];
+
+    final prefix = series.length > 1 ? '${s.label}\n' : '';
+    final unit = s.unit.isEmpty ? '' : ' ${s.unit}';
+
+    return LineTooltipItem(
+      '$prefix${AppFormat.weight(value)}$unit\n${AppFormat.dayMonth(date)}',
+      TextStyle(
+        color: s.color,
+        fontWeight: FontWeight.w700,
+        fontSize: 11.5,
+        height: 1.45,
+      ),
+    );
+  }
+}
+
+/// Everything the chart needs to place a point: the time origin, the padded
+/// axis bounds and the label intervals.
+class _ChartGeometry {
+  final DateTime origin;
+  final double minX;
+  final double maxX;
+  final double minY;
+  final double maxY;
+  final double xInterval;
+  final double yInterval;
+
+  /// True when every point falls on (roughly) the same day.
+  final bool singlePoint;
+
+  final int totalPoints;
+
+  const _ChartGeometry({
+    required this.origin,
+    required this.minX,
+    required this.maxX,
+    required this.minY,
+    required this.maxY,
+    required this.xInterval,
+    required this.yInterval,
+    required this.singlePoint,
+    required this.totalPoints,
+  });
+
+  factory _ChartGeometry.of(List<ProgressionSeries> series) {
+    DateTime? first;
+    DateTime? last;
+    var lowest = double.infinity;
+    var highest = -double.infinity;
+    var total = 0;
+
+    for (final s in series) {
+      for (var i = 0; i < s.length; i++) {
+        final date = s.dates[i];
+        final value = s.values[i];
+        if (first == null || date.isBefore(first)) first = date;
+        if (last == null || date.isAfter(last)) last = date;
+        if (value < lowest) lowest = value;
+        if (value > highest) highest = value;
+        total++;
+      }
+    }
+
+    final start = first ?? DateTime.now();
+    final end = last ?? start;
+    final span = end.difference(start).inMinutes / 1440.0;
+
+    if (total == 0) {
+      lowest = 0.0;
+      highest = 1.0;
+    }
+
+    // Pad the value axis so the line never touches the top or the baseline.
+    final range = highest - lowest;
+    final margin = range > 0 ? range * 0.14 : math.max(1.0, highest.abs() * 0.1);
+    var low = lowest - margin;
+    final high = highest + margin;
+    if (lowest >= 0 && low < 0) low = 0.0;
+    final paddedRange = high - low;
+
+    final singlePoint = span < 0.75;
+    final minX = singlePoint ? -1.0 : -span * 0.03;
+    final maxX = singlePoint ? 1.0 : span * 1.03;
+
+    return _ChartGeometry(
+      origin: start,
+      minX: minX,
+      maxX: maxX,
+      minY: low,
+      maxY: high,
+      // Whole-day steps keep the date labels distinct.
+      xInterval:
+          singlePoint ? 1.0 : math.max(1.0, ((maxX - minX) / 3).roundToDouble()),
+      yInterval: paddedRange > 0 ? paddedRange / 3 : 1.0,
+      singlePoint: singlePoint,
+      totalPoints: total,
+    );
+  }
+
+  /// Days elapsed since [origin] — the chart's x coordinate.
+  double xOf(DateTime date) => date.difference(origin).inMinutes / 1440.0;
+
+  DateTime dateAt(double x) =>
+      origin.add(Duration(minutes: (x * 1440).round()));
+
+  /// Maps a touched x back onto the closest real session in [s].
+  int nearestIndex(ProgressionSeries s, double x) {
+    var best = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < s.length; i++) {
+      final distance = (xOf(s.dates[i]) - x).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    }
+    return best;
+  }
+}
+
+/// Colour key for a multi-series chart.
+class _ChartLegend extends ConsumerWidget {
+  final List<ProgressionSeries> series;
+
+  const _ChartLegend({required this.series});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Wrap(
+      spacing: AppSpacing.lg,
+      runSpacing: AppSpacing.sm,
+      children: [
+        for (final s in series)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: s.color,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Text(
+                  s.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.secondary(t).copyWith(
+                    color: t.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/standard_workout_template.dart';
 import '../services/database_service.dart';
 
@@ -243,8 +244,8 @@ Future<void> addSampleTemplates() async {
     await StandardWorkoutService.addStandardWorkout(pushTemplate);
     await StandardWorkoutService.addStandardWorkout(pullTemplate);
     
-    print('✅ Successfully added all 4 workout templates!');
+    debugPrint('✅ Successfully added all 4 workout templates!');
   } catch (e) {
-    print('❌ Error adding templates: $e');
+    debugPrint('❌ Error adding templates: $e');
   }
 }

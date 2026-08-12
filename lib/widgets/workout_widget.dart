@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/theme_provider.dart';
-import 'gradient_button.dart';
 
+import '../providers/theme_provider.dart';
+import 'ui/ui.dart';
+
+/// A saved workout program, rendered as a card on the home screen.
+///
+/// The whole card opens the program detail page; the trailing "Start" button
+/// launches the session and the overflow button opens the options sheet.
 class WorkoutWidget extends ConsumerWidget {
   final String title;
   final String description;
@@ -13,109 +17,93 @@ class WorkoutWidget extends ConsumerWidget {
   final VoidCallback? onTap;
 
   const WorkoutWidget({
-    Key? key,
+    super.key,
     required this.title,
     required this.description,
     required this.exerciseCount,
     required this.onMenuPressed,
     this.onStartWorkout,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
-    final themeIndex = ref.watch(themeIndexProvider);
-    final isPinkMode = themeIndex == 1; // Pink theme is at index 1
+    final t = ref.watch(themeProvider);
+    final subtitle = description.trim();
 
-    return GestureDetector(
-      onTap:
-          onTap != null
-              ? () {
-                HapticFeedback.lightImpact();
-                onTap!();
-              }
-              : null,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        decoration: BoxDecoration(
-          color: theme.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.withOpacity(0.2), width: 1),
-          boxShadow:
-              isPinkMode
-                  ? [
-                    BoxShadow(
-                      color: const Color(0xFFFCE7F3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                      spreadRadius: 0,
-                    ),
-                  ]
-                  : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
+    return AppCard(
+      onTap: onTap,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     title,
-                    style: TextStyle(
-                      color: theme.text,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.title(t).copyWith(fontSize: 19),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    onMenuPressed();
-                  },
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                const Icon(Icons.fitness_center, color: Colors.grey, size: 18),
-                const SizedBox(width: 4),
-                Text(
-                  '$exerciseCount exercises',
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            GradientButton(
-              text: 'Start workout',
-              onPressed:
-                  onStartWorkout != null
-                      ? () {
-                        HapticFeedback.mediumImpact();
-                        onStartWorkout!();
-                      }
-                      : () {},
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              borderRadius: 20,
-              textStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AppIconButton(
+                icon: Icons.more_horiz_rounded,
+                onPressed: onMenuPressed,
+                filled: false,
+                size: 36,
+                iconSize: 20,
+                color: t.textSecondary,
+                tooltip: 'Workout options',
+              ),
+            ],
+          ),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.secondary(t),
               ),
             ),
           ],
-        ),
+          const SizedBox(height: AppSpacing.lg),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Row(
+              children: [
+                AppBadge(
+                  label: exerciseCount == 1
+                      ? '1 exercise'
+                      : '$exerciseCount exercises',
+                  icon: Icons.fitness_center_rounded,
+                ),
+                const Spacer(),
+                AppButton(
+                  label: 'Start',
+                  icon: Icons.play_arrow_rounded,
+                  size: AppButtonSize.small,
+                  onPressed: onStartWorkout,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

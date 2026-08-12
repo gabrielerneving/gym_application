@@ -1,932 +1,811 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
-import '../services/database_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/analytics_service.dart';
+import '../widgets/ui/ui.dart';
 
-enum VolumePeriod { oneWeek, oneMonth, threeMonths }
-
-class VolumeTrackerScreen extends ConsumerStatefulWidget {
-  const VolumeTrackerScreen({Key? key}) : super(key: key);
+/// ---------------------------------------------------------------------------
+/// Volume — how much work each muscle group is actually getting.
+///
+/// Everything comes from [trainingDataProvider] (one cached read of the session
+/// history) and [AnalyticsService]: period totals with a comparison against the
+/// previous window, weekly sets per muscle group scored against the 10–20
+/// sets/week hypertrophy band, a 12-week tonnage trend, and a short list of
+/// what to add next.
+/// ---------------------------------------------------------------------------
+class VolumeTrackerScreen extends ConsumerWidget {
+  const VolumeTrackerScreen({super.key});
 
   @override
-  ConsumerState<VolumeTrackerScreen> createState() =>
-      _VolumeTrackerScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = ref.watch(statsPeriodProvider);
+    final async = ref.watch(trainingDataProvider);
+
+    return async.when(
+      loading: () => const AppScaffold(
+        title: 'Volume',
+        headerBottom: _PeriodSelector(),
+        children: [_LoadingSkeleton()],
+      ),
+      error: (error, _) => AppScaffold(
+        title: 'Volume',
+        subtitle: period.longLabel,
+        headerBottom: const _PeriodSelector(),
+        body: ErrorState(
+          message: 'Could not load your training history.',
+          onRetry: () {
+            ref.invalidate(workoutSessionsProvider);
+            ref.invalidate(exerciseMuscleMapProvider);
+          },
+        ),
+      ),
+      data: (data) {
+        final range = period.range();
+        final summary = AnalyticsService.summarize(data.sessions, range);
+
+        if (data.isEmpty || summary.current.sets == 0) {
+          // When there is history but not in this window, the useful action is
+          // widening the window rather than sending the user away.
+          final canWiden = !data.isEmpty && period != StatsPeriod.all;
+          final VoidCallback action = canWiden
+              ? () {
+                  ref.read(statsPeriodProvider.notifier).state =
+                      StatsPeriod.all;
+                }
+              : () {
+                  Navigator.of(context).maybePop();
+                };
+
+          return AppScaffold(
+            title: 'Volume',
+            subtitle: period.longLabel,
+            headerBottom: const _PeriodSelector(),
+            onRefresh: () => _refresh(ref),
+            body: EmptyState(
+              icon: Icons.bar_chart_rounded,
+              title: data.isEmpty
+                  ? 'No workouts yet'
+                  : 'Nothing logged in this window',
+              message: data.isEmpty
+                  ? 'Finish a workout and your weekly volume shows up here.'
+                  : 'No working sets in ${period.longLabel.toLowerCase()}. '
+                      'Widen the window to see older training.',
+              actionLabel: canWiden ? 'Show all time' : 'Log a workout',
+              onAction: action,
+            ),
+          );
+        }
+
+        final weeks = _weeksFor(period, data);
+        final balance = AnalyticsService.muscleBalance(
+          data.sessions,
+          data.exerciseToMuscle,
+          weeks: weeks,
+        );
+        final currentSets = AnalyticsService.muscleGroupSets(
+          data.sessions,
+          data.exerciseToMuscle,
+          range: range,
+        );
+        final previousSets = AnalyticsService.muscleGroupSets(
+          data.sessions,
+          data.exerciseToMuscle,
+          range: range.previous(),
+        );
+        final lagging = AnalyticsService.weakestGroups(balance, limit: 3)
+            .where((m) => m.setsPerWeek < MuscleBalance.targetMin)
+            .toList();
+
+        return AppScaffold(
+          title: 'Volume',
+          subtitle: period.longLabel,
+          headerBottom: const _PeriodSelector(),
+          onRefresh: () => _refresh(ref),
+          children: [
+            const SizedBox(height: AppSpacing.sm),
+            // A slightly taller tile than the kit default: these two carry a
+            // label, a big number, a unit and a delta badge.
+            StatGrid(
+              aspectRatio: 1.1,
+              children: [
+                StatTile(
+                  label: 'Working sets',
+                  value: summary.current.sets.toDouble(),
+                  unit: 'sets',
+                  icon: Icons.repeat_rounded,
+                  highlight: true,
+                  delta: summary.hasComparison ? summary.setsChange : null,
+                  deltaIsPercent: true,
+                ),
+                StatTile(
+                  label: 'Tonnage',
+                  valueText: AppFormat.compact(summary.current.volume),
+                  unit: 'kg',
+                  icon: Icons.fitness_center_rounded,
+                  delta: summary.hasComparison ? summary.volumeChange : null,
+                  deltaIsPercent: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            FadeSlideIn(index: 2, child: _PeriodFacts(summary: summary)),
+            const SectionHeader(
+              title: 'Weekly volume',
+              subtitle: 'Tonnage per week, last 12 weeks',
+            ),
+            FadeSlideIn(index: 3, child: _WeeklyVolumeCard(buckets: data.weeklyVolume)),
+            SectionHeader(
+              title: 'Muscle balance',
+              subtitle: '${_weeksLabel(weeks)} · target '
+                  '${MuscleBalance.targetMin.toInt()}–'
+                  '${MuscleBalance.targetMax.toInt()} sets per week',
+            ),
+            FadeSlideIn(
+              index: 4,
+              child: _BalanceCard(
+                balance: balance,
+                currentSets: currentSets,
+                previousSets: previousSets,
+                periodLabel: period.longLabel.toLowerCase(),
+              ),
+            ),
+            const SectionHeader(title: 'What to add'),
+            FadeSlideIn(index: 5, child: _Recommendations(lagging: lagging)),
+            const SizedBox(height: AppSpacing.sm),
+            const _MethodNote(),
+          ],
+        );
+      },
+    );
+  }
 }
 
-class _VolumeTrackerScreenState extends ConsumerState<VolumeTrackerScreen> {
-  DatabaseService? _dbService;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  VolumePeriod selectedPeriod = VolumePeriod.oneMonth;
-  // null = "All muscles"
-  String? selectedMuscleGroup;
+/// How many weeks the muscle-group average should be taken over for the
+/// selected period. Keeps "sets per week" honest when the window changes.
+int _weeksFor(StatsPeriod period, TrainingData data) {
+  switch (period) {
+    case StatsPeriod.week:
+      return 1;
+    case StatsPeriod.month:
+      return 4;
+    case StatsPeriod.quarter:
+      return 13;
+    case StatsPeriod.year:
+      return 52;
+    case StatsPeriod.all:
+      if (data.sessions.isEmpty) return 4;
+      final oldest = data.sessions
+          .map((s) => s.date)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      final days = DateTime.now().difference(oldest).inDays;
+      return math.max(1, (days / 7).ceil());
+  }
+}
 
-  bool isLoading = true;
+String _weeksLabel(int weeks) =>
+    weeks == 1 ? 'This week' : 'Average over $weeks weeks';
 
-  // Current period totals per muscle
-  Map<String, int> currentCounts = {};
-  // Previous period totals per muscle (for delta)
-  Map<String, int> previousCounts = {};
-  // Time-bucketed counts for selected muscle trend chart
-  List<_TimeBucket> timeBuckets = [];
+Color _statusColor(AppColors t, VolumeStatus status) {
+  switch (status) {
+    case VolumeStatus.low:
+      return t.warning;
+    case VolumeStatus.optimal:
+      return t.success;
+    case VolumeStatus.high:
+      return t.primary;
+    case VolumeStatus.none:
+      return t.textTertiary;
+  }
+}
+
+Future<void> _refresh(WidgetRef ref) async {
+  ref.invalidate(workoutSessionsProvider);
+  ref.invalidate(exerciseMuscleMapProvider);
+  try {
+    await ref.read(trainingDataProvider.future);
+  } catch (_) {
+    // The error state renders on the next build; nothing to do here.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Period selection
+// ---------------------------------------------------------------------------
+
+class _PeriodSelector extends ConsumerWidget {
+  const _PeriodSelector();
 
   @override
-  void initState() {
-    super.initState();
-    _initializeAndLoadData();
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = ref.watch(statsPeriodProvider);
 
-  Future<void> _initializeAndLoadData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _dbService = DatabaseService(uid: user.uid);
-      await _loadData();
-    } else {
-      setState(() => isLoading = false);
+    return AppSegmented<StatsPeriod>(
+      value: period,
+      segments: [
+        for (final p in StatsPeriod.values) AppSegment(value: p, label: p.label),
+      ],
+      onChanged: (value) =>
+          ref.read(statsPeriodProvider.notifier).state = value,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Headline
+// ---------------------------------------------------------------------------
+
+class _PeriodFacts extends ConsumerWidget {
+  final PeriodSummary summary;
+
+  const _PeriodFacts({required this.summary});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final totals = summary.current;
+    final setsPerWorkout =
+        totals.workouts == 0 ? 0.0 : totals.sets / totals.workouts;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MetricRow(
+            label: 'Workouts',
+            value: '${totals.workouts}',
+            icon: Icons.event_rounded,
+            trailing: summary.hasComparison
+                ? DeltaBadge(
+                    delta: summary.workoutsChange,
+                    percent: true,
+                    compact: true,
+                    fontSize: 11.5,
+                  )
+                : null,
+          ),
+          MetricRow(
+            label: 'Sets per workout',
+            value: AppFormat.weight(setsPerWorkout),
+            icon: Icons.repeat_rounded,
+          ),
+          MetricRow(
+            label: 'Volume per workout',
+            value: '${AppFormat.compact(totals.avgVolume)} kg',
+            icon: Icons.fitness_center_rounded,
+          ),
+          MetricRow(
+            label: 'Total reps',
+            value: '${totals.reps}',
+            icon: Icons.format_list_numbered_rounded,
+          ),
+          MetricRow(
+            label: 'Time under the bar',
+            value: AppFormat.duration(totals.minutes),
+            icon: Icons.schedule_rounded,
+            trailing: summary.hasComparison
+                ? DeltaBadge(
+                    delta: summary.minutesChange,
+                    percent: true,
+                    compact: true,
+                    fontSize: 11.5,
+                  )
+                : null,
+          ),
+          if (!summary.hasComparison) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'No training in the previous window, so there is nothing to '
+              'compare against yet.',
+              style: AppType.caption(t),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Weekly trend
+// ---------------------------------------------------------------------------
+
+class _WeeklyVolumeCard extends ConsumerWidget {
+  final List<TimeBucket> buckets;
+
+  const _WeeklyVolumeCard({required this.buckets});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    var peak = 0.0;
+    var total = 0.0;
+    for (final b in buckets) {
+      peak = math.max(peak, b.volume);
+      total += b.volume;
     }
-  }
 
-  _PeriodRange _rangeForPeriod(VolumePeriod period, {int offset = 0}) {
-    final now = DateTime.now();
-    final endOfToday =
-        DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-    late int days;
-    switch (period) {
-      case VolumePeriod.oneWeek:
-        days = 7;
-        break;
-      case VolumePeriod.oneMonth:
-        days = 30;
-        break;
-      case VolumePeriod.threeMonths:
-        days = 90;
-        break;
-    }
-
-    final end = endOfToday.subtract(Duration(days: days * offset));
-    final start = DateTime(end.year, end.month, end.day)
-        .subtract(Duration(days: days - 1));
-
-    return _PeriodRange(start: start, end: end);
-  }
-
-  // Build time buckets within a period for the trend chart.
-  // 1 week -> 7 daily buckets
-  // 1 month -> ~5 weekly buckets
-  // 3 months -> ~12 weekly buckets
-  List<_TimeBucket> _buildTimeBuckets(_PeriodRange range, VolumePeriod period) {
-    final buckets = <_TimeBucket>[];
-    final startDay = DateTime(range.start.year, range.start.month, range.start.day);
-    final endDay = DateTime(range.end.year, range.end.month, range.end.day);
-    final totalDays = endDay.difference(startDay).inDays + 1;
-
-    if (period == VolumePeriod.oneWeek) {
-      for (int i = 0; i < totalDays; i++) {
-        final d = startDay.add(Duration(days: i));
-        buckets.add(_TimeBucket(
-          start: DateTime(d.year, d.month, d.day),
-          end: DateTime(d.year, d.month, d.day, 23, 59, 59),
-          label: DateFormat('E').format(d),
-        ));
-      }
-    } else {
-      const bucketSizeDays = 7;
-      DateTime cursor = startDay;
-      while (!cursor.isAfter(endDay)) {
-        final bucketEndDay = cursor.add(const Duration(days: bucketSizeDays - 1));
-        final clampedEndDay = bucketEndDay.isAfter(endDay) ? endDay : bucketEndDay;
-        buckets.add(_TimeBucket(
-          start: cursor,
-          end: DateTime(
-              clampedEndDay.year, clampedEndDay.month, clampedEndDay.day, 23, 59, 59),
-          label: DateFormat('d/M').format(cursor),
-        ));
-        cursor = cursor.add(const Duration(days: bucketSizeDays));
-      }
-    }
-
-    return buckets;
-  }
-
-  Future<void> _loadData() async {
-    if (_dbService == null) return;
-    setState(() => isLoading = true);
-
-    try {
-      final current = _rangeForPeriod(selectedPeriod);
-      final previous = _rangeForPeriod(selectedPeriod, offset: 1);
-
-      // Bucket 0 = current totals, bucket 1 = previous totals.
-      final overviewBuckets = await _dbService!.getMuscleGroupCountsByBuckets(
-        bucketStarts: [current.start, previous.start],
-        bucketEnds: [current.end, previous.end],
+    if (buckets.isEmpty || peak <= 0) {
+      return AppCard(
+        child: SizedBox(
+          height: 120,
+          child: Center(
+            child: Text(
+              'No volume logged in the last 12 weeks.',
+              style: AppType.secondary(t),
+            ),
+          ),
+        ),
       );
+    }
 
-      final curr = overviewBuckets[0];
-      final prev = overviewBuckets[1];
+    final maxY = peak * 1.2;
+    final interval = maxY / 4;
+    final labelStep = math.max(1, (buckets.length / 4).ceil());
+    final average = total / buckets.length;
+    final lastIndex = buckets.length - 1;
 
-      // Time-bucket breakdown across the current period.
-      final tBuckets = _buildTimeBuckets(current, selectedPeriod);
-      final bucketCounts = await _dbService!.getMuscleGroupCountsByBuckets(
-        bucketStarts: tBuckets.map((b) => b.start).toList(),
-        bucketEnds: tBuckets.map((b) => b.end).toList(),
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.sm),
+            child: Row(
+              children: [
+                Icon(Icons.show_chart_rounded, size: 15, color: t.primary),
+                const SizedBox(width: 6),
+                Text(
+                  '${AppFormat.compact(average)} kg average per week',
+                  style: AppType.secondary(t),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            height: 208,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxY,
+                barGroups: [
+                  for (var i = 0; i < buckets.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: buckets[i].volume,
+                          width: 12,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(6),
+                          ),
+                          color: i == lastIndex
+                              ? null
+                              : t.primary.withValues(alpha: t.isDark ? 0.38 : 0.30),
+                          gradient: i == lastIndex
+                              ? LinearGradient(
+                                  colors: [t.primaryLight, t.primary],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
+                ],
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  drawHorizontalLine: true,
+                  horizontalInterval: interval,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: t.divider,
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 42,
+                      interval: interval,
+                      getTitlesWidget: (value, meta) => SideTitleWidget(
+                        axisSide: meta.axisSide,
+                        child: Text(
+                          AppFormat.compact(value),
+                          style: AppType.caption(t).copyWith(fontSize: 10.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.round();
+                        if (index < 0 || index >= buckets.length) {
+                          return const SizedBox.shrink();
+                        }
+                        if (index % labelStep != 0 && index != lastIndex) {
+                          return const SizedBox.shrink();
+                        }
+                        return SideTitleWidget(
+                          axisSide: meta.axisSide,
+                          child: Text(
+                            AppFormat.dayMonth(buckets[index].start),
+                            style: AppType.caption(t).copyWith(fontSize: 10.5),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchCallback: (event, response) {
+                    if (event is FlTapDownEvent && response?.spot != null) {
+                      HapticStrength.selection.fire();
+                    }
+                  },
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (group) => t.elevated,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final index = math.min(
+                        math.max(group.x.toInt(), 0),
+                        buckets.length - 1,
+                      );
+                      final bucket = buckets[index];
+                      return BarTooltipItem(
+                        'Week of ${AppFormat.dayMonth(bucket.start)}\n'
+                        '${AppFormat.compact(bucket.volume)} kg · '
+                        '${bucket.sets} sets',
+                        AppType.caption(t).copyWith(
+                          color: t.text,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11.5,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Muscle balance
+// ---------------------------------------------------------------------------
+
+class _BalanceCard extends ConsumerWidget {
+  final List<MuscleBalance> balance;
+  final Map<String, int> currentSets;
+  final Map<String, int> previousSets;
+  final String periodLabel;
+
+  const _BalanceCard({
+    required this.balance,
+    required this.currentSets,
+    required this.previousSets,
+    required this.periodLabel,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    if (balance.isEmpty) {
+      return AppCard(
+        child: Text(
+          'No muscle groups to score yet.',
+          style: AppType.secondary(t),
+        ),
       );
-      for (int i = 0; i < tBuckets.length; i++) {
-        tBuckets[i].countsByMuscle = bucketCounts[i];
-      }
-
-      if (mounted) {
-        setState(() {
-          currentCounts = curr;
-          previousCounts = prev;
-          timeBuckets = tBuckets;
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading volume data: $e');
-      if (mounted) setState(() => isLoading = false);
     }
+
+    // Keep the 10–20 band visible even when one group dwarfs the rest.
+    final peak = balance.first.setsPerWeek;
+    final maxScale = math.max(MuscleBalance.targetMax * 1.2, peak * 1.12);
+    final unmapped = currentSets['Other'] ?? 0;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < balance.length; i++)
+            FadeSlideIn(
+              index: i,
+              offsetY: 12,
+              child: _MuscleRow(
+                muscle: balance[i],
+                maxScale: maxScale,
+                periodSets: currentSets[balance[i].group] ?? 0,
+                previousPeriodSets: previousSets[balance[i].group] ?? 0,
+                periodLabel: periodLabel,
+              ),
+            ),
+          if (unmapped > 0) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Divider(height: 1, thickness: 1, color: t.divider),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 15,
+                  color: t.textTertiary,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '$unmapped sets in $periodLabel came from exercises with no '
+                    'muscle group. Assign one in your exercise library to score '
+                    'them here.',
+                    style: AppType.caption(t).copyWith(height: 1.45),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
+}
 
-  int get _currentTotal => _sumFor(currentCounts, selectedMuscleGroup);
-  int get _previousTotal => _sumFor(previousCounts, selectedMuscleGroup);
+class _MuscleRow extends ConsumerWidget {
+  final MuscleBalance muscle;
+  final double maxScale;
+  final int periodSets;
+  final int previousPeriodSets;
+  final String periodLabel;
 
-  int _sumFor(Map<String, int> counts, String? muscle) {
-    if (muscle != null) return counts[muscle] ?? 0;
-    return counts.values.fold<int>(0, (sum, v) => sum + v);
+  const _MuscleRow({
+    required this.muscle,
+    required this.maxScale,
+    required this.periodSets,
+    required this.previousPeriodSets,
+    required this.periodLabel,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final tone = _statusColor(t, muscle.status);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StatBar(
+            label: muscle.group,
+            value: muscle.setsPerWeek,
+            max: maxScale,
+            valueLabel: '${AppFormat.weight(muscle.setsPerWeek)} /wk',
+            color: tone,
+            targetMin: MuscleBalance.targetMin,
+            targetMax: MuscleBalance.targetMax,
+          ),
+          Row(
+            children: [
+              AppBadge(
+                label: muscle.statusLabel,
+                color: tone,
+                fontSize: 10.5,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '$periodSets sets in $periodLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.caption(t),
+                ),
+              ),
+              DeltaBadge(
+                delta: periodSets - previousPeriodSets,
+                compact: true,
+                fontSize: 11,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
+}
 
-  String _periodLabel(VolumePeriod p) {
-    switch (p) {
-      case VolumePeriod.oneWeek:
-        return '1 week';
-      case VolumePeriod.oneMonth:
-        return '1 month';
-      case VolumePeriod.threeMonths:
-        return '3 months';
+// ---------------------------------------------------------------------------
+// Recommendations
+// ---------------------------------------------------------------------------
+
+class _Recommendations extends ConsumerWidget {
+  final List<MuscleBalance> lagging;
+
+  const _Recommendations({required this.lagging});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    if (lagging.isEmpty) {
+      return AppCard(
+        child: Row(
+          children: [
+            IconBadge(
+              icon: Icons.check_circle_rounded,
+              color: t.success,
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Nothing is lagging', style: AppType.heading(t)),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Every muscle group is at or above the '
+                    '${MuscleBalance.targetMin.toInt()} sets per week floor.',
+                    style: AppType.secondary(t),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < lagging.length; i++) ...[
+            if (i != 0) ...[
+              const SizedBox(height: AppSpacing.md),
+              Divider(height: 1, thickness: 1, color: t.divider),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            _RecommendationRow(muscle: lagging[i]),
+          ],
+        ],
+      ),
+    );
   }
+}
+
+class _RecommendationRow extends ConsumerWidget {
+  final MuscleBalance muscle;
+
+  const _RecommendationRow({required this.muscle});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final tone = _statusColor(t, muscle.status);
+    final missing =
+        math.max(1, (MuscleBalance.targetMin - muscle.setsPerWeek).ceil());
+
+    return Row(
+      children: [
+        IconBadge(icon: Icons.trending_up_rounded, color: tone),
+        const SizedBox(width: AppSpacing.lg),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(muscle.group, style: AppType.heading(t)),
+              const SizedBox(height: 3),
+              Text(
+                muscle.status == VolumeStatus.none
+                    ? 'Not trained at all. Start with '
+                        '${MuscleBalance.targetMin.toInt()} sets a week.'
+                    : 'At ${AppFormat.weight(muscle.setsPerWeek)} sets a week. '
+                        'Add about $missing more.',
+                style: AppType.secondary(t),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        AppBadge(label: '+$missing', color: tone, icon: Icons.add_rounded),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chrome
+// ---------------------------------------------------------------------------
+
+class _MethodNote extends ConsumerWidget {
+  const _MethodNote();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 15, color: t.textTertiary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'A working set is any non-warm-up set with weight and reps. '
+              'Tonnage is weight × reps summed over those sets. Weeks start on '
+              'Monday.',
+              style: AppType.caption(t).copyWith(height: 1.45),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingSkeleton extends StatelessWidget {
+  const _LoadingSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back,
-              color: theme.primary.withOpacity(0.8), size: 24),
-          onPressed: () => Navigator.pop(context),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        SizedBox(height: AppSpacing.lg),
+        Row(
+          children: [
+            Expanded(child: SkeletonCard(height: 150)),
+            SizedBox(width: AppSpacing.md),
+            Expanded(child: SkeletonCard(height: 150)),
+          ],
         ),
-        title: Text(
-          'Volume Tracker',
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator(color: theme.primary))
-          : RefreshIndicator(
-              color: theme.primary,
-              backgroundColor: theme.card,
-              onRefresh: _loadData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPeriodSelector(theme),
-                    const SizedBox(height: 16),
-                    _buildMuscleFilter(theme),
-                    const SizedBox(height: 20),
-                    _buildSummaryCard(theme),
-                    const SizedBox(height: 20),
-                    _buildChartCard(theme),
-                    const SizedBox(height: 20),
-                    if (selectedMuscleGroup == null)
-                      _buildBreakdownList(theme),
-                    const SizedBox(height: 40),
-                  ],
-                ),
-              ),
-            ),
+        SizedBox(height: AppSpacing.md),
+        SkeletonCard(height: 180),
+        SizedBox(height: AppSpacing.xl),
+        SkeletonCard(height: 240),
+        SizedBox(height: AppSpacing.xl),
+        SkeletonCard(height: 260),
+      ],
     );
   }
-
-  Widget _buildPeriodSelector(dynamic theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        children: VolumePeriod.values.map((p) {
-          final selected = selectedPeriod == p;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (selectedPeriod == p) return;
-                HapticFeedback.lightImpact();
-                setState(() => selectedPeriod = p);
-                _loadData();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected ? theme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _periodLabel(p),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? Colors.white : theme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildMuscleFilter(dynamic theme) {
-    final options = <String?>[null, ...DatabaseService.muscleGroups];
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: options.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final muscle = options[i];
-          final selected = selectedMuscleGroup == muscle;
-          final label = muscle ?? 'All';
-          return GestureDetector(
-            onTap: () {
-              if (selectedMuscleGroup == muscle) return;
-              HapticFeedback.lightImpact();
-              setState(() => selectedMuscleGroup = muscle);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? (muscle == null
-                        ? theme.primary
-                        : _getMuscleColor(muscle))
-                    : theme.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: selected
-                      ? Colors.transparent
-                      : theme.textSecondary.withOpacity(0.2),
-                  width: 0.5,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : theme.text,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard(dynamic theme) {
-    final current = _currentTotal;
-    final previous = _previousTotal;
-    final diff = current - previous;
-    final pctText = previous == 0
-        ? (current > 0 ? '—' : '0%')
-        : '${((diff / previous) * 100).toStringAsFixed(0)}%';
-    final positive = diff > 0;
-    final negative = diff < 0;
-    final deltaColor = positive
-        ? const Color(0xFF16A34A)
-        : negative
-            ? const Color(0xFFDC2626)
-            : theme.textSecondary;
-    final deltaIcon = positive
-        ? Icons.arrow_upward
-        : negative
-            ? Icons.arrow_downward
-            : Icons.remove;
-
-    final titleLabel = selectedMuscleGroup == null
-        ? 'All working sets'
-        : '${selectedMuscleGroup!} working sets';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            titleLabel,
-            style: TextStyle(
-              color: theme.textSecondary,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$current',
-                style: TextStyle(
-                  color: theme.text,
-                  fontSize: 38,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'sets',
-                  style: TextStyle(
-                    color: theme.textSecondary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(deltaIcon, color: deltaColor, size: 18),
-              const SizedBox(width: 4),
-              Text(
-                '${diff > 0 ? '+' : ''}$diff ($pctText)',
-                style: TextStyle(
-                  color: deltaColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'vs previous ${_periodLabel(selectedPeriod).toLowerCase()}',
-                  style: TextStyle(
-                    color: theme.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChartCard(dynamic theme) {
-    final title = selectedMuscleGroup == null
-        ? 'Sets per muscle group'
-        : '${selectedMuscleGroup!} over time';
-
-    return Container(
-      height: 340,
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: theme.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: selectedMuscleGroup == null
-                ? _buildMuscleComparisonChart(theme)
-                : _buildTrendChart(theme, selectedMuscleGroup!),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMuscleComparisonChart(dynamic theme) {
-    final entries = currentCounts.entries
-        .where((e) => e.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    if (entries.isEmpty) {
-      return _emptyChartState(theme, 'No sets logged in this period');
-    }
-
-    final maxValue =
-        entries.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble();
-
-    final barGroups = entries.asMap().entries.map((entry) {
-      final index = entry.key;
-      final muscle = entry.value.key;
-      final count = entry.value.value;
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: count.toDouble(),
-            width: 18,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-            gradient: LinearGradient(
-              colors: [
-                _getMuscleColor(muscle),
-                _getMuscleColor(muscle).withOpacity(0.7),
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-        ],
-      );
-    }).toList();
-
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxValue * 1.15,
-        barGroups: barGroups,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxValue > 4 ? (maxValue / 4) : 1.0,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: Colors.grey.shade800.withOpacity(0.3),
-            strokeWidth: 0.5,
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 36,
-              getTitlesWidget: (value, meta) {
-                final i = value.toInt();
-                if (i < 0 || i >= entries.length) return const Text('');
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    _shortName(entries[i].key),
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 32,
-              interval: maxValue > 4 ? (maxValue / 4) : 1.0,
-              getTitlesWidget: (value, meta) => Text(
-                value.toInt().toString(),
-                style: TextStyle(color: theme.textSecondary, fontSize: 10),
-              ),
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchCallback: (event, response) {
-            if (event is FlTapDownEvent && response?.spot != null) {
-              HapticFeedback.lightImpact();
-            }
-          },
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF1E1E1E),
-            getTooltipItem: (group, _, rod, __) {
-              final muscle = entries[group.x.toInt()].key;
-              return BarTooltipItem(
-                '$muscle\n${rod.toY.toInt()} sets',
-                const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTrendChart(dynamic theme, String muscle) {
-    if (timeBuckets.isEmpty) {
-      return _emptyChartState(theme, 'No sets logged in this period');
-    }
-
-    final values =
-        timeBuckets.map((b) => b.countsByMuscle[muscle] ?? 0).toList();
-    final maxValue = values.fold<int>(0, (m, v) => v > m ? v : m).toDouble();
-
-    if (maxValue == 0) {
-      return _emptyChartState(theme, 'No ${muscle.toLowerCase()} sets yet');
-    }
-
-    final color = _getMuscleColor(muscle);
-
-    final barGroups = List.generate(timeBuckets.length, (i) {
-      return BarChartGroupData(
-        x: i,
-        barRods: [
-          BarChartRodData(
-            toY: values[i].toDouble(),
-            width: timeBuckets.length > 10 ? 10 : 16,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-            gradient: LinearGradient(
-              colors: [color, color.withOpacity(0.7)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-        ],
-      );
-    });
-
-    final labelStep = timeBuckets.length > 7
-        ? (timeBuckets.length / 6).ceil()
-        : 1;
-
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxValue * 1.15,
-        barGroups: barGroups,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxValue > 4 ? (maxValue / 4) : 1.0,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: Colors.grey.shade800.withOpacity(0.3),
-            strokeWidth: 0.5,
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 32,
-              getTitlesWidget: (value, meta) {
-                final i = value.toInt();
-                if (i < 0 || i >= timeBuckets.length) return const Text('');
-                if (i % labelStep != 0 && i != timeBuckets.length - 1) {
-                  return const Text('');
-                }
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    timeBuckets[i].label,
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 32,
-              interval: maxValue > 4 ? (maxValue / 4) : 1.0,
-              getTitlesWidget: (value, meta) => Text(
-                value.toInt().toString(),
-                style: TextStyle(color: theme.textSecondary, fontSize: 10),
-              ),
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchCallback: (event, response) {
-            if (event is FlTapDownEvent && response?.spot != null) {
-              HapticFeedback.lightImpact();
-            }
-          },
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF1E1E1E),
-            getTooltipItem: (group, _, rod, __) {
-              final bucket = timeBuckets[group.x.toInt()];
-              return BarTooltipItem(
-                '${bucket.label}\n${rod.toY.toInt()} sets',
-                const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyChartState(dynamic theme, String text) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.bar_chart, size: 40, color: theme.textSecondary),
-          const SizedBox(height: 8),
-          Text(
-            text,
-            style: TextStyle(color: theme.textSecondary, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreakdownList(dynamic theme) {
-    final entries = currentCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final totalCurrent = _currentTotal;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.textSecondary.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Breakdown',
-            style: TextStyle(
-              color: theme.text,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...entries.map((e) =>
-              _buildBreakdownRow(theme, e.key, e.value, totalCurrent)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreakdownRow(
-      dynamic theme, String muscle, int current, int total) {
-    final previous = previousCounts[muscle] ?? 0;
-    final diff = current - previous;
-    final percentage = total == 0 ? 0.0 : (current / total) * 100;
-    final positive = diff > 0;
-    final negative = diff < 0;
-    final deltaColor = positive
-        ? const Color(0xFF16A34A)
-        : negative
-            ? const Color(0xFFDC2626)
-            : theme.textSecondary;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _getMuscleColor(muscle),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                muscle.substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        muscle,
-                        style: TextStyle(
-                          color: theme.text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '$current sets',
-                      style: TextStyle(
-                        color: theme.text,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.textSecondary.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: (percentage / 100).clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: _getMuscleColor(muscle),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      diff == 0 ? '±0' : '${diff > 0 ? '+' : ''}$diff',
-                      style: TextStyle(
-                        color: deltaColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _shortName(String muscleGroup) {
-    switch (muscleGroup) {
-      case 'Shoulders':
-        return 'SHLD';
-      case 'Biceps':
-        return 'BIC';
-      case 'Triceps':
-        return 'TRI';
-      case 'Chest':
-        return 'CHT';
-      case 'Back':
-        return 'BCK';
-      case 'Quads':
-        return 'QUAD';
-      case 'Hamstrings':
-        return 'HAM';
-      case 'Glutes':
-        return 'GLUT';
-      case 'Calves':
-        return 'CALF';
-      case 'Abs':
-        return 'ABS';
-      default:
-        return muscleGroup.substring(0, 3).toUpperCase();
-    }
-  }
-
-  Color _getMuscleColor(String muscleGroup) {
-    switch (muscleGroup) {
-      case 'Chest':
-        return const Color(0xFFDC2626);
-      case 'Back':
-        return const Color(0xFF16A34A);
-      case 'Shoulders':
-        return const Color(0xFF2563EB);
-      case 'Biceps':
-        return const Color(0xFF7C3AED);
-      case 'Triceps':
-        return const Color(0xFFEAB308);
-      case 'Quads':
-        return const Color(0xFFE11D48);
-      case 'Hamstrings':
-        return const Color(0xFFDC2F02);
-      case 'Glutes':
-        return const Color(0xFFB91C1C);
-      case 'Calves':
-        return const Color(0xFFEA580C);
-      case 'Abs':
-        return const Color(0xFF06B6D4);
-      default:
-        return Colors.grey;
-    }
-  }
-}
-
-class _PeriodRange {
-  final DateTime start;
-  final DateTime end;
-  _PeriodRange({required this.start, required this.end});
-}
-
-class _TimeBucket {
-  final DateTime start;
-  final DateTime end;
-  final String label;
-  Map<String, int> countsByMuscle;
-
-  _TimeBucket({
-    required this.start,
-    required this.end,
-    required this.label,
-    Map<String, int>? countsByMuscle,
-  }) : countsByMuscle = countsByMuscle ?? {};
 }

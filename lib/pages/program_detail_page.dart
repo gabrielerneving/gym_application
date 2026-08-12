@@ -1,378 +1,258 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/exercise_model.dart';
 import '../models/workout_model.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/ui/ui.dart';
 import 'create_workout.dart';
 
+/// A read-only view of a saved program: what it contains and how the sets are
+/// planned, before any weights have been logged against it.
 class ProgramDetailPage extends ConsumerWidget {
   final WorkoutProgram program;
 
-  const ProgramDetailPage({Key? key, required this.program}) : super(key: key);
+  const ProgramDetailPage({super.key, required this.program});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
-    
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.primary.withOpacity(0.8), size: 24),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          program.title,
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.edit, color: theme.primary.withOpacity(0.8), size: 24),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CreateWorkoutScreen(workoutToEdit: program),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.card,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.textSecondary.withOpacity(0.2),
-                  width: 0.5,
-                ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Program Overview',
-                    style: TextStyle(
-                      color: theme.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildStatItem(
-                        icon: Icons.fitness_center,
-                        label: 'Exercises',
-                        value: '${program.exercises.length}',
-                        theme: theme,
-                      ),
-                      _buildStatItem(
-                        icon: Icons.repeat,
-                        label: 'Total Sets',
-                        value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.sets)}',
-                        theme: theme,
-                      ),
-                       _buildStatItem(
-                        icon: Icons.repeat,
-                        label: 'Working Sets',
-                        value: '${program.exercises.fold<int>(0, (sum, ex) => sum + ex.workingSets)}',
-                        theme: theme,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            Text(
-              'Exercises',
-              style: TextStyle(
-                color: theme.text,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            ...program.exercises.asMap().entries.map((entry) {
-              final index = entry.key;
-              final exercise = entry.value;
-              
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.textSecondary.withOpacity(0.2),
-                    width: 0.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Exercise header
-                    Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: theme.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              String.fromCharCode(65 + index), // A, B, C...
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                exercise.name,
-                                style: TextStyle(
-                                  color: theme.text,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                exercise.warmUpSets > 0 
-                                  ? '${exercise.workingSets} working + ${exercise.warmUpSets} warm-up sets'
-                                  : '${exercise.sets} sets planned',
-                                style: TextStyle(
-                                  color: theme.textSecondary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Empty sets template
-                    ...List.generate(exercise.sets, (setIndex) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.surface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            // Set number with warm-up indication
-                            Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                color: setIndex < exercise.warmUpSets
-                                  ? Colors.orange.withOpacity(0.2)
-                                  : Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                                border: setIndex < exercise.warmUpSets
-                                  ? Border.all(color: Colors.orange.withOpacity(0.4), width: 1)
-                                  : null,
-                              ),
-                              child: Center(
-                                child: setIndex < exercise.warmUpSets
-                                  ? Icon(
-                                      Icons.local_fire_department,
-                                      color: Colors.orange,
-                                      size: 12,
-                                    )
-                                  : Text(
-                                      '${setIndex - exercise.warmUpSets + 1}',
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                ),
-                              ),
-                            ),
-                            
-                            const SizedBox(width: 12),
-                            
-                            // Set type label
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    setIndex < exercise.warmUpSets ? 'Warm-up' : 'Working',
-                                    style: TextStyle(
-                                      color: setIndex < exercise.warmUpSets ? Colors.orange : theme.textSecondary,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    setIndex < exercise.warmUpSets 
-                                      ? 'Set ${setIndex + 1}'
-                                      : 'Set ${setIndex - exercise.warmUpSets + 1}',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 8,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            
-                            const SizedBox(width: 8),
-                            
-                            // Empty placeholders for weight/reps/notes
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Weight',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    '—',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Reps',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    '—',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Notes',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    '—',
-                                    style: TextStyle(
-                                      color: theme.textSecondary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ],
-                ),
-              );
-            }).toList(),
-          ],
-        ),
+  int get _totalSets =>
+      program.exercises.fold<int>(0, (sum, ex) => sum + ex.sets);
+
+  int get _workingSets =>
+      program.exercises.fold<int>(0, (sum, ex) => sum + ex.workingSets);
+
+  int get _warmUpSets =>
+      program.exercises.fold<int>(0, (sum, ex) => sum + ex.warmUpSets);
+
+  void _openEditor(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CreateWorkoutScreen(workoutToEdit: program),
       ),
     );
   }
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required dynamic theme,
-  }) {
-    return Column(
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final exercises = program.exercises;
+
+    final actions = <Widget>[
+      AppIconButton(
+        icon: Icons.edit_rounded,
+        tooltip: 'Edit program',
+        onPressed: () => _openEditor(context),
+      ),
+    ];
+
+    if (exercises.isEmpty) {
+      return AppScaffold(
+        title: program.title,
+        subtitle: 'No exercises yet',
+        actions: actions,
+        body: EmptyState(
+          icon: Icons.playlist_add_rounded,
+          title: 'Nothing planned yet',
+          message: 'This program has no exercises. Add a few and it is ready '
+              'to run.',
+          actionLabel: 'Add exercises',
+          onAction: () => _openEditor(context),
+        ),
+      );
+    }
+
+    return AppScaffold(
+      title: program.title,
+      subtitle: '${exercises.length} '
+          '${exercises.length == 1 ? 'exercise' : 'exercises'} · '
+          '$_totalSets ${_totalSets == 1 ? 'set' : 'sets'}',
+      actions: actions,
       children: [
-        Icon(
-          icon,
-          color: theme.text,
-          size: 26,
+        StatGrid(
+          columns: 3,
+          aspectRatio: 1.0,
+          children: [
+            StatTile(
+              label: 'Exercises',
+              value: exercises.length.toDouble(),
+            ),
+            StatTile(
+              label: 'Working',
+              value: _workingSets.toDouble(),
+              unit: 'sets',
+            ),
+            StatTile(
+              label: 'Warm-up',
+              value: _warmUpSets.toDouble(),
+              unit: 'sets',
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            color: theme.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+        const SectionHeader(
+          title: 'Exercises',
+          subtitle: 'The planned set structure for every movement',
+        ),
+        for (var i = 0; i < exercises.length; i++)
+          FadeSlideIn(
+            index: i,
+            child: _ExerciseCard(exercise: exercises[i], index: i),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: theme.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
       ],
+    );
+  }
+}
+
+/// One exercise: its position in the program, its name and how its sets split
+/// between working and warm-up work.
+class _ExerciseCard extends ConsumerWidget {
+  final Exercise exercise;
+  final int index;
+
+  const _ExerciseCard({required this.exercise, required this.index});
+
+  /// A, B, C … and plain numbers once the alphabet runs out.
+  String get _marker =>
+      index < 26 ? String.fromCharCode(65 + index) : '${index + 1}';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    final badges = <Widget>[
+      if (exercise.workingSets > 0)
+        AppBadge(
+          label: '${exercise.workingSets} working',
+          icon: Icons.fitness_center_rounded,
+        ),
+      if (exercise.warmUpSets > 0)
+        AppBadge(
+          label: '${exercise.warmUpSets} warm-up',
+          icon: Icons.local_fire_department_rounded,
+          color: t.warning,
+        ),
+      if (exercise.workingSets <= 0 && exercise.warmUpSets <= 0)
+        AppBadge(label: 'No sets planned', color: t.textSecondary),
+    ];
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: t.primaryWash,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: t.primaryWashOutline),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _marker,
+                  style: AppType.mono(t, size: 14, weight: FontWeight.w800)
+                      .copyWith(color: t.primary),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      exercise.name,
+                      style: AppType.heading(t),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: badges,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (exercise.sets > 0) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _SetStrip(exercise: exercise),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The planned sets drawn as a row of chips — flames for warm-ups, numbers for
+/// the working sets that actually count towards statistics.
+class _SetStrip extends ConsumerWidget {
+  final Exercise exercise;
+
+  const _SetStrip({required this.exercise});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children: [
+        for (var i = 0; i < exercise.sets; i++)
+          _SetChip(
+            isWarmUp: i < exercise.warmUpSets,
+            number: i - exercise.warmUpSets + 1,
+            theme: t,
+          ),
+      ],
+    );
+  }
+}
+
+class _SetChip extends StatelessWidget {
+  final bool isWarmUp;
+  final int number;
+  final AppColors theme;
+
+  const _SetChip({
+    required this.isWarmUp,
+    required this.number,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isWarmUp
+            ? theme.warning.withValues(alpha: theme.isDark ? 0.16 : 0.11)
+            : theme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xs),
+        border: Border.all(
+          color: isWarmUp ? theme.warning.withValues(alpha: 0.28) : theme.outline,
+        ),
+      ),
+      child: isWarmUp
+          ? Icon(
+              Icons.local_fire_department_rounded,
+              size: 14,
+              color: theme.warning,
+            )
+          : Text(
+              '$number',
+              style: AppType.mono(theme, size: 12)
+                  .copyWith(color: theme.textSecondary),
+            ),
     );
   }
 }

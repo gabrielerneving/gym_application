@@ -1,4 +1,4 @@
-import 'dart:math' as Math;
+import 'dart:math' as math;
 
 /// Olika formler för att beräkna 1RM (One Rep Max)
 class OneRMCalculator {
@@ -33,7 +33,7 @@ class OneRMCalculator {
   static double lombardi(double weight, int reps) {
     if (reps == 1) return weight;
     if (reps == 0 || weight == 0) return 0;
-    return weight * Math.pow(reps, 0.10);
+    return weight * math.pow(reps, 0.10);
   }
 
   /// Mayhew et al. Formula
@@ -41,7 +41,7 @@ class OneRMCalculator {
   static double mayhew(double weight, int reps) {
     if (reps == 1) return weight;
     if (reps == 0 || weight == 0) return 0;
-    return (100.0 * weight) / (52.2 + 41.9 * Math.exp(-0.055 * reps));
+    return (100.0 * weight) / (52.2 + 41.9 * math.exp(-0.055 * reps));
   }
 
   /// O'Conner Formula
@@ -57,7 +57,7 @@ class OneRMCalculator {
   static double wathan(double weight, int reps) {
     if (reps == 1) return weight;
     if (reps == 0 || weight == 0) return 0;
-    return (100.0 * weight) / (48.8 + 53.8 * Math.exp(-0.075 * reps));
+    return (100.0 * weight) / (48.8 + 53.8 * math.exp(-0.075 * reps));
   }
 
   /// Beräkna genomsnitt av alla formler (mest exakt)
