@@ -8,6 +8,7 @@ import 'workout_history.dart';
 import 'statistics_screen.dart';
 import 'active_workout_screen.dart';
 import '../providers/workout_provider.dart';
+import '../providers/rest_timer_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/ui/ui.dart';
 
@@ -102,18 +103,21 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           backgroundColor: theme.background,
           body: Stack(
             children: [
-              // The tab content. Pushed down while the live-workout pill shows.
+              // The pill is visually detached, but the content still yields the
+              // strip it occupies: letting it overlay would put it straight on
+              // top of every screen's title row and back button.
               AnimatedPadding(
                 duration: AppMotion.normal,
                 curve: AppMotion.standard,
-                padding: EdgeInsets.only(top: isRunning ? 62 : 0),
+                padding: EdgeInsets.only(top: isRunning ? 58 : 0),
                 child: _FadeIndexedStack(
                   index: _selectedIndex,
                   children: _pages,
                 ),
               ),
 
-              // Live workout pill.
+              // Live workout pill: detached, centred and only as wide as its
+              // content, matching the floating nav bar at the other end.
               Positioned(
                 top: topInset + AppSpacing.sm,
                 left: AppSpacing.lg,
@@ -123,21 +127,32 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   child: AnimatedSlide(
                     duration: AppMotion.normal,
                     curve: AppMotion.spring,
-                    offset: isRunning ? Offset.zero : const Offset(0, -1.4),
+                    offset: isRunning ? Offset.zero : const Offset(0, -1.6),
                     child: AnimatedOpacity(
                       duration: AppMotion.fast,
                       opacity: isRunning ? 1 : 0,
-                      child: _ActiveWorkoutPill(
-                        title: activeWorkout.session?.programTitle ?? 'Workout',
-                        elapsedSeconds: activeWorkout.elapsedSeconds,
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ActiveWorkoutScreen(),
-                            ),
-                          );
-                        },
+                      // A Row rather than Center: this Positioned has no
+                      // bottom, so the vertical axis is loose and Center would
+                      // stretch to the full stack height — which would make the
+                      // slide-in animation travel 1.6 screens instead of 1.6
+                      // pill heights.
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _ActiveWorkoutPill(
+                            title:
+                                activeWorkout.session?.programTitle ?? 'Workout',
+                            elapsedSeconds: activeWorkout.elapsedSeconds,
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ActiveWorkoutScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -272,6 +287,9 @@ class _ActiveWorkoutPillState extends ConsumerState<_ActiveWorkoutPill>
           vertical: AppSpacing.sm,
         ),
         child: Row(
+          // Hugs its content so the pill reads as a floating chip rather than
+          // a full-width banner.
+          mainAxisSize: MainAxisSize.min,
           children: [
             AnimatedBuilder(
               animation: _pulse,
@@ -300,7 +318,10 @@ class _ActiveWorkoutPillState extends ConsumerState<_ActiveWorkoutPill>
               },
             ),
             const SizedBox(width: AppSpacing.md),
-            Expanded(
+            // A ceiling rather than Expanded: the pill must not stretch, but a
+            // long program name still has to give way instead of overflowing.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -311,16 +332,11 @@ class _ActiveWorkoutPillState extends ConsumerState<_ActiveWorkoutPill>
                     overflow: TextOverflow.ellipsis,
                     style: AppType.heading(t).copyWith(fontSize: 15),
                   ),
-                  Text(
-                    'In progress · tap to resume',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.caption(t).copyWith(fontSize: 11.5),
-                  ),
+                  _PillSubtitle(theme: t),
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: AppSpacing.md),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -335,6 +351,45 @@ class _ActiveWorkoutPillState extends ConsumerState<_ActiveWorkoutPill>
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The pill's second line. Swaps to the live rest countdown while a rest is
+/// running, so stepping away from the workout screen does not mean losing
+/// track of it.
+class _PillSubtitle extends ConsumerWidget {
+  final AppColors theme;
+
+  const _PillSubtitle({required this.theme});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rest = ref.watch(restTimerProvider);
+
+    if (!rest.isRunning) {
+      return Text(
+        'In progress · tap to resume',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.caption(theme).copyWith(fontSize: 11.5),
+      );
+    }
+
+    final tone = rest.isOvertime ? theme.success : theme.textSecondary;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.timer_outlined, size: 12, color: tone),
+        const SizedBox(width: 4),
+        Text(
+          rest.isOvertime ? 'Rested ${rest.label}' : 'Resting ${rest.label}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.caption(theme).copyWith(fontSize: 11.5, color: tone),
+        ),
+      ],
     );
   }
 }

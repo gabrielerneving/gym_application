@@ -23,5 +23,6 @@ export 'feedback.dart';
 export 'floating_nav_bar.dart';
 export 'motion.dart';
 export 'progress_ring.dart';
+export 'rest_timer.dart';
 export 'section_header.dart';
 export 'stat_tile.dart';

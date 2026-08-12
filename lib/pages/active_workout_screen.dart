@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/master_exercise_model.dart';
 import '../models/workout_session_model.dart';
 import '../providers/analytics_provider.dart';
+import '../providers/rest_timer_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_provider.dart';
 import '../providers/workout_settings_provider.dart';
@@ -21,6 +22,10 @@ import 'choose_category_screen.dart';
 /// All state lives in [workoutProvider]; this screen only renders it and owns
 /// the text controllers for the inputs.
 /// ---------------------------------------------------------------------------
+/// Vertical space the floating rest timer occupies: the pill itself plus the
+/// gap it keeps from the bottom edge.
+const double _restTimerClearance = 76;
+
 class ActiveWorkoutScreen extends ConsumerStatefulWidget {
   const ActiveWorkoutScreen({super.key});
 
@@ -180,8 +185,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
     final exercises = session.completedExercises;
     final summary = _WorkoutSummary.of(session);
-    final topInset = MediaQuery.of(context).padding.top;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final media = MediaQuery.of(context);
+    final topInset = media.padding.top;
+    final bottomInset = media.padding.bottom;
+    final keyboardOpen = media.viewInsets.bottom > 0;
 
     return PopScope(
       canPop: true,
@@ -190,9 +197,11 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         ref.read(workoutProvider.notifier).saveCurrentState();
       },
       child: AppPage(
-        child: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: CustomScrollView(
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: CustomScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             slivers: [
               SliverPersistentHeader(
@@ -262,7 +271,8 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     AppSpacing.screenH,
                     AppSpacing.xs,
                     AppSpacing.screenH,
-                    AppSpacing.xxxl + bottomInset,
+                    // Clears the floating rest timer as well as the safe area.
+                    AppSpacing.xxxl + _restTimerClearance + bottomInset,
                   ),
                   child: Column(
                     children: [
@@ -293,7 +303,20 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 ),
               ),
             ],
-          ),
+              ),
+            ),
+
+            // The rest timer floats over the list so it is reachable without
+            // scrolling. Hidden while the keyboard is up, where it would sit on
+            // top of the number pad the user is aiming at.
+            if (!keyboardOpen)
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: RestTimerBar(),
+              ),
+          ],
         ),
       ),
     );
@@ -377,6 +400,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     );
     if (!confirmed || !mounted) return;
     ref.read(workoutProvider.notifier).discardStaleWorkout();
+    ref.read(restTimerProvider.notifier).stop();
     if (!mounted) return;
     Navigator.of(context).maybePop();
   }
@@ -494,6 +518,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       );
       return;
     }
+
+    // The rest belongs to the session that just ended.
+    ref.read(restTimerProvider.notifier).stop();
 
     // Statistics read from one cached fetch — force it to refresh.
     if (mounted) ref.invalidate(workoutSessionsProvider);
@@ -1342,6 +1369,21 @@ class _SetRowState extends ConsumerState<_SetRow>
       CurveTween(curve: AppMotion.standard),
     ),
   );
+
+  static bool _isComplete(CompletedSet set) => set.weight > 0 && set.reps > 0;
+
+  @override
+  void didUpdateWidget(covariant _SetRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // A set becoming complete is the moment the rest starts. Warm-up sets are
+    // excluded — nobody rests two minutes after an empty bar.
+    if (!widget.set.isWarmUp &&
+        !_isComplete(oldWidget.set) &&
+        _isComplete(widget.set)) {
+      ref.read(restTimerProvider.notifier).onSetCompleted();
+    }
+  }
 
   @override
   void dispose() {
