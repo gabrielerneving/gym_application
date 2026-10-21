@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/design_tokens.dart';
 import 'app_buttons.dart';
 import 'app_card.dart';
+import 'feedback.dart';
 import 'motion.dart';
 
 /// ---------------------------------------------------------------------------
@@ -65,16 +66,19 @@ class AppSheet {
   }
 
   /// A list of actions in a sheet — the replacement for the long-press menu.
+  /// [subtitle] sits under the title ("Set 3" / "Bench Press").
   static Future<void> actions({
     required BuildContext context,
     required WidgetRef ref,
     required List<SheetAction> actions,
     String? title,
+    String? subtitle,
   }) {
     return show<void>(
       context: context,
       ref: ref,
       title: title,
+      subtitle: subtitle,
       builder: (context) {
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -125,12 +129,15 @@ class _SheetActionRow extends ConsumerWidget {
         action.onTap();
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(
           children: [
+            // Neutral for ordinary actions; only a destructive row carries
+            // colour, so it stands out by more than its label.
             IconBadge(
               icon: action.icon,
-              color: action.destructive ? t.error : t.primary,
+              color: action.destructive ? t.error : null,
+              neutral: true,
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
@@ -140,7 +147,11 @@ class _SheetActionRow extends ConsumerWidget {
                 children: [
                   Text(
                     action.label,
-                    style: AppType.heading(t).copyWith(color: tone),
+                    style: AppType.body(t).copyWith(
+                      color: tone,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (action.description != null) ...[
                     const SizedBox(height: 2),
@@ -155,6 +166,11 @@ class _SheetActionRow extends ConsumerWidget {
     );
   }
 }
+
+/// The title style of a sheet — 19pt bold. Exposed so a sheet that draws its
+/// own header (a picker with a search field) can match the shell.
+TextStyle sheetTitleStyle(AppColors t) =>
+    AppType.heading(t).copyWith(fontSize: 19, letterSpacing: -0.3);
 
 class _SheetShell extends StatelessWidget {
   final AppColors theme;
@@ -220,12 +236,14 @@ class _SheetShell extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // A sheet title labels the sheet; it is not a page
+                    // headline, so it stays a step under AppType.title.
                     SizedBox(
                       width: double.infinity,
-                      child: Text(title!, style: AppType.title(theme)),
+                      child: Text(title!, style: sheetTitleStyle(theme)),
                     ),
                     if (subtitle != null) ...[
-                      const SizedBox(height: 3),
+                      const SizedBox(height: AppSpacing.xs),
                       Text(subtitle!, style: AppType.secondary(theme)),
                     ],
                   ],
@@ -236,9 +254,9 @@ class _SheetShell extends StatelessWidget {
                 padding: padding ??
                     EdgeInsets.fromLTRB(
                       AppSpacing.xxl,
-                      AppSpacing.xl,
+                      title != null ? AppSpacing.lg : AppSpacing.xl,
                       AppSpacing.xxl,
-                      AppSpacing.xxl + media.padding.bottom,
+                      AppSpacing.lg + media.padding.bottom,
                     ),
                 child: child,
               ),
@@ -404,14 +422,14 @@ class AppDialog {
                             ),
                             const SizedBox(height: AppSpacing.lg),
                           ],
-                          Text(
+                          BalancedText(
                             title,
                             textAlign: TextAlign.center,
                             style: AppType.title(t).copyWith(fontSize: 20),
                           ),
                           if (message != null) ...[
                             const SizedBox(height: AppSpacing.sm),
-                            Text(
+                            BalancedText(
                               message,
                               textAlign: TextAlign.center,
                               style: AppType.secondary(t)

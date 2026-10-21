@@ -8,14 +8,16 @@ import '../models/workout_session_model.dart';
 import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/analytics_service.dart';
+import '../widgets/stats_components.dart';
 import '../widgets/ui/ui.dart';
 
 /// ---------------------------------------------------------------------------
 /// Consistency — the habit, not the lifting.
 ///
 /// Four questions, in order of how often people ask them:
-///   1. Did I train this week?            → the seven-day strip
-///   2. How long have I kept it up?       → streaks and weekly frequency
+///   1. How long have I kept it up?       → the streak, as the headline, with
+///      this week's count and the weekly average beside it
+///   2. Did I train this week?            → the seven-day strip
 ///   3. What does the year look like?     → the heat map
 ///   4. Which days do I actually train?   → the weekday breakdown, which is
 ///      usually the part that surprises people.
@@ -85,13 +87,14 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
       loading: () => AppScaffold(
         title: 'Consistency',
         headerBottom: _rangeBar(),
+        // Shaped like the page: headline, the week, then the calendar.
         children: const [
-          SizedBox(height: AppSpacing.lg),
-          SkeletonCard(height: 120),
-          SizedBox(height: AppSpacing.xl),
-          SkeletonCard(height: 150),
-          SizedBox(height: AppSpacing.xl),
-          SkeletonCard(height: 220),
+          SizedBox(height: AppSpacing.sm),
+          SkeletonCard(height: 184),
+          SizedBox(height: AppSpacing.md),
+          SkeletonCard(height: 136),
+          SizedBox(height: AppSpacing.xxl),
+          SkeletonCard(height: 260),
         ],
       ),
       error: (error, stackTrace) => AppScaffold(
@@ -131,7 +134,7 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
 
     final windowStart = _range.days == null
         ? AnalyticsService.dayOf(oldest)
-        : today.subtract(Duration(days: _range.days! - 1));
+        : AnalyticsService.addDays(today, -(_range.days! - 1));
 
     final windowSessions = <WorkoutSession>[
       for (final session in data.sessions)
@@ -152,8 +155,7 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
 
     final weekLabels = <String>[
       for (var i = 6; i >= 0; i--)
-        AppFormat.weekdaysShort[
-            today.subtract(Duration(days: i)).weekday - 1],
+        AppFormat.weekdaysShort[AnalyticsService.addDays(today, -i).weekday - 1],
     ];
 
     return AppScaffold(
@@ -163,55 +165,48 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
       headerBottom: _rangeBar(),
       onRefresh: _refresh,
       children: [
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.sm),
         FadeSlideIn(
+          child: StatsHeadlineCard(
+            value: streak.current.toDouble(),
+            unit: 'week streak',
+            icon: Icons.local_fire_department_rounded,
+            caption: goal > 1
+                ? 'Weeks with at least $goal sessions, back to back'
+                : 'Weeks with a session, back to back',
+            metrics: [
+              HeadlineMetric(
+                label: 'Longest',
+                value: '${streak.longest}',
+                unit: streak.longest == 1 ? 'week' : 'weeks',
+              ),
+              HeadlineMetric(
+                label: 'This week',
+                // A weekly goal turns the count into progress, so show what
+                // it is being counted toward rather than just the number.
+                value: goal > 1
+                    ? '${streak.thisWeek}/$goal'
+                    : '${streak.thisWeek}',
+                unit: goal > 1
+                    ? null
+                    : streak.thisWeek == 1
+                        ? 'session'
+                        : 'sessions',
+              ),
+              HeadlineMetric(
+                label: 'Per week',
+                value: frequency.toStringAsFixed(1),
+                unit: 'avg',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        FadeSlideIn(
+          index: 1,
           child: _WeekCard(days: data.lastSevenDays, labels: weekLabels),
         ),
-        const SizedBox(height: AppSpacing.xxl),
-        StatGrid(
-          children: [
-            StatTile(
-              label: 'Current streak',
-              value: streak.current.toDouble(),
-              unit: streak.current == 1 ? 'week' : 'weeks',
-              icon: Icons.local_fire_department_rounded,
-              highlight: true,
-            ),
-            StatTile(
-              label: 'Longest streak',
-              value: streak.longest.toDouble(),
-              unit: streak.longest == 1 ? 'week' : 'weeks',
-              icon: Icons.emoji_events_rounded,
-            ),
-            StatTile(
-              label: 'This week',
-              value: streak.thisWeek.toDouble(),
-              // A weekly goal turns the count into progress, so show what it
-              // is being counted toward rather than just the raw number.
-              unit: goal > 1
-                  ? 'of $goal sessions'
-                  : streak.thisWeek == 1
-                      ? 'session'
-                      : 'sessions',
-              icon: Icons.event_available_rounded,
-            ),
-            StatTile(
-              label: 'Average per week',
-              value: frequency,
-              decimals: 1,
-              unit: 'sessions',
-              icon: Icons.timeline_rounded,
-              sparkline: [
-                for (final bucket in data.weeklyVolume)
-                  bucket.workouts.toDouble(),
-              ],
-            ),
-          ],
-        ),
-        const SectionHeader(
-          title: 'Training calendar',
-          subtitle: 'Every day you showed up',
-        ),
+        const SectionHeader(title: 'Training calendar'),
         FadeSlideIn(
           key: ValueKey('heatmap-${_range.name}'),
           child: _HeatmapCard(
@@ -219,17 +214,13 @@ class _ConsistencyScreenState extends ConsumerState<ConsistencyScreen> {
             startDate: windowStart,
             endDate: today,
             selected: _selectedDay,
-            sessions: windowSessions.length,
             onSelect: (day) {
               HapticStrength.selection.fire();
               setState(() => _selectedDay = AnalyticsService.dayOf(day));
             },
           ),
         ),
-        const SectionHeader(
-          title: 'Which days you train',
-          subtitle: 'Sessions by weekday in this window',
-        ),
+        const SectionHeader(title: 'Training days'),
         FadeSlideIn(
           key: ValueKey('weekdays-${_range.name}'),
           child: _WeekdayBreakdown(counts: weekdayCounts),
@@ -255,15 +246,6 @@ class _WeekCard extends ConsumerWidget {
     final t = ref.watch(themeProvider);
     final trained = days.where((d) => d).length;
 
-    final String message;
-    if (trained == 0) {
-      message = 'No sessions in the last seven days.';
-    } else if (days.isNotEmpty && days.last) {
-      message = 'You trained $trained of the last 7 days, including today.';
-    } else {
-      message = 'You trained $trained of the last 7 days.';
-    }
-
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,15 +254,14 @@ class _WeekCard extends ConsumerWidget {
             children: [
               Expanded(child: Overline('Last 7 days', padding: EdgeInsets.zero)),
               AppBadge(
-                label: '$trained / 7',
-                color: trained >= 3 ? t.success : t.primary,
+                label: '$trained of 7 days',
+                // Green once it is a solid week; otherwise just a count.
+                color: trained >= 3 ? t.success : t.textSecondary,
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
           WeekStrip(days: days, labels: labels),
-          const SizedBox(height: AppSpacing.lg),
-          Text(message, style: AppType.secondary(t)),
         ],
       ),
     );
@@ -296,7 +277,6 @@ class _HeatmapCard extends ConsumerWidget {
   final DateTime startDate;
   final DateTime endDate;
   final DateTime? selected;
-  final int sessions;
   final ValueChanged<DateTime> onSelect;
 
   const _HeatmapCard({
@@ -304,9 +284,15 @@ class _HeatmapCard extends ConsumerWidget {
     required this.startDate,
     required this.endDate,
     required this.selected,
-    required this.sessions,
     required this.onSelect,
   });
+
+  /// The package's weekday-label column ("Mon", "Wed"…) plus its margins.
+  static const double _weekLabelWidth = 26;
+  static const double _cellMargin = 2;
+  static const double _minCell = 14;
+  static const double _maxCell = 22;
+  static const double _scrollCell = 18;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -327,20 +313,46 @@ class _HeatmapCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          HeatMap(
-            datasets: datasets,
-            colorMode: ColorMode.color,
-            showText: false,
-            scrollable: true,
-            colorsets: colorsets,
-            onClick: (day) => onSelect(day),
-            startDate: startDate,
-            endDate: endDate,
-            size: 20,
-            textColor: t.textSecondary,
-            fontSize: 11,
-            defaultColor: t.surface,
-            showColorTip: false,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Columns the package draws: one per week, Sunday-first.
+              final days = endDate.difference(startDate).inDays;
+              final weeks = (days + startDate.weekday % 7) ~/ 7 + 1;
+              final fitted =
+                  (constraints.maxWidth - _weekLabelWidth) / weeks -
+                      2 * _cellMargin;
+
+              // When every week fits at a readable size, show the whole range
+              // with its weekday labels. Otherwise scroll (newest first) and
+              // fade the far edge so the cut-off column reads as "more".
+              final fits = fitted >= _minCell;
+              final heatmap = HeatMap(
+                datasets: datasets,
+                colorMode: ColorMode.color,
+                showText: false,
+                scrollable: !fits,
+                colorsets: colorsets,
+                onClick: (day) => onSelect(day),
+                startDate: startDate,
+                endDate: endDate,
+                size: fits ? math.min(fitted, _maxCell) : _scrollCell,
+                margin: const EdgeInsets.all(_cellMargin),
+                borderRadius: 4,
+                textColor: t.textSecondary,
+                fontSize: 10.5,
+                defaultColor: t.surface,
+                showColorTip: false,
+              );
+              if (fits) return heatmap;
+              return ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Color(0x00000000), Color(0xFF000000)],
+                  stops: [0.0, 0.08],
+                ).createShader(bounds),
+                child: heatmap,
+              );
+            },
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(
@@ -363,7 +375,6 @@ class _HeatmapCard extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           if (selected != null)
             MetricRow(
-              icon: Icons.event_rounded,
               label: '${_weekdayNames[selected!.weekday - 1]}, '
                   '${AppFormat.dayMonth(selected!)}',
               value: selectedCount == 0
@@ -371,16 +382,7 @@ class _HeatmapCard extends ConsumerWidget {
                   : '$selectedCount ${selectedCount == 1 ? 'session' : 'sessions'}',
               valueColor: selectedCount == 0 ? t.textSecondary : t.primary,
             ),
-          MetricRow(
-            icon: Icons.fitness_center_rounded,
-            label: 'Sessions in this window',
-            value: '$sessions',
-          ),
-          MetricRow(
-            icon: Icons.today_rounded,
-            label: 'Days trained',
-            value: '${datasets.length}',
-          ),
+          MetricRow(label: 'Days trained', value: '${datasets.length}'),
         ],
       ),
     );
@@ -410,14 +412,17 @@ class _LegendSwatch extends StatelessWidget {
 /// Weekday distribution
 /// ---------------------------------------------------------------------------
 
-/// Which days of the week the training actually lands on. Most people are
-/// convinced they are even across the week and are not.
+/// Which days of the week the training actually lands on, as seven columns
+/// with the busiest day in the accent. Most people are convinced they are
+/// even across the week and are not.
 class _WeekdayBreakdown extends ConsumerWidget {
   /// 1 = Monday … 7 = Sunday, straight from
   /// [AnalyticsService.weekdayDistribution].
   final Map<int, int> counts;
 
   const _WeekdayBreakdown({required this.counts});
+
+  static const double _plotHeight = 112;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -428,65 +433,128 @@ class _WeekdayBreakdown extends ConsumerWidget {
     final maxCount = values.reduce(math.max);
 
     var busiest = 0;
-    var quietest = 0;
     for (var i = 1; i < values.length; i++) {
       if (values[i] > values[busiest]) busiest = i;
-      if (values[i] < values[quietest]) quietest = i;
     }
-
-    final String verdict;
-    if (total == 0) {
-      verdict = 'No sessions in this window yet.';
-    } else if (values[busiest] == values[quietest]) {
-      verdict = 'Your sessions are spread perfectly evenly across the week — '
-          '${values[busiest]} on every day.';
-    } else {
-      final share = (values[busiest] / total) * 100;
-      final busiestLine = '${_weekdayNames[busiest]} is your day — '
-          '${share.toStringAsFixed(share < 10 ? 1 : 0)}% of your sessions '
-          'land there.';
-      final quietLine = values[quietest] == 0
-          ? ' You have never trained on a ${_weekdayNames[quietest]} in this '
-              'window.'
-          : ' ${_weekdayNames[quietest]} is your lightest day with '
-              '${values[quietest]}.';
-      verdict = busiestLine + quietLine;
-    }
+    final share = total == 0 ? 0.0 : values[busiest] / total * 100;
 
     return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              IconBadge(icon: Icons.calendar_view_week_rounded),
-              const SizedBox(width: AppSpacing.lg),
-              Expanded(
-                child: Text(verdict, style: AppType.body(t)),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          for (var i = 0; i < values.length; i++)
-            FadeSlideIn(
-              index: i,
-              child: StatBar(
-                label: _weekdayNames[i],
-                value: values[i].toDouble(),
-                max: maxCount == 0 ? 1.0 : maxCount.toDouble(),
-                valueLabel: _valueLabel(values[i], total),
-                color: total > 0 && i == busiest ? t.primary : t.textSecondary,
+          if (total > 0) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: _weekdayNames[busiest],
+                      style: AppType.heading(t),
+                    ),
+                    TextSpan(
+                      text: ' is your day · '
+                          '${share.toStringAsFixed(share < 10 ? 1 : 0)}% of '
+                          'sessions',
+                      style: AppType.secondary(t),
+                    ),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(height: AppSpacing.xl),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < values.length; i++)
+                Expanded(
+                  child: FadeSlideIn(
+                    index: i,
+                    child: _DayColumn(
+                      label: AppFormat.weekdaysShort[i],
+                      count: values[i],
+                      fraction: maxCount == 0 ? 0 : values[i] / maxCount,
+                      height: _plotHeight,
+                      highlight: total > 0 && i == busiest,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
 
-  String _valueLabel(int value, int total) {
-    if (value == 0) return '—';
-    final share = (value / total) * 100;
-    return '$value  ·  ${share.toStringAsFixed(share < 10 ? 1 : 0)}%';
+class _DayColumn extends ConsumerWidget {
+  final String label;
+  final int count;
+  final double fraction;
+  final double height;
+  final bool highlight;
+
+  const _DayColumn({
+    required this.label,
+    required this.count,
+    required this.fraction,
+    required this.height,
+    required this.highlight,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final tone = highlight
+        ? t.primary
+        : t.textSecondary.withValues(alpha: t.isDark ? 0.42 : 0.32);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          count == 0 ? '' : '$count',
+          style: AppType.mono(t, size: 12.5).copyWith(
+            color: highlight ? t.text : t.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs + 2),
+        SizedBox(
+          height: height,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: fraction),
+              duration: AppMotion.lazy,
+              curve: AppMotion.enter,
+              builder: (context, f, _) => Container(
+                width: 22,
+                // A zero day keeps a stub, so the empty days still line up.
+                height: count == 0 ? 4 : math.max(6, height * f),
+                decoration: BoxDecoration(
+                  color: count == 0 ? t.surface : tone,
+                  borderRadius: BorderRadius.circular(AppRadius.xs - 2),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          label,
+          style: AppType.caption(t).copyWith(
+            color: highlight ? t.text : t.textSecondary,
+            fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
   }
 }

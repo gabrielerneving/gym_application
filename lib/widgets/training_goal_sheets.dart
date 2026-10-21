@@ -78,27 +78,40 @@ class _BandEditorState extends ConsumerState<_BandEditor> {
       children: [
         _BandReadout(min: min, max: max),
         const SizedBox(height: AppSpacing.lg),
-        RangeSlider(
-          values: values,
-          min: TrainingGoals.minSets.toDouble(),
-          max: TrainingGoals.maxSets.toDouble(),
-          divisions: TrainingGoals.maxSets - TrainingGoals.minSets,
-          activeColor: t.primary,
-          inactiveColor: t.surface,
-          onChanged: (next) {
-            // Keep the ends at least a set apart, so the band never collapses
-            // into a line that the charts cannot shade.
-            if (next.end - next.start < TrainingGoals.minBandWidth) return;
-            HapticFeedback.selectionClick();
-            setState(() => _dragging = next);
-          },
-          onChangeEnd: (next) {
-            setState(() => _dragging = null);
-            notifier.setWeeklySetBand(next.start.round(), next.end.round());
-          },
+        // Forty one-set steps drew forty dots along the track; the snapping
+        // stays, the dots go.
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 6,
+            activeTickMarkColor: Colors.transparent,
+            inactiveTickMarkColor: Colors.transparent,
+            overlayColor: t.primary.withValues(alpha: 0.12),
+          ),
+          child: RangeSlider(
+            values: values,
+            min: TrainingGoals.minSets.toDouble(),
+            max: TrainingGoals.maxSets.toDouble(),
+            divisions: TrainingGoals.maxSets - TrainingGoals.minSets,
+            activeColor: t.primary,
+            // The sheet is already the raised surface; the track needs the
+            // hairline tone to show against it.
+            inactiveColor: t.outline,
+            onChanged: (next) {
+              // Keep the ends at least a set apart, so the band never
+              // collapses into a line that the charts cannot shade.
+              if (next.end - next.start < TrainingGoals.minBandWidth) return;
+              HapticFeedback.selectionClick();
+              setState(() => _dragging = next);
+            },
+            onChangeEnd: (next) {
+              setState(() => _dragging = null);
+              notifier.setWeeklySetBand(next.start.round(), next.end.round());
+            },
+          ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          // Lines the scale's ends up under the ends of the track.
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -108,7 +121,7 @@ class _BandEditorState extends ConsumerState<_BandEditor> {
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-        Text('Common bands', style: AppType.overline(t)),
+        Text('COMMON BANDS', style: AppType.overline(t)),
         const SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.sm,
@@ -176,19 +189,18 @@ class _BandReadout extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
+            // Both ends in body text: they are equals, and the slider below
+            // already carries the accent for the selection.
             Text('$min', style: AppType.metric(t, size: 40)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Text(
                 '–',
                 style: AppType.metric(t, size: 28)
-                    .copyWith(color: t.textTertiary),
+                    .copyWith(color: t.textSecondary),
               ),
             ),
-            Text(
-              '$max',
-              style: AppType.metric(t, size: 40).copyWith(color: t.primary),
-            ),
+            Text('$max', style: AppType.metric(t, size: 40)),
           ],
         ),
         const SizedBox(height: AppSpacing.xs),

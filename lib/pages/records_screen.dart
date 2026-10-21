@@ -13,8 +13,8 @@ enum _RecordSort { recent, heaviest, alphabetical }
 /// RecordsScreen — every all-time personal best, one card per exercise.
 ///
 /// Reads [TrainingData.personalBests] (one [PersonalBest] per exercise) and
-/// pairs each record with the estimated-1RM curve for that lift so you can see
-/// whether the PR was a fluke or the top of a trend.
+/// pairs each record with that lift's trend line, so you can see whether the
+/// PR was a fluke or the top of a trend.
 /// ---------------------------------------------------------------------------
 class RecordsScreen extends ConsumerStatefulWidget {
   const RecordsScreen({super.key});
@@ -68,9 +68,10 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
         }
 
         final now = DateTime.now();
-        final fresh = records
-            .where((r) => now.difference(r.date) <= _recentWindow)
-            .length;
+        // A record from an exercise's first session is a baseline, not news.
+        bool isNew(PersonalBest r) =>
+            !r.isDebut && now.difference(r.date) <= _recentWindow;
+        final fresh = records.where(isNew).length;
         final visible = _applyFilters(records);
 
         return _shell(
@@ -108,8 +109,8 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
                     index: i,
                     child: _RecordCard(
                       record: visible[i],
-                      series: data.progressFor(visible[i].exercise).oneRmSeries,
-                      isNew: now.difference(visible[i].date) <= _recentWindow,
+                      series: _trend(data.progressFor(visible[i].exercise)),
+                      isNew: isNew(visible[i]),
                     ),
                   ),
                 ),
@@ -145,6 +146,18 @@ class _RecordsScreenState extends ConsumerState<RecordsScreen> {
       body: body,
       children: children,
     );
+  }
+
+  /// The line behind each record: estimated 1RM where there is one, the top
+  /// weight for a lift only ever done for high reps, and the best set's reps
+  /// for a bodyweight exercise.
+  static List<double> _trend(ExerciseProgress progress) {
+    if (progress.isBodyweight) {
+      return [for (final p in progress.points) p.bestReps.toDouble()];
+    }
+    final oneRm = progress.oneRmSeries;
+    if (oneRm.isNotEmpty) return oneRm;
+    return [for (final p in progress.weightedPoints) p.topWeight];
   }
 
   List<PersonalBest> _applyFilters(List<PersonalBest> records) {
@@ -207,10 +220,18 @@ class _SearchField extends ConsumerWidget {
               textCapitalization: TextCapitalization.words,
               style: AppType.body(t),
               cursorColor: t.primary,
-              decoration: InputDecoration.collapsed(
+              // The pill is the field: switch off the theme's own outline
+              // and fill, which otherwise draw a second box inside it.
+              decoration: InputDecoration(
+                isCollapsed: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
                 hintText: 'Search exercises',
                 hintStyle:
-                    AppType.secondary(t).copyWith(color: t.textTertiary),
+                    AppType.secondary(t).copyWith(color: t.textSecondary),
               ),
             ),
           ),
@@ -233,15 +254,15 @@ class _SearchField extends ConsumerWidget {
   }
 }
 
-/// One personal record: the heaviest working set ever logged for an exercise,
-/// what it estimates as a 1RM, when it happened and how the lift has trended.
+/// One personal record: the best set ever logged for an exercise, its trend
+/// line, and one line of context — estimated 1RM, when, and how often.
 class _RecordCard extends ConsumerWidget {
   final PersonalBest record;
 
-  /// Estimated 1RM per session for this exercise, oldest first.
+  /// The exercise's trend, oldest first.
   final List<double> series;
 
-  /// Set inside the last 30 days.
+  /// Beat an earlier best inside the last 30 days.
   final bool isNew;
 
   const _RecordCard({
@@ -255,19 +276,28 @@ class _RecordCard extends ConsumerWidget {
     final t = ref.watch(themeProvider);
     final tone = isNew ? t.success : t.primary;
 
+    final sessions =
+        '${record.totalSessions} ${record.totalSessions == 1 ? 'session' : 'sessions'}';
+    final details = [
+      if (record.isBodyweight) 'Bodyweight',
+      if (!record.isBodyweight && record.estimatedOneRm > 0)
+        'e1RM ${AppFormat.weight(record.estimatedOneRm)} kg',
+      AppFormat.relativeDate(record.date),
+      sessions,
+    ].join(' · ');
+
     return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg + 2,
+        AppSpacing.xl,
+        AppSpacing.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              IconBadge(
-                icon: Icons.emoji_events_rounded,
-                color: tone,
-                size: 38,
-                iconSize: 19,
-              ),
-              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
                   record.exercise,
@@ -276,76 +306,65 @@ class _RecordCard extends ConsumerWidget {
                   style: AppType.heading(t).copyWith(fontSize: 16),
                 ),
               ),
+              // A quiet marker rather than a pill: in a good month nearly
+              // every card is new, and a row of badges stops saying anything.
               if (isNew) ...[
                 const SizedBox(width: AppSpacing.sm),
-                AppBadge(
-                  label: 'New',
-                  color: t.success,
-                  icon: Icons.bolt_rounded,
+                Icon(Icons.arrow_upward_rounded, size: 14, color: t.success),
+                const SizedBox(width: 2),
+                Text(
+                  'New',
+                  style: AppType.caption(t).copyWith(
+                    color: t.success,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.sm),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
-                    const Overline('Best set'),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            AppFormat.weight(record.weight),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppType.metric(t, size: 26),
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          'kg × ${record.reps}',
-                          style: AppType.secondary(t),
-                        ),
-                      ],
+                    Flexible(
+                      child: Text(
+                        record.isBodyweight
+                            ? '${record.reps}'
+                            : AppFormat.weight(record.weight),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.metric(t, size: 28),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      record.isBodyweight
+                          ? (record.reps == 1 ? 'rep' : 'reps')
+                          : 'kg × ${record.reps}',
+                      style: AppType.secondary(t),
                     ),
                   ],
                 ),
               ),
               if (series.length > 1)
                 SizedBox(
-                  width: 92,
-                  height: 42,
+                  width: 88,
+                  height: 32,
                   child: Sparkline(values: series, color: tone),
                 ),
             ],
           ),
-          Divider(height: AppSpacing.xxl, thickness: 1, color: t.divider),
-          MetricRow(
-            label: 'Estimated 1RM',
-            value: '${AppFormat.weight(record.estimatedOneRm)} kg',
-            icon: Icons.trending_up_rounded,
-            valueColor: tone,
-          ),
-          MetricRow(
-            label: 'Record set',
-            value: AppFormat.relativeDate(record.date),
-            icon: Icons.event_available_rounded,
-          ),
-          MetricRow(
-            label: 'Last performed',
-            value: AppFormat.relativeDate(record.lastPerformed),
-            icon: Icons.history_rounded,
-          ),
-          MetricRow(
-            label: 'Sessions logged',
-            value: '${record.totalSessions}',
-            icon: Icons.repeat_rounded,
+          const SizedBox(height: AppSpacing.xs + 2),
+          Text(
+            details,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.caption(t),
           ),
         ],
       ),
@@ -371,11 +390,11 @@ class _RecordsSkeleton extends StatelessWidget {
         children: [
           SkeletonBox(height: 48, radius: AppRadius.pill),
           SizedBox(height: AppSpacing.lg),
-          SkeletonCard(height: 210),
+          SkeletonCard(height: 132),
           SizedBox(height: AppSpacing.md),
-          SkeletonCard(height: 210),
+          SkeletonCard(height: 132),
           SizedBox(height: AppSpacing.md),
-          SkeletonCard(height: 210),
+          SkeletonCard(height: 132),
         ],
       ),
     );

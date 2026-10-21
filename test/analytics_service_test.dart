@@ -29,14 +29,18 @@ WorkoutSession session({
 
 void main() {
   group('working set rules', () {
-    test('warm-ups and unfilled sets never count', () {
+    test('a set is done when it has reps; weight 0 is bodyweight', () {
       expect(AnalyticsService.isWorkingSet(set(100, 5)), isTrue);
+      expect(AnalyticsService.isWorkingSet(set(0, 5)), isTrue); // pull-ups
       expect(AnalyticsService.isWorkingSet(set(100, 5, warmUp: true)), isFalse);
-      expect(AnalyticsService.isWorkingSet(set(0, 5)), isFalse);
       expect(AnalyticsService.isWorkingSet(set(100, 0)), isFalse);
+      expect(AnalyticsService.isWorkingSet(set(0, 0)), isFalse);
+
+      expect(AnalyticsService.isWeightedSet(set(100, 5)), isTrue);
+      expect(AnalyticsService.isWeightedSet(set(0, 5)), isFalse);
     });
 
-    test('session volume excludes warm-ups and empty sets', () {
+    test('bodyweight sets count as sets and reps but add no tonnage', () {
       final s = session(
         date: DateTime(2025, 3, 10),
         exercises: {
@@ -44,16 +48,33 @@ void main() {
             set(60, 10, warmUp: true), // ignored
             set(100, 5), // 500
             set(100, 4), // 400
-            set(0, 0), // ignored
+            set(0, 0), // empty, ignored
           ],
           'Dips': [set(20, 10)], // 200
+          'Pull-ups': [set(0, 8), set(0, 6)], // bodyweight: 2 sets, 14 reps
         },
       );
 
       expect(AnalyticsService.sessionVolume(s), 1100);
-      expect(AnalyticsService.sessionWorkingSets(s), 3);
-      expect(AnalyticsService.sessionReps(s), 19);
+      expect(AnalyticsService.sessionWorkingSets(s), 5);
+      expect(AnalyticsService.sessionReps(s), 33);
       expect(AnalyticsService.sessionTopSet(s), 100);
+    });
+
+    test('sessions with nothing filled in are dropped', () {
+      final sessions = [
+        session(date: DateTime(2025, 3, 12), exercises: {
+          'Bench Press': [set(0, 0), set(0, 0)],
+          'Row': [],
+        }),
+        session(date: DateTime(2025, 3, 10), exercises: {
+          'Pull-ups': [set(0, 10)],
+        }),
+      ];
+
+      final logged = AnalyticsService.loggedSessions(sessions);
+      expect(logged.length, 1);
+      expect(logged.single.date, DateTime(2025, 3, 10));
     });
   });
 
@@ -184,6 +205,72 @@ void main() {
       expect(streak.current, 0);
       expect(streak.longest, 0);
     });
+
+    test('a daylight-saving change does not break the streak', () {
+      // EU clocks went forward on Sunday 30 March 2025. A seven-day Duration
+      // step from Monday 31 March lands on 23:00 on the 23rd, which missed the
+      // week keyed on midnight of the 24th and cut the streak to one.
+      final sessions = [
+        session(date: DateTime(2025, 4, 1, 18)),
+        session(date: DateTime(2025, 3, 25, 18)),
+        session(date: DateTime(2025, 3, 18, 18)),
+      ];
+
+      final streak = AnalyticsService.weeklyStreak(
+        sessions,
+        now: DateTime(2025, 4, 2),
+      );
+
+      expect(streak.current, 3);
+      expect(streak.longest, 3);
+    });
+
+    test('weekly buckets start on local midnight across a DST change', () {
+      final buckets = AnalyticsService.weeklyVolume(
+        const [],
+        weeks: 3,
+        now: DateTime(2025, 4, 2),
+      );
+
+      expect(buckets.map((b) => b.start), [
+        DateTime(2025, 3, 17),
+        DateTime(2025, 3, 24),
+        DateTime(2025, 3, 31),
+      ]);
+    });
+
+    test('weekly frequency averages a rolling window, not part-weeks', () {
+      // Two sessions a week for ten weeks, checked on a Monday morning before
+      // that day's session. The history is longer than the eight-week window.
+      final now = DateTime(2025, 3, 3, 7);
+      final sessions = [
+        for (var day = 1; day <= 70; day++)
+          if (day % 7 == 2 || day % 7 == 5)
+            session(date: now.subtract(Duration(days: day))),
+      ];
+
+      expect(
+        AnalyticsService.weeklyFrequency(sessions, now: now),
+        closeTo(2, 0.01),
+      );
+    });
+
+    test('a new lifter is averaged over the weeks they have trained', () {
+      final now = DateTime(2025, 3, 20);
+      final sessions = [
+        session(date: DateTime(2025, 3, 19)),
+        session(date: DateTime(2025, 3, 17)),
+        session(date: DateTime(2025, 3, 14)),
+        session(date: DateTime(2025, 3, 7)),
+      ];
+
+      // Fourteen days including today since the first session: two weeks,
+      // not the full eight.
+      expect(
+        AnalyticsService.weeklyFrequency(sessions, now: now),
+        closeTo(2, 0.01),
+      );
+    });
   });
 
   group('exercise progress', () {
@@ -233,6 +320,94 @@ void main() {
       expect(all.keys, contains('Bench Press'));
       expect(all['Bench Press']!.points.length, single.points.length);
       expect(all['Bench Press']!.bestWeight, single.bestWeight);
+    });
+
+    test('an exercise logged twice in one session is one point', () {
+      final twice = [
+        WorkoutSession(
+          id: 'a',
+          programTitle: 'Push',
+          date: DateTime(2025, 3, 3),
+          durationInMinutes: 60,
+          completedExercises: [
+            CompletedExercise(name: 'Bench Press', sets: [set(100, 5)]),
+            CompletedExercise(name: 'Dips', sets: [set(0, 10)]),
+            CompletedExercise(name: 'Bench Press', sets: [set(80, 10)]),
+          ],
+        ),
+      ];
+
+      final single = AnalyticsService.exerciseProgress(twice, 'Bench Press');
+      final all = AnalyticsService.allExerciseProgress(twice)['Bench Press']!;
+
+      for (final p in [single, all]) {
+        expect(p.points.length, 1);
+        expect(p.points.single.sets, 2);
+        expect(p.points.single.volume, 1300);
+        expect(p.points.single.topWeight, 100);
+      }
+    });
+
+    test('a tie on the top weight goes to the set with more reps', () {
+      final p = AnalyticsService.exerciseProgress([
+        session(date: DateTime(2025, 3, 3), exercises: {
+          'Squat': [set(100, 3), set(100, 5), set(90, 8)],
+        }),
+      ], 'Squat');
+
+      expect(p.points.single.topWeight, 100);
+      expect(p.points.single.topWeightReps, 5);
+    });
+
+    test('a skipped exercise is not trained and plots nothing', () {
+      final history = [
+        session(date: DateTime(2025, 3, 10), exercises: {
+          'Bench Press': [set(0, 0), set(0, 0)], // skipped
+          'Squat': [set(100, 5)],
+        }),
+        session(date: DateTime(2025, 3, 3), exercises: {
+          'Bench Press': [set(80, 5)],
+        }),
+      ];
+
+      final bench = AnalyticsService.exerciseProgress(history, 'Bench Press');
+      expect(bench.points.length, 1);
+      expect(bench.latest!.date, DateTime(2025, 3, 3));
+
+      // Squat was trained on the 10th; Bench was not, so it is not "newer".
+      expect(
+        AnalyticsService.exerciseNamesByRecency(history),
+        ['Squat', 'Bench Press'],
+      );
+      expect(
+        AnalyticsService.personalBests(history)
+            .firstWhere((b) => b.exercise == 'Bench Press')
+            .lastPerformed,
+        DateTime(2025, 3, 3),
+      );
+    });
+
+    test('trend and gain ignore sessions with no 1RM estimate', () {
+      // A 15-rep block first, then real strength work. The high-rep session
+      // has no estimate; read as a zero, it made the gain 0% and the slope
+      // wildly positive.
+      final p = AnalyticsService.exerciseProgress([
+        session(date: DateTime(2025, 1, 6), exercises: {
+          'Row': [set(40, 15)],
+        }),
+        session(date: DateTime(2025, 1, 13), exercises: {
+          'Row': [set(80, 5)],
+        }),
+        session(date: DateTime(2025, 1, 20), exercises: {
+          'Row': [set(88, 5)],
+        }),
+      ], 'Row');
+
+      expect(p.points.length, 3);
+      expect(p.ratedPoints.length, 2);
+      expect(p.totalGainPercent, closeTo(10, 0.01));
+      expect(p.oneRmPerWeek, closeTo(8 * (1 + 5 / 30), 0.01));
+      expect(p.oneRmSeries.length, 2);
     });
 
     test('a plateau is detected after four sessions without a new best', () {
@@ -328,8 +503,7 @@ void main() {
     final monday = DateTime(2025, 2, 3);
 
     test('a normal Monday is not reported as a lighter week', () {
-      final result =
-          AnalyticsService.insights(steadyWeeks(), const {}, now: monday);
+      final result = AnalyticsService.insights(steadyWeeks(), now: monday);
 
       // The comparison used to put one Monday session against four *complete*
       // weeks, so a consistent lifter was told they were ~66% down every Monday.
@@ -346,7 +520,7 @@ void main() {
         }),
       ];
 
-      final result = AnalyticsService.insights(fresh, const {}, now: monday);
+      final result = AnalyticsService.insights(fresh, now: monday);
 
       // Only one prior week exists. Averaging in three empty weeks turned a
       // second session into a several-hundred-percent jump.
@@ -358,16 +532,39 @@ void main() {
     });
 
     test('a new PR outranks the ambient observations', () {
-      final result = AnalyticsService.insights(
-        steadyWeeks(mondayWeight: 110),
-        const {},
-        now: monday,
-      );
+      // A heavier Monday with twice the usual work: both a PR and a big week.
+      final history = [
+        ...steadyWeeks().where((s) => s.date != monday),
+        session(date: monday, exercises: {
+          'Bench Press': [set(110, 5), set(110, 5)],
+        }),
+      ];
 
-      // The screen shows the first three. A PR set this week must not be pushed
-      // out by a streak that will still be there tomorrow.
+      final result = AnalyticsService.insights(history, now: monday);
+
       expect(result.first.title, 'New PR: Bench Press');
-      expect(result.map((i) => i.title), contains('5-week streak'));
+      expect(result.first.message, '110 kg × 5');
+      expect(result.map((i) => i.title), contains('Volume is climbing'));
+    });
+
+    test('a first session is not announced as a PR', () {
+      final result = AnalyticsService.insights([
+        session(date: DateTime(2025, 1, 27), exercises: {
+          'Bench Press': [set(100, 5)],
+        }),
+        session(date: monday, exercises: {
+          'Bench Press': [set(100, 5)],
+          'Overhead Press': [set(60, 5)], // never done before
+        }),
+      ], now: monday);
+
+      expect(result.where((i) => i.title.contains('PR')), isEmpty);
+    });
+
+    test('streaks and muscle balance are left to their own cards', () {
+      final result = AnalyticsService.insights(steadyWeeks(), now: monday);
+      expect(result.where((i) => i.title.contains('streak')), isEmpty);
+      expect(result.where((i) => i.title.contains('lagging')), isEmpty);
     });
   });
 
@@ -390,6 +587,71 @@ void main() {
       expect(deadlift.date, DateTime(2025, 2, 3));
       expect(deadlift.totalSessions, 2);
       expect(deadlift.lastPerformed, DateTime(2025, 3, 3));
+      expect(deadlift.isDebut, isTrue); // the 200 came first
+    });
+
+    test('equal weight with more reps later is the newer record', () {
+      final bests = AnalyticsService.personalBests([
+        session(date: DateTime(2025, 2, 3), exercises: {
+          'Squat': [set(120, 3)],
+        }),
+        session(date: DateTime(2025, 3, 3), exercises: {
+          'Squat': [set(120, 5)],
+        }),
+      ]);
+
+      expect(bests.single.reps, 5);
+      expect(bests.single.date, DateTime(2025, 3, 3));
+      expect(bests.single.isDebut, isFalse);
+    });
+
+    test('a bodyweight-only exercise gets a rep record, never a 0 kg one', () {
+      final sessions = [
+        session(date: DateTime(2025, 3, 3), exercises: {
+          'Pull-ups': [set(0, 8), set(0, 7)],
+        }),
+        session(date: DateTime(2025, 3, 10), exercises: {
+          'Pull-ups': [set(0, 11), set(0, 9)],
+        }),
+      ];
+
+      final record = AnalyticsService.personalBests(sessions).single;
+      expect(record.isBodyweight, isTrue);
+      expect(record.reps, 11);
+      expect(record.date, DateTime(2025, 3, 10));
+      expect(record.estimatedOneRm, 0);
+      expect(record.setLabel, '11 reps');
+
+      final progress = AnalyticsService.exerciseProgress(sessions, 'Pull-ups');
+      expect(progress.isBodyweight, isTrue);
+      expect(progress.points.length, 2);
+      expect(progress.bestReps, 11);
+      expect(progress.ratedPoints, isEmpty); // no bogus 1RM points
+      expect(progress.weightedPoints, isEmpty);
+      expect(progress.isStalled, isFalse);
+    });
+
+    test('bodyweight days do not drag a weighted lift', () {
+      final sessions = [
+        session(date: DateTime(2025, 3, 3), exercises: {
+          'Dips': [set(20, 8)],
+        }),
+        session(date: DateTime(2025, 3, 10), exercises: {
+          'Dips': [set(0, 15)], // a bodyweight day
+        }),
+      ];
+
+      final progress = AnalyticsService.exerciseProgress(sessions, 'Dips');
+      expect(progress.points.length, 2);
+      expect(progress.weightedPoints.length, 1);
+      expect(progress.ratedPoints.length, 1);
+      expect(progress.isBodyweight, isFalse);
+      expect(progress.totalGainPercent, 0); // one estimate is no trend
+
+      final record = AnalyticsService.personalBests(sessions).single;
+      expect(record.weight, 20);
+      expect(record.reps, 8);
+      expect(record.date, DateTime(2025, 3, 3));
     });
   });
 
@@ -400,6 +662,20 @@ void main() {
         'Mystery Machine': [set(50, 10)],
       }),
     ];
+
+    test('bodyweight sets count toward their muscle group', () {
+      final counts = AnalyticsService.muscleGroupSets(
+        [
+          session(date: DateTime(2025, 3, 18), exercises: {
+            'Pull-ups': [set(0, 10), set(0, 8), set(0, 0)],
+            'Row': [set(0, 0), set(0, 0)], // skipped
+          }),
+        ],
+        {'Pull-ups': 'Back', 'Row': 'Back'},
+      );
+
+      expect(counts['Back'], 2);
+    });
 
     test('unmapped exercises are surfaced rather than dropped', () {
       final counts = AnalyticsService.muscleGroupSets(
@@ -445,9 +721,10 @@ void main() {
 
     test('a custom band re-scores the same training', () {
       // Six working sets of chest a week: under the default band, comfortably
-      // inside a maintenance band, over a very light one.
+      // inside a maintenance band, over a very light one. The history runs
+      // past the four-week window, so the whole window is averaged over.
       final sessions = [
-        for (var week = 0; week < 4; week++)
+        for (var week = 0; week < 6; week++)
           session(date: DateTime(2025, 3, 18).subtract(Duration(days: 7 * week)),
               exercises: {
                 'Bench Press': [set(100, 5), set(100, 5), set(100, 5)],
@@ -479,6 +756,66 @@ void main() {
             .status,
         VolumeStatus.high,
       );
+    });
+
+    test('a Monday does not make every muscle look a quarter short', () {
+      // Six chest sets every Thursday for months, checked on a Monday. The
+      // old calendar-week window counted today's week at full weight.
+      final monday = DateTime(2025, 3, 24, 8);
+      final sessions = [
+        for (var week = 0; week < 10; week++)
+          session(
+            date: DateTime(2025, 3, 20).subtract(Duration(days: 7 * week)),
+            exercises: {
+              'Bench Press': [for (var i = 0; i < 6; i++) set(100, 5)],
+            },
+          ),
+      ];
+
+      final chest = AnalyticsService.muscleBalance(
+        sessions,
+        const {'Bench Press': 'Chest'},
+        now: monday,
+      ).firstWhere((b) => b.group == 'Chest');
+
+      expect(chest.setsPerWeek, 6);
+    });
+
+    test('a new lifter is not averaged over weeks before they started', () {
+      final now = DateTime(2025, 3, 20);
+      final sessions = [
+        session(date: DateTime(2025, 3, 18), exercises: {
+          'Bench Press': [for (var i = 0; i < 6; i++) set(100, 5)],
+        }),
+        session(date: DateTime(2025, 3, 7), exercises: {
+          'Bench Press': [for (var i = 0; i < 6; i++) set(100, 5)],
+        }),
+      ];
+
+      final chest = AnalyticsService.muscleBalance(
+        sessions,
+        const {'Bench Press': 'Chest'},
+        now: now,
+      ).firstWhere((b) => b.group == 'Chest');
+
+      // 12 sets over the 14 days since the first session.
+      expect(chest.setsPerWeek, closeTo(6, 0.01));
+    });
+
+    test('weakest groups are the ones below target, trained ones first', () {
+      const balance = [
+        MuscleBalance(group: 'Back', setsPerWeek: 26, totalSets: 104),
+        MuscleBalance(group: 'Chest', setsPerWeek: 14, totalSets: 56),
+        MuscleBalance(group: 'Biceps', setsPerWeek: 8, totalSets: 32),
+        MuscleBalance(group: 'Triceps', setsPerWeek: 4, totalSets: 16),
+        MuscleBalance(group: 'Calves', setsPerWeek: 0, totalSets: 0),
+      ];
+
+      expect(
+        AnalyticsService.weakestGroups(balance, limit: 5).map((b) => b.group),
+        ['Triceps', 'Biceps', 'Calves'],
+      );
+      expect(balance[3].setsToTarget, 6);
     });
 
     test('each result carries the band it was scored against', () {
@@ -590,6 +927,16 @@ void main() {
   });
 
   group('last seven days', () {
+    test('days line up across a daylight-saving change', () {
+      // 30 March 2025 was 23 hours long in the EU.
+      final days = AnalyticsService.lastSevenDays(
+        [session(date: DateTime(2025, 3, 30, 10))],
+        now: DateTime(2025, 4, 1, 9),
+      );
+
+      expect(days, [false, false, false, false, true, false, false]);
+    });
+
     test('returns oldest first and ends on today', () {
       final now = DateTime(2025, 3, 20, 21);
       final sessions = [

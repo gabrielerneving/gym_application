@@ -4,33 +4,52 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/admin_config.dart';
 import '../models/workout_model.dart';
+import '../models/workout_session_model.dart';
 import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_provider.dart';
+import '../services/analytics_service.dart';
 import '../services/database_service.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/workout_widget.dart';
-import 'active_workout_screen.dart';
 import 'admin_screen.dart';
 import 'create_workout.dart';
 import 'program_detail_page.dart';
 
-/// The front page: a compact snapshot of the training week followed by every
-/// saved program, each one a single tap away from a live session.
+/// The front page: this week at a glance, then every saved program, each one
+/// a single tap away from a live session.
 class HomeScreen extends ConsumerStatefulWidget {
   final VoidCallback? onSwitchToProfileTab;
 
-  const HomeScreen({super.key, this.onSwitchToProfileTab});
+  /// Opens the Create tab — the empty state's way forward. Without it the
+  /// builder is pushed as a route instead.
+  final VoidCallback? onSwitchToCreateTab;
+
+  const HomeScreen({
+    super.key,
+    this.onSwitchToProfileTab,
+    this.onSwitchToCreateTab,
+  });
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  static const String _title = 'My workouts';
+
   /// Bumped to rebuild the program subscription after a failure.
   int _retryToken = 0;
 
-  static const String _title = 'My workouts';
+  /// The live programs query, kept across builds. A fresh stream per build
+  /// makes StreamBuilder resubscribe — flashing the skeleton and opening
+  /// another Firestore listener — every time anything on this screen changes.
+  Stream<List<WorkoutProgram>>? _programs;
+  String? _programsUid;
+  int? _programsToken;
+
+  /// The program whose session is being prepared, if any.
+  String? _startingId;
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -40,6 +59,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 'Good evening';
   }
 
+  Stream<List<WorkoutProgram>> _programsFor(String uid) {
+    if (_programs == null ||
+        _programsUid != uid ||
+        _programsToken != _retryToken) {
+      _programsUid = uid;
+      _programsToken = _retryToken;
+      _programs = DatabaseService(uid: uid).getWorkoutPrograms();
+    }
+    return _programs!;
+  }
+
   /// Admin panel is gated on the signed-in address.
   bool _isAdminUser() {
     final user = FirebaseAuth.instance.currentUser;
@@ -47,24 +77,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return AdminConfig.isAdminEmail(user.email ?? '');
   }
 
-  void _openCreate(BuildContext context) {
+  void _openCreate() {
+    final switchTab = widget.onSwitchToCreateTab;
+    if (switchTab != null) {
+      switchTab();
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const CreateWorkoutScreen()),
     );
   }
 
-  void _openAdmin(BuildContext context) {
+  void _openAdmin() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const AdminScreen()),
     );
   }
 
+  void _openDetail(WorkoutProgram program) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProgramDetailPage(program: program),
+      ),
+    );
+  }
+
   /// The overflow menu on a program card.
-  void _showWorkoutOptions(
-    BuildContext context,
-    WorkoutProgram program,
-    DatabaseService dbService,
-  ) {
+  void _showWorkoutOptions(WorkoutProgram program, DatabaseService dbService) {
     AppSheet.actions(
       context: context,
       ref: ref,
@@ -73,7 +112,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         SheetAction(
           icon: Icons.edit_rounded,
           label: 'Edit',
-          description: 'Change the name, exercises or sets',
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -86,87 +124,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         SheetAction(
           icon: Icons.delete_outline_rounded,
           label: 'Delete',
-          description: 'Remove this workout permanently',
           destructive: true,
-          onTap: () async {
-            final shouldDelete = await AppDialog.confirm(
-              context: context,
-              ref: ref,
-              title: 'Delete workout?',
-              message:
-                  'Are you sure you want to delete "${program.title}"? '
-                  'This action cannot be undone.',
-              confirmLabel: 'Delete',
-              destructive: true,
-            );
-            if (shouldDelete) {
-              await dbService.deleteWorkoutProgram(program.id);
-            }
-          },
+          onTap: () => _deleteProgram(program, dbService),
         ),
       ],
     );
   }
 
-  void _showActiveWorkoutDialog(BuildContext context) {
-    AppDialog.info(
+  Future<void> _deleteProgram(
+    WorkoutProgram program,
+    DatabaseService dbService,
+  ) async {
+    final shouldDelete = await AppDialog.confirm(
       context: context,
       ref: ref,
-      title: 'Workout already active',
-      message:
-          'You already have an active workout in progress. Please finish or '
-          'cancel your current workout before starting a new one.',
-      buttonLabel: 'Got it',
-      icon: Icons.bolt_rounded,
+      title: 'Delete "${program.title}"?',
+      message: 'This cannot be undone. Workouts you have logged with it stay '
+          'in your history.',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
-  }
+    if (!shouldDelete || !mounted) return;
 
-  void _startWorkout(BuildContext context, WorkoutProgram program) {
-    // Bara ett pass åt gången — annars skrivs den pågående sessionen över.
-    final activeWorkout = ref.read(workoutProvider);
-    if (activeWorkout.isRunning) {
-      _showActiveWorkoutDialog(context);
-      return;
+    try {
+      await dbService.deleteWorkoutProgram(program.id);
+    } catch (_) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        ref,
+        'Could not delete "${program.title}". Try again.',
+        isError: true,
+      );
     }
+  }
 
-    ref.read(workoutProvider.notifier).startWorkout(program);
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const ActiveWorkoutScreen()),
+  void _startWorkout(WorkoutProgram program) {
+    // One start at a time — a second tap while the first is still preparing
+    // would race it.
+    if (_startingId != null) return;
+    launchProgram(
+      context,
+      ref,
+      program,
+      onBusy: (busy) {
+        if (mounted) setState(() => _startingId = busy ? program.id : null);
+      },
     );
   }
 
-  /// "Bench Press, Row, Squat …" — a quiet preview of what the program holds.
-  String _describe(WorkoutProgram program) {
-    final names = program.exercises.map((e) => e.name).toList();
-    if (names.isEmpty) return '';
-    final preview = names.take(3).join(', ');
-    return names.length > 3 ? '$preview …' : preview;
-  }
-
-  Widget _programCard(
-    BuildContext context,
-    DatabaseService dbService,
-    WorkoutProgram program,
-    int index,
-  ) {
-    return FadeSlideIn(
-      index: index,
-      child: WorkoutWidget(
-        title: program.title,
-        description: _describe(program),
-        exerciseCount: program.exercises.length,
-        onMenuPressed: () => _showWorkoutOptions(context, program, dbService),
-        onStartWorkout: () => _startWorkout(context, program),
-        onTap: () {
-          // Visa programstrukturen utan tidigare data
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ProgramDetailPage(program: program),
-            ),
-          );
-        },
-      ),
-    );
+  /// "3 days ago" — when the program was last done, or nothing if never.
+  String _lastDone(DateTime? date) {
+    if (date == null) return '';
+    final now = DateTime.now();
+    // A session stamped by a phone whose clock ran ahead still reads "Today".
+    return AppFormat.relativeDate(date.isAfter(now) ? now : date, now: now);
   }
 
   @override
@@ -184,57 +196,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    // Skapa en instans av vår DatabaseService
     final dbService = DatabaseService(uid: uid);
+
+    // The running session's program, so its card can offer "Resume".
+    final liveId = ref.watch(
+      workoutProvider.select((s) => s.isRunning ? s.session?.id : null),
+    );
+
+    // When each program was last done, keyed by title like the history is.
+    final usage = ref.watch(trainingDataProvider).valueOrNull?.programs ??
+        const <ProgramUsage>[];
+    final lastDone = <String, DateTime>{
+      for (final u in usage) u.title: u.lastPerformed,
+    };
 
     final actions = <Widget>[
       if (_isAdminUser())
         AppIconButton(
           icon: Icons.admin_panel_settings_rounded,
           tooltip: 'Admin Panel (Add Templates)',
-          onPressed: () => _openAdmin(context),
+          onPressed: _openAdmin,
         ),
     ];
 
     // StreamBuilder för att hämta och visa data i realtid
     return StreamBuilder<List<WorkoutProgram>>(
+      // A new key on retry gives a fresh snapshot instead of carrying the old
+      // error over into the new subscription.
       key: ValueKey<int>(_retryToken),
-      stream: dbService.getWorkoutPrograms(),
+      stream: _programsFor(uid),
       builder: (context, snapshot) {
-        // Om ett fel inträffade
         if (snapshot.hasError) {
           return AppScaffold(
             title: _title,
             subtitle: _greeting,
             actions: actions,
             body: ErrorState(
-              message: 'Something went wrong: ${snapshot.error}',
+              message: 'Your workouts could not be loaded.',
               onRetry: () => setState(() => _retryToken++),
             ),
           );
         }
 
         // Medan vi väntar på data från Firebase, visa skelett i listans form
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData) {
           return AppScaffold(
             title: _title,
             subtitle: _greeting,
             actions: actions,
             children: const [
-              SkeletonCard(height: 156),
-              SizedBox(height: AppSpacing.xxxl),
-              SkeletonCard(height: 132),
+              SkeletonCard(height: _cardHeight),
+              SizedBox(height: AppSpacing.xxl),
+              SkeletonCard(height: _cardHeight),
               SizedBox(height: AppSpacing.md),
-              SkeletonCard(height: 132),
+              SkeletonCard(height: _cardHeight),
               SizedBox(height: AppSpacing.md),
-              SkeletonCard(height: 132),
+              SkeletonCard(height: _cardHeight),
             ],
           );
         }
 
-        final programs = snapshot.data ?? const <WorkoutProgram>[];
+        // Firestore hands documents back in id order — random uuids, so new
+        // programs landed anywhere. Alphabetical is at least predictable.
+        final programs = [...snapshot.data!]..sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+          );
 
-        // Om vi har data, men listan är tom
         if (programs.isEmpty) {
           return AppScaffold(
             title: _title,
@@ -243,46 +270,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             body: EmptyState(
               icon: Icons.fitness_center_rounded,
               title: 'No workouts yet',
-              message:
-                  'Build a program once, then start it with a single tap every '
-                  'time you train.',
-              actionLabel: 'Create your first workout',
-              onAction: () => _openCreate(context),
+              message: 'Build a program once, then start it with a single '
+                  'tap every time you train.',
+              actionLabel: 'Create a workout',
+              onAction: _openCreate,
             ),
           );
         }
 
         return AppScaffold(
           title: _title,
-          subtitle: '$_greeting · ${programs.length} '
-              '${programs.length == 1 ? 'program' : 'programs'} saved',
+          subtitle: _greeting,
           actions: actions,
           children: [
-            _TodayStrip(onTap: widget.onSwitchToProfileTab),
-            const SectionHeader(title: 'Your programs'),
+            _WeekCard(onTap: widget.onSwitchToProfileTab),
             for (var i = 0; i < programs.length; i++)
-              _programCard(context, dbService, programs[i], i),
+              FadeSlideIn(
+                // Keyed so a card keeps its place (and a new program is the
+                // one that fades in) when the sorted list shifts.
+                key: ValueKey<String>(programs[i].id),
+                index: i,
+                child: WorkoutWidget(
+                  title: programs[i].title,
+                  description: _lastDone(lastDone[programs[i].title]),
+                  exerciseCount: programs[i].exercises.length,
+                  isLive: liveId != null && liveId == programs[i].id,
+                  isStarting: _startingId == programs[i].id,
+                  onMenuPressed: () =>
+                      _showWorkoutOptions(programs[i], dbService),
+                  onStartWorkout: () => _startWorkout(programs[i]),
+                  onTap: () => _openDetail(programs[i]),
+                ),
+              ),
           ],
         );
       },
     );
   }
+
+  /// Roughly the height of a program card and of the week card, so the
+  /// skeleton does not jump when the real content lands.
+  static const double _cardHeight = 76;
 }
 
-/// One card summarising the training week: the current weekly streak, how many
-/// sessions have been logged this week and the last seven days at a glance.
-class _TodayStrip extends ConsumerWidget {
+/// This week at a glance: sessions logged against the weekly goal, and which
+/// days they fell on. Tapping through opens Statistics.
+class _WeekCard extends ConsumerWidget {
   final VoidCallback? onTap;
 
-  const _TodayStrip({this.onTap});
+  const _WeekCard({this.onTap});
 
-  /// Mon–Sun labels ending on today, matching [TrainingData.lastSevenDays].
-  List<String> _labels() {
-    final today = DateTime.now();
+  /// M T W T F S S — the strip runs Monday to Sunday, the same week the count
+  /// beside it covers.
+  static final List<String> _labels = [
+    for (final day in AppFormat.weekdaysShort) day.substring(0, 1),
+  ];
+
+  /// Whether a session was logged on each day of the current week.
+  static List<bool> _thisWeek(List<WorkoutSession> sessions) {
+    final start = AnalyticsService.weekStart(DateTime.now());
+    final trained = {for (final s in sessions) AnalyticsService.dayOf(s.date)};
     return [
-      for (var i = 6; i >= 0; i--)
-        AppFormat.weekdaysShort[
-            today.subtract(Duration(days: i)).weekday - 1],
+      // Calendar arithmetic rather than `add(Duration(days: i))`, which lands
+      // an hour off midnight across a daylight-saving change.
+      for (var i = 0; i < 7; i++)
+        trained.contains(DateTime(start.year, start.month, start.day + i)),
     ];
   }
 
@@ -291,93 +343,116 @@ class _TodayStrip extends ConsumerWidget {
     final t = ref.watch(themeProvider);
     final training = ref.watch(trainingDataProvider);
 
+    const spacing = EdgeInsets.only(bottom: AppSpacing.xxl);
+
     return training.when(
-      loading: () => const SkeletonCard(height: 156),
-      error: (error, _) => AppCard(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 18, color: t.textTertiary),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(
-                'Your week could not be loaded',
-                style: AppType.secondary(t),
+      loading: () => const Padding(
+        padding: spacing,
+        child: SkeletonCard(height: _HomeScreenState._cardHeight),
+      ),
+      error: (error, _) => Padding(
+        padding: spacing,
+        child: AppCard(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 18, color: t.textTertiary),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'Your week could not be loaded',
+                  style: AppType.secondary(t),
+                ),
               ),
-            ),
-            AppButton.ghost(
-              label: 'Retry',
-              size: AppButtonSize.small,
-              onPressed: () => ref.invalidate(workoutSessionsProvider),
-            ),
-          ],
+              AppButton.ghost(
+                label: 'Retry',
+                size: AppButtonSize.small,
+                onPressed: () => ref.invalidate(workoutSessionsProvider),
+              ),
+            ],
+          ),
         ),
       ),
       data: (data) {
-        final streak = data.streak;
-        final goal = data.goals.sessionsPerWeek;
+        // Nothing logged yet: an empty week says nothing the empty history
+        // does not, so the programs get the screen to themselves.
+        if (data.isEmpty) return const SizedBox.shrink();
 
-        return FadeSlideIn(
-          child: AppCard(
-            onTap: onTap,
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xl,
-              vertical: AppSpacing.lg,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MiniMetric(
-                        icon: Icons.local_fire_department_rounded,
-                        label: 'Current streak',
-                        value: streak.current,
-                        unit: streak.current == 1 ? 'week' : 'weeks',
-                        color: t.warning,
+        final done = data.streak.thisWeek;
+        // A goal of one is the default "any session counts", not a target.
+        final goal = data.goals.sessionsPerWeek;
+        final hasGoal = goal > 1;
+        final reached = hasGoal && done >= goal;
+        // Monday = 0. Today is marked, the days still to come are quieter.
+        final today = DateTime.now().weekday - 1;
+
+        // "2 workouts" on its own, "2/4" against a goal — the number always
+        // says what it counts. (With a goal the unit would crowd the strip,
+        // and "of 4" already says it.)
+        final unit = hasGoal ? null : (done == 1 ? 'workout' : 'workouts');
+
+        return Padding(
+          padding: spacing,
+          child: FadeSlideIn(
+            child: AppCard(
+              onTap: onTap,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+              ),
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'This week',
+                        style: AppType.caption(t)
+                            .copyWith(color: t.textSecondary),
                       ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          CountUp(
+                            value: done.toDouble(),
+                            style: AppType.metric(t, size: 26).copyWith(
+                              color: reached ? t.success : null,
+                            ),
+                          ),
+                          if (hasGoal)
+                            Text(
+                              '/$goal',
+                              style: AppType.mono(t, size: 15).copyWith(
+                                color: t.textSecondary,
+                              ),
+                            ),
+                          if (unit != null) ...[
+                            const SizedBox(width: AppSpacing.xs + 1),
+                            Text(unit, style: AppType.secondary(t)),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(
+                    child: _WeekDays(
+                      trained: _thisWeek(data.sessions),
+                      labels: _labels,
+                      today: today,
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Container(width: 1, height: 38, color: t.divider),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: _MiniMetric(
-                        icon: Icons.bolt_rounded,
-                        label: 'This week',
-                        value: streak.thisWeek,
-                        // With a weekly goal set, the count is only half the
-                        // story — "2 of 4" says whether the week is on track.
-                        unit: goal > 1
-                            ? 'of $goal sessions'
-                            : streak.thisWeek == 1
-                                ? 'session'
-                                : 'sessions',
-                        color: goal > 1 && streak.thisWeek >= goal
-                            ? t.success
-                            : null,
-                      ),
-                    ),
-                    if (onTap != null)
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 22,
-                        color: t.textTertiary,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Divider(height: 1, thickness: 1, color: t.divider),
-                const SizedBox(height: AppSpacing.lg),
-                WeekStrip(
-                  days: data.lastSevenDays,
-                  labels: _labels(),
-                  dotSize: 28,
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -386,65 +461,91 @@ class _TodayStrip extends ConsumerWidget {
   }
 }
 
-/// A small icon + number + label block used inside the week card.
-class _MiniMetric extends ConsumerWidget {
-  final IconData icon;
-  final String label;
-  final int value;
-  final String unit;
-  final Color? color;
+/// Monday to Sunday as a row of dots: done days carry a check in the success
+/// colour, today has a ring around it, and the days still to come are drawn
+/// quieter than the ones already past — so a glance says where in the week
+/// you are, not only what you did.
+class _WeekDays extends ConsumerWidget {
+  final List<bool> trained;
+  final List<String> labels;
 
-  const _MiniMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.unit,
-    this.color,
+  /// Index of today in [trained], Monday = 0.
+  final int today;
+
+  const _WeekDays({
+    required this.trained,
+    required this.labels,
+    required this.today,
   });
+
+  static const double _dot = 26;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
-    final tone = color ?? t.primary;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (var i = 0; i < trained.length; i++)
+          _day(t, i, done: trained[i], isToday: i == today, future: i > today),
+      ],
+    );
+  }
+
+  Widget _day(
+    AppColors t,
+    int i, {
+    required bool done,
+    required bool isToday,
+    required bool future,
+  }) {
+    final Color fill;
+    final Border? border;
+    if (done) {
+      fill = t.success.withValues(alpha: t.isDark ? 0.18 : 0.14);
+      border = Border.all(
+        color: t.success.withValues(alpha: isToday ? 1 : 0.45),
+        width: isToday ? 1.6 : 1,
+      );
+    } else if (isToday) {
+      fill = t.surface;
+      border = Border.all(color: t.text, width: 1.6);
+    } else if (future) {
+      fill = Colors.transparent;
+      border = Border.all(color: t.outline);
+    } else {
+      fill = t.surface;
+      border = Border.all(color: t.outline);
+    }
+
+    final labelStyle = AppType.caption(t).copyWith(
+      fontSize: 11,
+      color: isToday
+          ? t.text
+          : future
+              ? t.textTertiary
+              : t.textSecondary,
+      fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+    );
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 15, color: tone),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.caption(t),
-              ),
-            ),
-          ],
+        Container(
+          width: _dot,
+          height: _dot,
+          decoration: BoxDecoration(
+            color: fill,
+            shape: BoxShape.circle,
+            border: border,
+          ),
+          child: done
+              ? Icon(Icons.check_rounded, size: 15, color: t.success)
+              : null,
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            CountUp(
-              value: value.toDouble(),
-              style: AppType.metric(t, size: 24),
-            ),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                unit,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.caption(t),
-              ),
-            ),
-          ],
-        ),
+        const SizedBox(height: AppSpacing.xs + 2),
+        Text(i < labels.length ? labels[i] : '', style: labelStyle),
       ],
     );
   }

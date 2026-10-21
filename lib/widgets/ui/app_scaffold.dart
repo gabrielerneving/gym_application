@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -179,6 +177,7 @@ class AppScaffold extends ConsumerWidget {
         onBack: onBack ?? () => Navigator.of(context).maybePop(),
         topInset: MediaQuery.of(context).padding.top,
         bottom: headerBottom,
+        ambient: ambient,
       ),
     );
   }
@@ -186,8 +185,21 @@ class AppScaffold extends ConsumerWidget {
 
 /// The collapsing large-title header.
 ///
-/// Expanded: a big display title sitting under a compact toolbar row.
-/// Collapsed: the toolbar row alone, frosted, with the title inline.
+/// Two layouts:
+///  * **Root pages** (no back chevron: the tabs): the large title sits right
+///    under the status bar, on the same row as the actions. There is no empty
+///    toolbar row above it.
+///  * **Pushed pages**: a toolbar row with the back chevron and actions, the
+///    large title under it.
+///
+/// Either way the large title moves 1:1 with the content and fades as it
+/// goes; a compact inline title fades into the toolbar once it has gone.
+///
+/// Collapsed, the header is *the page itself*: it paints the page background
+/// (and the same ambient glow, at the same screen position) instead of a
+/// tinted or frosted band, and dissolves into the content over a soft fade
+/// below its edge. Content scrolls away under it instead of being cut by a
+/// hard line, and nothing gets blurred into coloured smudges.
 class _LargeTitleHeader extends SliverPersistentHeaderDelegate {
   final AppColors theme;
   final String title;
@@ -197,10 +209,27 @@ class _LargeTitleHeader extends SliverPersistentHeaderDelegate {
   final VoidCallback onBack;
   final double topInset;
   final Widget? bottom;
+  final bool ambient;
 
   static const double _toolbarHeight = 52;
+
+  /// Pushed pages: room for the large title under the toolbar row.
   static const double _largeTitleHeight = 62;
+
+  /// Root pages: the title's line box starts this far below the status bar,
+  /// which centres the title's caps on the toolbar row's actions.
+  static const double _rootTitleTop = 7;
+
+  /// Line box of [AppType.display] (34 x 1.1, rounded up).
+  static const double _titleLine = 38;
+
+  /// Air between the title block and the first piece of content.
+  static const double _titleGap = AppSpacing.xl;
+
   static const double _bottomHeight = 58;
+
+  /// The soft edge the collapsed header dissolves into, below its bounds.
+  static const double _fadeHeight = 20;
 
   _LargeTitleHeader({
     required this.theme,
@@ -211,8 +240,10 @@ class _LargeTitleHeader extends SliverPersistentHeaderDelegate {
     required this.onBack,
     required this.topInset,
     required this.bottom,
+    required this.ambient,
   });
 
+  bool get _isRoot => !showBack;
   double get _subtitleHeight => subtitle == null ? 0 : 20;
   double get _bottomExtent => bottom == null ? 0 : _bottomHeight;
 
@@ -220,123 +251,198 @@ class _LargeTitleHeader extends SliverPersistentHeaderDelegate {
   double get minExtent => topInset + _toolbarHeight + _bottomExtent;
 
   @override
-  double get maxExtent =>
-      topInset + _toolbarHeight + _largeTitleHeight + _subtitleHeight + _bottomExtent;
+  double get maxExtent {
+    if (_isRoot) {
+      final expanded = topInset +
+          _rootTitleTop +
+          _titleLine +
+          _subtitleHeight +
+          _titleGap +
+          _bottomExtent;
+      return expanded < minExtent ? minExtent : expanded;
+    }
+    return topInset +
+        _toolbarHeight +
+        _largeTitleHeight +
+        _subtitleHeight +
+        _bottomExtent;
+  }
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final range = (maxExtent - minExtent).clamp(1.0, double.infinity);
-    final tCollapse = (shrinkOffset / range).clamp(0.0, 1.0);
+    // How far the content has moved, in px. Keeps growing past [range] while
+    // the header itself stays pinned at [minExtent].
+    final shift = shrinkOffset;
 
-    // Large title fades out over the first 60% of the collapse.
-    final largeOpacity = (1 - tCollapse * 1.6).clamp(0.0, 1.0);
-    // Inline title fades in over the last 40%.
-    final inlineOpacity = ((tCollapse - 0.55) / 0.45).clamp(0.0, 1.0);
+    final double largeOpacity;
+    final double inlineOpacity;
+    if (_isRoot) {
+      // Fades over its own first ~18px of travel; the inline title takes over
+      // once it is nearly gone.
+      largeOpacity = (1 - shift / 18).clamp(0.0, 1.0);
+      inlineOpacity = ((shift - 14) / 16).clamp(0.0, 1.0);
+    } else {
+      final tCollapse = (shift / range).clamp(0.0, 1.0);
+      largeOpacity = (1 - tCollapse * 1.6).clamp(0.0, 1.0);
+      inlineOpacity = ((tCollapse - 0.55) / 0.45).clamp(0.0, 1.0);
+    }
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: 18 * tCollapse,
-          sigmaY: 18 * tCollapse,
-        ),
-        child: Container(
-          color: theme.background.withValues(alpha: 0.62 * tCollapse),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: topInset),
-              SizedBox(
-                height: _toolbarHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.screenH,
-                  ),
-                  child: Row(
-                    children: [
-                      if (showBack) ...[
-                        _BackChevron(theme: theme, onTap: onBack),
-                        const SizedBox(width: AppSpacing.md),
-                      ],
-                      Expanded(
-                        child: Opacity(
-                          opacity: inlineOpacity,
-                          child: Transform.translate(
-                            offset: Offset(0, 8 * (1 - inlineOpacity)),
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppType.heading(theme).copyWith(fontSize: 18),
-                            ),
-                          ),
-                        ),
-                      ),
-                      ...actions,
-                    ],
-                  ),
-                ),
-              ),
-              // Large title — clipped away as the header collapses.
-              Expanded(
-                child: ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.topLeft,
-                    minHeight: 0,
-                    maxHeight: _largeTitleHeight + _subtitleHeight,
-                    child: Opacity(
-                      opacity: largeOpacity,
-                      child: Transform.translate(
-                        offset: Offset(-12 * tCollapse, -6 * tCollapse),
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppSpacing.screenH,
-                            right: AppSpacing.screenH,
-                            top: 2,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppType.display(theme),
-                              ),
-                              if (subtitle != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  subtitle!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppType.secondary(theme),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (bottom != null)
-                SizedBox(
-                  height: _bottomHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.screenH,
-                      0,
-                      AppSpacing.screenH,
-                      AppSpacing.md,
-                    ),
-                    child: bottom!,
-                  ),
-                ),
-            ],
-          ),
+    // The page-coloured fill fades in over the last 16px before content
+    // starts passing under the header. It matches what is behind it, so the
+    // ramp itself is invisible: only content disappearing under it shows.
+    final fill = ((shift - (range - 16)) / 16).clamp(0.0, 1.0);
+
+    final inlineTitle = Opacity(
+      opacity: inlineOpacity,
+      child: Transform.translate(
+        offset: Offset(0, 8 * (1 - inlineOpacity)),
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.heading(theme).copyWith(fontSize: 18),
         ),
       ),
+    );
+
+    final largeTitle = Opacity(
+      opacity: largeOpacity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.display(theme),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.secondary(theme),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    final Widget toolbar;
+    final Widget? largeTitleRegion;
+    if (_isRoot) {
+      // The large title shares the toolbar row: same width as the inline
+      // title (so it never runs under the actions), overflowing downward,
+      // clipped at the status bar as it travels up.
+      toolbar = Row(
+        children: [
+          Expanded(
+            child: ClipRect(
+              clipper: const _ClipAboveOnly(),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: inlineTitle,
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: _rootTitleTop - shift,
+                    child: largeTitle,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ...actions,
+        ],
+      );
+      largeTitleRegion = null;
+    } else {
+      toolbar = Row(
+        children: [
+          _BackChevron(theme: theme, onTap: onBack),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(child: inlineTitle),
+          ...actions,
+        ],
+      );
+      // Slides up under the toolbar row, 1:1 with the content.
+      largeTitleRegion = ClipRect(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: AppSpacing.screenH,
+              right: AppSpacing.screenH,
+              top: 2 - shift,
+              child: largeTitle,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.expand,
+      children: [
+        if (fill > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: -_fadeHeight,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: fill,
+                child: _HeaderFill(
+                  theme: theme,
+                  ambient: ambient,
+                  fadeHeight: _fadeHeight,
+                ),
+              ),
+            ),
+          ),
+        if (largeTitleRegion != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: topInset + _toolbarHeight,
+            bottom: _bottomExtent,
+            child: largeTitleRegion,
+          ),
+        Positioned(
+          left: AppSpacing.screenH,
+          right: AppSpacing.screenH,
+          top: topInset,
+          height: _toolbarHeight,
+          child: toolbar,
+        ),
+        if (bottom != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: _bottomHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenH,
+                0,
+                AppSpacing.screenH,
+                AppSpacing.md,
+              ),
+              child: bottom!,
+            ),
+          ),
+      ],
     );
   }
 
@@ -348,8 +454,68 @@ class _LargeTitleHeader extends SliverPersistentHeaderDelegate {
         old.showBack != showBack ||
         old.topInset != topInset ||
         old.bottom != bottom ||
+        old.ambient != ambient ||
         old.actions.length != actions.length;
   }
+}
+
+/// The collapsed header's background: the page colour plus the ambient glow
+/// at exactly the position [AppScaffold] paints it behind the scroll view, so
+/// the two are indistinguishable. Its last [fadeHeight] px fade to clear.
+class _HeaderFill extends StatelessWidget {
+  final AppColors theme;
+  final bool ambient;
+  final double fadeHeight;
+
+  const _HeaderFill({
+    required this.theme,
+    required this.ambient,
+    required this.fadeHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) {
+        final solid = rect.height <= 0
+            ? 0.0
+            : ((rect.height - fadeHeight) / rect.height).clamp(0.0, 1.0);
+        // Eased, not linear: content right under the edge stays mostly
+        // hidden, then lets go quickly, so nothing ghosts below the toolbar.
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const [
+            Color(0xFF000000),
+            Color(0xFF000000),
+            Color(0xC7000000),
+            Color(0x00000000),
+          ],
+          stops: [0.0, solid, solid + (1 - solid) * 0.45, 1.0],
+        ).createShader(rect);
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(child: ColoredBox(color: theme.background)),
+          if (ambient) AmbientBackground(theme: theme),
+        ],
+      ),
+    );
+  }
+}
+
+/// Clips only the top edge: lets the root large title (and its subtitle)
+/// overflow the toolbar row downward, but not up into the status bar.
+class _ClipAboveOnly extends CustomClipper<Rect> {
+  const _ClipAboveOnly();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(-size.width, 0, size.width * 2, size.height + 400);
+
+  @override
+  bool shouldReclip(covariant _ClipAboveOnly oldClipper) => false;
 }
 
 class _BackChevron extends StatelessWidget {
@@ -363,16 +529,18 @@ class _BackChevron extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       scale: 0.88,
+      // Same 42pt circle as AppIconButton, so a back chevron and the header
+      // actions on the other side of the row read as one set.
       child: Container(
-        width: 38,
-        height: 38,
+        width: 42,
+        height: 42,
         decoration: BoxDecoration(
           color: theme.card,
           shape: BoxShape.circle,
           border: Border.all(color: theme.outline),
         ),
         child: Icon(Icons.arrow_back_ios_new_rounded,
-            size: 16, color: theme.text),
+            size: 17, color: theme.text),
       ),
     );
   }

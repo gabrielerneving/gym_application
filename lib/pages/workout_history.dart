@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import '../models/workout_session_model.dart';
 import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/analytics_service.dart';
 import '../services/database_service.dart';
 import '../widgets/ui/ui.dart';
 import '../widgets/workout_history_widget.dart';
@@ -15,9 +14,10 @@ import 'create_workout.dart';
 /// The History tab.
 ///
 /// Sessions stream live from Firestore, are grouped by calendar month and can
-/// be filtered down to a single program. Swiping a row left deletes it after a
-/// themed confirmation; the statistics cache is invalidated afterwards so every
-/// other screen agrees with what is on screen here.
+/// be filtered down to a single program. Swiping a row left (or long-pressing
+/// it) deletes it after a themed confirmation; the statistics cache is
+/// invalidated afterwards so every other screen agrees with what is on screen
+/// here. Editing a session lives on its detail page.
 class WorkoutHistoryScreen extends ConsumerStatefulWidget {
   const WorkoutHistoryScreen({super.key});
 
@@ -27,7 +27,8 @@ class WorkoutHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
-  static final DateFormat _monthFormat = DateFormat('MMMM yyyy');
+  static final DateFormat _monthFormat = DateFormat('MMMM');
+  static final DateFormat _monthYearFormat = DateFormat('MMMM yyyy');
   static final DateFormat _dayFormat = DateFormat('MMM d, yyyy');
 
   DatabaseService? _db;
@@ -62,13 +63,15 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
   }
 
   Future<bool> _confirmDelete(WorkoutSession session) {
+    final title = session.programTitle.trim().isEmpty
+        ? 'This workout'
+        : session.programTitle.trim();
     return AppDialog.confirm(
       context: context,
       ref: ref,
       title: 'Delete workout?',
-      message: '${session.programTitle} from '
-          '${_dayFormat.format(session.date)} will be removed from your '
-          'history and from your statistics. This cannot be undone.',
+      message: '$title from ${_dayFormat.format(session.date)} is removed '
+          'from your history and statistics. This cannot be undone.',
       confirmLabel: 'Delete',
       destructive: true,
     );
@@ -90,11 +93,15 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
     final db = _db;
     if (db == null) return;
 
+    // Firestore drops the session from its local cache as soon as the delete
+    // is issued, so the statistics can refresh now rather than after the
+    // server answers — which on a gym's patchy signal can take a while.
+    final delete = db.deleteWorkoutSession(session.id);
+    ref.invalidate(workoutSessionsProvider);
+
     try {
-      await db.deleteWorkoutSession(session.id);
+      await delete;
       if (!mounted) return;
-      // Keep every statistics screen in sync with the shortened history.
-      ref.invalidate(workoutSessionsProvider);
       AppSnack.show(
         context,
         ref,
@@ -105,6 +112,7 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
       if (!mounted) return;
       // Put the row back — the workout is still there.
       setState(() => _removed.remove(session.id));
+      ref.invalidate(workoutSessionsProvider);
       AppSnack.show(
         context,
         ref,
@@ -195,8 +203,8 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
             body: EmptyState(
               icon: Icons.history_rounded,
               title: 'Your history is empty',
-              message: 'Finish a workout and it shows up here with its '
-                  'volume, sets and heaviest lift.',
+              message: 'Finish a workout and it lands here, set by set, '
+                  'with how it compared to last time.',
               actionLabel: 'Create a workout',
               onAction: _openCreateWorkout,
             ),
@@ -222,25 +230,12 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
               )
             : null;
 
-        if (visible.isEmpty) {
-          return AppScaffold(
-            title: 'History',
-            subtitle: 'No sessions for ${filter ?? 'this filter'}',
-            headerBottom: filterRow,
-            body: EmptyState(
-              icon: Icons.filter_list_rounded,
-              title: 'Nothing here',
-              message: 'You have no sessions left for this program.',
-              actionLabel: 'Show all sessions',
-              onAction: () => setState(() => _programFilter = null),
-            ),
-          );
-        }
-
+        // A filter only survives while its program still has sessions (see
+        // above), so `visible` is never empty here.
         final rows = <_HistoryRow>[];
         var animationIndex = 0;
         for (final group in _groupByMonth(visible)) {
-          rows.add(_MonthRow(group));
+          rows.add(_MonthRow(group, first: rows.isEmpty));
           for (final session in group.sessions) {
             rows.add(_SessionRow(session: session, index: animationIndex++));
           }
@@ -248,7 +243,7 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
 
         final subtitle = filter == null
             ? '${all.length} ${all.length == 1 ? 'session' : 'sessions'}'
-            : '${visible.length} of ${all.length} sessions · $filter';
+            : '${visible.length} of ${all.length} sessions';
 
         return AppScaffold(
           title: 'History',
@@ -274,9 +269,13 @@ class _WorkoutHistoryScreenState extends ConsumerState<WorkoutHistoryScreen> {
 
   Widget _buildRow(_HistoryRow row) {
     if (row is _MonthRow) {
+      final month = row.group.month;
+      final format =
+          month.year == DateTime.now().year ? _monthFormat : _monthYearFormat;
       return _MonthHeader(
         group: row.group,
-        label: _monthFormat.format(row.group.month),
+        label: format.format(month),
+        first: row.first,
       );
     }
 
@@ -317,7 +316,10 @@ abstract class _HistoryRow {
 class _MonthRow extends _HistoryRow {
   final _MonthGroup group;
 
-  const _MonthRow(this.group);
+  /// The top of the list — it sits closer to the filter row above it.
+  final bool first;
+
+  const _MonthRow(this.group, {required this.first});
 }
 
 class _SessionRow extends _HistoryRow {
@@ -330,37 +332,56 @@ class _SessionRow extends _HistoryRow {
   const _SessionRow({required this.session, required this.index});
 }
 
-/// The sessions of one calendar month, with their combined tonnage.
+/// The sessions of one calendar month.
 class _MonthGroup {
   final DateTime month;
   final List<WorkoutSession> sessions = <WorkoutSession>[];
-  double volume = 0;
 
   _MonthGroup(this.month);
 
-  void add(WorkoutSession session) {
-    sessions.add(session);
-    volume += AnalyticsService.sessionVolume(session);
-  }
+  void add(WorkoutSession session) => sessions.add(session);
 }
 
-class _MonthHeader extends StatelessWidget {
+/// "October ········ 10 sessions" — the month and its count on one line, so a
+/// new month costs one row rather than two.
+class _MonthHeader extends ConsumerWidget {
   final _MonthGroup group;
   final String label;
+  final bool first;
 
-  const _MonthHeader({required this.group, required this.label});
+  const _MonthHeader({
+    required this.group,
+    required this.label,
+    required this.first,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
     final count = group.sessions.length;
-    return SectionHeader(
-      title: label,
-      subtitle: '$count ${count == 1 ? 'session' : 'sessions'} · '
-          '${AppFormat.compact(group.volume)} kg',
-      icon: Icons.calendar_month_rounded,
-      padding: const EdgeInsets.only(
-        top: AppSpacing.lg,
+
+    return Padding(
+      padding: EdgeInsets.only(
+        top: first ? AppSpacing.sm : AppSpacing.xxl,
         bottom: AppSpacing.md,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.title(t).copyWith(fontSize: 19),
+            ),
+          ),
+          Text(
+            '$count ${count == 1 ? 'session' : 'sessions'}',
+            style: AppType.secondary(t),
+          ),
+        ],
       ),
     );
   }
@@ -394,7 +415,6 @@ class _ProgramFilterRow extends StatelessWidget {
           return Center(
             child: AppChip(
               label: 'All',
-              icon: Icons.all_inclusive_rounded,
               selected: selected == null,
               onTap: () => onChanged(null),
             ),
@@ -404,7 +424,7 @@ class _ProgramFilterRow extends StatelessWidget {
         final title = titles[index - 1];
         return Center(
           child: AppChip(
-            label: title,
+            label: title.trim().isEmpty ? 'Workout' : title,
             selected: selected == title,
             onTap: () => onChanged(selected == title ? null : title),
           ),
@@ -449,6 +469,9 @@ class _DeleteBackground extends ConsumerWidget {
 class _HistorySkeleton extends StatelessWidget {
   const _HistorySkeleton();
 
+  /// About the height of a session card.
+  static const double _cardHeight = 72;
+
   @override
   Widget build(BuildContext context) {
     return const Padding(
@@ -461,13 +484,15 @@ class _HistorySkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SkeletonBox(width: 160, height: 20),
+          SkeletonBox(width: 120, height: 20),
           SizedBox(height: AppSpacing.lg),
-          SkeletonCard(height: 132),
+          SkeletonCard(height: _cardHeight),
           SizedBox(height: AppSpacing.md),
-          SkeletonCard(height: 132),
+          SkeletonCard(height: _cardHeight),
           SizedBox(height: AppSpacing.md),
-          SkeletonCard(height: 132),
+          SkeletonCard(height: _cardHeight),
+          SizedBox(height: AppSpacing.md),
+          SkeletonCard(height: _cardHeight),
         ],
       ),
     );

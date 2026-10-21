@@ -4,9 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../auth_screen.dart';
 import '../providers/rest_timer_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/workout_provider.dart';
 import '../providers/workout_settings_provider.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
@@ -14,17 +14,18 @@ import '../widgets/theme_selector.dart';
 import '../widgets/training_goal_sheets.dart';
 import '../widgets/ui/ui.dart';
 
-/// The app version, mirrored from `pubspec.yaml` (`version: 1.3.0+17`).
+/// The app version, mirrored from `pubspec.yaml` (`version: 1.4.0+18`).
 /// `package_info_plus` is not a dependency, so this is kept in sync by hand —
 /// bump it whenever the pubspec version changes.
-const String _appVersion = '1.3.0';
-const String _appBuild = '17';
+const String _appVersion = '1.4.0';
+const String _appBuild = '18';
 
 const String _privacyPolicyUrl =
     'https://gabrielerneving.github.io/gym_application/policy.md';
 
 /// ---------------------------------------------------------------------------
-/// Settings — appearance, workout options, the account and the legal bits.
+/// Settings — what changes the logging screen first, then goals, looks, and
+/// the account.
 /// ---------------------------------------------------------------------------
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -41,36 +42,25 @@ class SettingsScreen extends ConsumerWidget {
       subtitle: email,
       bottomPadding: AppSpacing.huge,
       children: [
-        // --- Appearance ------------------------------------------------------
+        // --- Workout ---------------------------------------------------------
         const FadeSlideIn(
           index: 0,
           child: SectionHeader(
-            title: 'Appearance',
-            subtitle: 'Pick a palette — every screen follows it.',
+            title: 'Workout',
             padding: EdgeInsets.only(
               top: AppSpacing.sm,
               bottom: AppSpacing.md,
             ),
           ),
         ),
-        const ThemeSelector(),
-
-        // --- Workout ---------------------------------------------------------
-        const FadeSlideIn(
-          index: 1,
-          child: SectionHeader(
-            title: 'Workout',
-            subtitle: 'Extra detail while you are logging sets.',
-          ),
-        ),
         FadeSlideIn(
-          index: 2,
+          index: 1,
           child: AppTileGroup(
             children: [
               _ToggleTile(
                 icon: Icons.speed_rounded,
                 title: 'Show RIR',
-                subtitle: 'Track how many reps you have left in the tank',
+                subtitle: 'Log reps in reserve per set',
                 value: settings.showRIR,
                 onChanged: (v) => ref
                     .read(workoutSettingsProvider.notifier)
@@ -79,7 +69,7 @@ class SettingsScreen extends ConsumerWidget {
               _ToggleTile(
                 icon: Icons.trending_up_rounded,
                 title: 'Show progression',
-                subtitle: 'See +/- rep changes compared to last workout',
+                subtitle: 'Each set against last time',
                 value: settings.showProgression,
                 onChanged: (v) => ref
                     .read(workoutSettingsProvider.notifier)
@@ -88,19 +78,18 @@ class SettingsScreen extends ConsumerWidget {
               _ToggleTile(
                 icon: Icons.timer_outlined,
                 title: 'Rest timer',
-                subtitle: 'A floating timer that counts your rest between sets',
                 value: settings.showRestTimer,
                 onChanged: (v) => ref
                     .read(workoutSettingsProvider.notifier)
                     .toggleShowRestTimer(v),
               ),
-              // Only meaningful while the timer is on the screen, so it folds
+              // Only meaningful while the timer is on the screen, so they fold
               // away with it rather than sitting there doing nothing.
               if (settings.showRestTimer)
                 _ToggleTile(
                   icon: Icons.play_circle_outline_rounded,
                   title: 'Start rest automatically',
-                  subtitle: 'Begin the rest as soon as a set is filled in',
+                  subtitle: 'As soon as a set is filled in',
                   value: restTimer.autoStart,
                   onChanged: (v) =>
                       ref.read(restTimerProvider.notifier).setAutoStart(v),
@@ -113,14 +102,11 @@ class SettingsScreen extends ConsumerWidget {
 
         // --- Goals -----------------------------------------------------------
         const FadeSlideIn(
-          index: 3,
-          child: SectionHeader(
-            title: 'Goals',
-            subtitle: 'The targets your statistics are measured against.',
-          ),
+          index: 2,
+          child: SectionHeader(title: 'Goals'),
         ),
         const FadeSlideIn(
-          index: 4,
+          index: 3,
           child: AppTileGroup(
             children: [
               WeeklySetBandTile(),
@@ -128,6 +114,13 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+
+        // --- Appearance ------------------------------------------------------
+        const FadeSlideIn(
+          index: 4,
+          child: SectionHeader(title: 'Appearance'),
+        ),
+        const ThemeSelector(),
 
         // --- Account ---------------------------------------------------------
         const FadeSlideIn(
@@ -142,51 +135,48 @@ class SettingsScreen extends ConsumerWidget {
                 bare: true,
                 icon: Icons.logout_rounded,
                 title: 'Sign out',
-                subtitle: 'You can sign back in at any time',
                 onTap: () => _confirmSignOut(context, ref),
               ),
               AppTile(
                 bare: true,
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy policy',
+                // It leaves the app, so it says so instead of a chevron.
+                trailing: Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.sm,
+                    right: AppSpacing.xxs,
+                  ),
+                  child: Icon(
+                    Icons.open_in_new_rounded,
+                    size: 18,
+                    color: t.textTertiary,
+                  ),
+                ),
+                onTap: () => _openPrivacyPolicy(context, ref),
+              ),
+              // Error tone on tile and title, like every destructive action;
+              // no chevron — it does not lead anywhere, it asks first.
+              AppTile(
+                bare: true,
+                destructive: true,
+                showChevron: false,
                 icon: Icons.delete_forever_rounded,
-                iconColor: t.error,
                 title: 'Delete account',
-                subtitle: 'Permanently erase your account and all its data',
-                onTap: () => _confirmDeleteAccount(context, ref),
+                subtitle: 'Erase your account and all workout data',
+                onTap: () => _showDeleteAccount(context, ref),
               ),
             ],
           ),
         ),
 
-        // --- About -----------------------------------------------------------
-        const FadeSlideIn(
-          index: 7,
-          child: SectionHeader(title: 'About'),
-        ),
+        const SizedBox(height: AppSpacing.xxl),
         FadeSlideIn(
-          index: 8,
-          child: AppTileGroup(
-            children: [
-              AppTile(
-                bare: true,
-                icon: Icons.info_outline_rounded,
-                title: 'Version',
-                subtitle: 'Repicore · build $_appBuild',
-                showChevron: false,
-                trailing: Text(
-                  _appVersion,
-                  style: AppType.mono(t, size: 14).copyWith(
-                    color: t.textSecondary,
-                  ),
-                ),
-              ),
-              AppTile(
-                bare: true,
-                icon: Icons.privacy_tip_rounded,
-                title: 'Privacy policy',
-                subtitle: 'How your training data is handled',
-                onTap: () => _openPrivacyPolicy(context, ref),
-              ),
-            ],
+          index: 7,
+          child: Text(
+            'Repicore $_appVersion ($_appBuild)',
+            textAlign: TextAlign.center,
+            style: AppType.caption(t),
           ),
         ),
       ],
@@ -199,14 +189,14 @@ class SettingsScreen extends ConsumerWidget {
 class _ToggleTile extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   const _ToggleTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.value,
     required this.onChanged,
   });
@@ -224,10 +214,15 @@ class _ToggleTile extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       onTap: () => _set(!value),
-      trailing: Switch(
-        value: value,
-        onChanged: _set,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      trailing: Padding(
+        // AppTile butts its trailing slot against the text; a long subtitle
+        // would otherwise run right up to the switch.
+        padding: const EdgeInsets.only(left: AppSpacing.md),
+        child: Switch(
+          value: value,
+          onChanged: _set,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }
@@ -254,13 +249,11 @@ class _RestTargetTile extends ConsumerWidget {
       bare: true,
       icon: Icons.hourglass_bottom_rounded,
       title: 'Target rest',
-      subtitle: targetSeconds == 0
-          ? 'The timer just counts up'
-          : 'The ring fills toward this, then keeps counting',
       onTap: () => _pick(context, ref),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(width: AppSpacing.md),
           Text(
             _label(targetSeconds),
             style: AppType.mono(t, size: 14).copyWith(color: t.primary),
@@ -277,7 +270,7 @@ class _RestTargetTile extends ConsumerWidget {
       context: context,
       ref: ref,
       title: 'Target rest',
-      subtitle: 'How long you aim to rest between working sets',
+      subtitle: 'The timer fills toward this, then keeps counting',
       builder: (context) => Consumer(
         builder: (context, ref, _) {
           final current = ref.watch(
@@ -310,137 +303,225 @@ Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
   final shouldLogout = await AppDialog.confirm(
     context: context,
     ref: ref,
-    title: 'Sign Out',
-    message: 'Are you sure you want to sign out?',
-    confirmLabel: 'Sign Out',
+    title: 'Sign out?',
+    confirmLabel: 'Sign out',
     icon: Icons.logout_rounded,
   );
 
   if (!shouldLogout) return;
 
   await AuthService().signOut();
-  // Navigera tillbaka till föregående skärm efter utloggning.
-  // AuthGate kommer automatiskt att visa AuthScreen när auth state ändras.
+  // Tillbaka till roten — AuthGate visar AuthScreen när auth state ändras.
   if (context.mounted) {
-    Navigator.of(context).pop();
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }
 
-Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
-  final shouldDelete = await AppDialog.confirm(
+void _showDeleteAccount(BuildContext context, WidgetRef ref) {
+  AppSheet.show<void>(
     context: context,
     ref: ref,
-    title: 'Delete Account',
-    message: 'Are you sure you want to delete your account?\n\n'
-        'This action is IRREVERSIBLE and will:\n'
-        '• Delete all your workout data\n'
-        '• Delete all your exercise history\n'
-        '• Delete your account permanently\n'
-        '• Cannot be undone!',
-    confirmLabel: 'Delete Forever',
-    destructive: true,
+    title: 'Delete account',
+    subtitle: 'Your account, programs and workout history are erased for '
+        'good. This cannot be undone.',
+    builder: (context) => const _DeleteAccountSheet(),
   );
-
-  if (!shouldDelete) return;
-  if (!context.mounted) return;
-
-  await _performAccountDeletion(context, ref);
 }
 
-Future<void> _performAccountDeletion(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final theme = ref.read(themeProvider);
+/// Asks for the password, then deletes the data and the account.
+///
+/// The password does two jobs. It is the deliberate "yes, really", and it
+/// re-authenticates: Firebase refuses to delete an account without a recent
+/// sign-in, and the user's data has to be deleted *while still signed in*,
+/// because once the account is gone Firestore no longer lets anyone touch it.
+class _DeleteAccountSheet extends ConsumerStatefulWidget {
+  const _DeleteAccountSheet();
 
-  // Blocking progress dialog. It is dismissed by hand in every branch below.
-  AppDialog.show<void>(
-    context: context,
-    ref: ref,
-    title: 'Deleting account',
-    message: 'Removing your account and all of its data…',
-    icon: Icons.delete_forever_rounded,
-    iconColor: theme.error,
-    barrierDismissible: false,
-    content: const LoadingState(),
-  );
+  @override
+  ConsumerState<_DeleteAccountSheet> createState() =>
+      _DeleteAccountSheetState();
+}
 
-  try {
+class _DeleteAccountSheetState extends ConsumerState<_DeleteAccountSheet> {
+  final TextEditingController _password = TextEditingController();
+  bool _obscure = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    final navigator = Navigator.of(context);
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final uid = user.uid;
 
-      // Step 1: Delete Firebase Auth account FIRST.
-      // If this fails (e.g. requires-recent-login), user keeps their data.
-      await AuthService().deleteAccount();
+    if (user == null) {
+      navigator.popUntil((route) => route.isFirst);
+      return;
+    }
 
-      // Step 2: Delete user data from Firestore (only if auth delete succeeded)
-      final dbService = DatabaseService(uid: uid);
-      await dbService.deleteAllUserData();
+    final email = user.email;
+    if (email != null && _password.text.isEmpty) {
+      setState(() => _error = 'Enter your password');
+      return;
+    }
 
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.of(context).pop();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
 
-        // Navigate to auth screen manually to ensure immediate transition
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const AuthScreen()),
-          (route) => false,
-        );
-      }
-    } else {
-      // Nobody signed in — nothing to delete, but the dialog must still go.
-      if (context.mounted) {
-        Navigator.of(context).pop();
-        AppSnack.show(
-          context,
-          ref,
-          'No account is currently signed in.',
-          isError: true,
-        );
+    final auth = AuthService();
+
+    // Steg 1: Bekräfta att det är rätt person. Fel lösenord kostar ingenting.
+    if (email != null) {
+      try {
+        await auth.reauthenticate(_password.text);
+      } on AuthFailure catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          // Här finns bara ett fält, så "fel e-post eller lösenord" vore
+          // missvisande.
+          _error = switch (e.code) {
+            'wrong-password' ||
+            'invalid-credential' ||
+            'INVALID_LOGIN_CREDENTIALS' =>
+              'Incorrect password',
+            _ => e.message,
+          };
+        });
+        return;
       }
     }
-  } catch (e) {
-    // Close loading dialog
-    if (context.mounted) {
-      Navigator.of(context).pop();
 
-      // Show error dialog. Firebase asks for a recent sign-in before it will
-      // delete an account, and that message has to reach the user verbatim.
-      await AppDialog.info(
-        context: context,
-        ref: ref,
-        title: 'Error',
-        message: 'Failed to delete account: ${e.toString()}',
-        buttonLabel: 'OK',
-        icon: Icons.error_outline_rounded,
-      );
+    try {
+      // Avbryt ett pågående pass först — annars kan dess autosave skapa
+      // active_session-dokumentet på nytt efter att datan raderats.
+      await ref.read(workoutProvider.notifier).discardWorkout();
+      ref.read(restTimerProvider.notifier).stop();
+      // Steg 2: Radera datan medan användaren fortfarande är inloggad.
+      await DatabaseService(uid: user.uid).deleteAllUserData();
+      // Steg 3: Radera själva kontot.
+      await auth.deleteAccount();
+    } catch (e) {
+      debugPrint('Account deletion failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e is AuthFailure
+            ? e.message
+            : 'Could not delete your account. Try again.';
+      });
+      return;
     }
+
+    // Tillbaka till roten: AuthGate ser att ingen är inloggad och visar
+    // inloggningen. (Att pusha en egen AuthScreen här skulle lämna appen
+    // utan AuthGate, och nästa inloggning skulle då inte leda någonstans.)
+    navigator.popUntil((route) => route.isFirst);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ref.watch(themeProvider);
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
+
+    return PopScope<Object?>(
+      canPop: !_busy,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _password,
+                obscureText: _obscure,
+                enabled: !_busy,
+                autocorrect: false,
+                enableSuggestions: false,
+                textInputAction: TextInputAction.done,
+                style: AppType.body(t),
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  errorText: _error,
+                  suffixIcon: AppIconButton(
+                    icon: _obscure
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    tooltip: _obscure ? 'Show password' : 'Hide password',
+                    filled: false,
+                    size: 36,
+                    iconSize: 19,
+                    color: t.textSecondary,
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+                onSubmitted: (_) {
+                  if (!_busy) _delete();
+                },
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton.secondary(
+                      label: 'Cancel',
+                      onPressed:
+                          _busy ? null : () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppButton.danger(
+                      label: 'Delete',
+                      loading: _busy,
+                      onPressed: _busy ? null : _delete,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
 Future<void> _openPrivacyPolicy(BuildContext context, WidgetRef ref) async {
   final uri = Uri.parse(_privacyPolicyUrl);
 
-  try {
-    // För HTTPS-URL:er på Android fungerar canLaunchUrl ofta inte som förväntat.
-    // Vi försöker öppna direkt istället.
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } catch (e) {
-    debugPrint('Could not open privacy policy: $e');
-    // Försök med in-app webview som fallback.
+  // För HTTPS-URL:er på Android fungerar canLaunchUrl ofta inte som förväntat,
+  // så vi försöker öppna direkt — först externt, sedan i en in-app webview.
+  // launchUrl rapporterar oftast misslyckande genom att returnera false, inte
+  // genom att kasta, så båda utfallen räknas.
+  for (final mode in const [
+    LaunchMode.externalApplication,
+    LaunchMode.inAppWebView,
+  ]) {
     try {
-      await launchUrl(uri, mode: LaunchMode.inAppWebView);
-    } catch (e2) {
-      debugPrint('Could not open in webview either: $e2');
-      if (context.mounted) {
-        AppSnack.show(
-          context,
-          ref,
-          'Could not open the privacy policy.',
-          isError: true,
-        );
-      }
+      if (await launchUrl(uri, mode: mode)) return;
+    } catch (e) {
+      debugPrint('Could not open privacy policy ($mode): $e');
     }
+  }
+
+  if (context.mounted) {
+    AppSnack.show(
+      context,
+      ref,
+      'Could not open the privacy policy.',
+      isError: true,
+    );
   }
 }

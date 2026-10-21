@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -17,10 +18,11 @@ import 'motion.dart';
 /// The floating rest timer.
 ///
 /// Sits at the bottom of the active workout screen, where a thumb can reach it
-/// without looking. Idle it is a small "Rest" pill; running it grows to show a
-/// progress ring and the elapsed time, and pulses once the target is passed.
+/// without looking. Idle it is a small "Rest" pill; running it shows a
+/// progress ring and the elapsed time, and breathes once the target is passed.
 ///
-/// Tap to start/stop, long-press or tap the settings dot for the target picker.
+/// Tap to start/stop. While idle the trailing button opens the target picker;
+/// while running it restarts the rest. Long-press opens the picker any time.
 /// ---------------------------------------------------------------------------
 class RestTimerBar extends ConsumerWidget {
   /// Extra bottom inset, e.g. to clear a floating nav bar.
@@ -28,30 +30,146 @@ class RestTimerBar extends ConsumerWidget {
 
   const RestTimerBar({super.key, this.bottomPadding = 0});
 
+  /// Gap between the pill and the bottom safe area — low, where the thumb
+  /// rests, and out of the middle of the list.
+  static const double _bottomGap = AppSpacing.sm;
+
+  /// How far above the pill the fade behind it reaches.
+  static const double _fade = AppSpacing.xl;
+
+  /// Vertical space the bar and its fade occupy above the bottom safe area
+  /// (excluding [bottomPadding]) — what scrolling content needs to stay
+  /// clear of to be fully readable.
+  static const double clearance = RestTimerPill.height + _bottomGap + _fade;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final below = bottomInset + bottomPadding + _bottomGap;
+    final fadeHeight = _fade + RestTimerPill.height + below;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: bottomInset + bottomPadding + AppSpacing.xl,
-        left: AppSpacing.lg,
-        right: AppSpacing.lg,
-      ),
-      // A Row, not Align/Center: those expand to the tallest allowed height
-      // when the parent leaves the vertical axis loose, which would stretch the
-      // pill's box over the whole screen. A Row shrink-wraps to its child.
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [RestTimerPill()],
-      ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // The list fades into the page behind the pill, so the rows under it
+        // slide out of view instead of being cut in half by a floating chip
+        // sitting on top of their inputs. Taps pass straight through.
+        Positioned(
+          left: 0,
+          right: 0,
+          top: -_fade,
+          bottom: 0,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    t.background.withValues(alpha: 0),
+                    t.background.withValues(alpha: 0.9),
+                    t.background,
+                  ],
+                  stops: [
+                    0,
+                    _fade / fadeHeight,
+                    (_fade + RestTimerPill.height / 2) / fadeHeight,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: below,
+            left: AppSpacing.lg,
+            right: AppSpacing.lg,
+          ),
+          // A Row, not Align/Center: those expand to the tallest allowed
+          // height when the parent leaves the vertical axis loose, which would
+          // stretch the pill's box over the whole screen. A Row shrink-wraps.
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [RestTimerPill()],
+          ),
+        ),
+      ],
     );
+  }
+}
+
+/// Buzzes once when a running rest reaches its target — a double heavy tap,
+/// so the end of a rest is felt with the phone in a pocket or face down on
+/// the bench, where the pill's visual pulse is useless.
+///
+/// Wrap the whole screen that shows the rest timer with it rather than relying
+/// on the pill: the pill is hidden while the keyboard is up, the buzz should
+/// not be. It fires on the tick that crosses the target only, so rebuilds never
+/// repeat it, and a new rest (which starts below the target) re-arms it.
+class RestTargetHaptics extends ConsumerStatefulWidget {
+  final Widget child;
+
+  /// Off → never buzzes, e.g. when the rest timer is switched off.
+  final bool enabled;
+
+  const RestTargetHaptics({
+    super.key,
+    required this.child,
+    this.enabled = true,
+  });
+
+  @override
+  ConsumerState<RestTargetHaptics> createState() => _RestTargetHapticsState();
+}
+
+class _RestTargetHapticsState extends ConsumerState<RestTargetHaptics> {
+  Timer? _secondTap;
+
+  @override
+  void dispose() {
+    _secondTap?.cancel();
+    super.dispose();
+  }
+
+  void _onRestChanged(RestTimerState? previous, RestTimerState next) {
+    if (!widget.enabled || previous == null) return;
+
+    // Same rest, same target, and this tick is the one that crossed it.
+    // Changing the target or starting a new rest is not a crossing.
+    final crossed = next.isRunning &&
+        next.isOvertime &&
+        !previous.isOvertime &&
+        previous.startedAt == next.startedAt &&
+        previous.targetSeconds == next.targetSeconds;
+    if (!crossed) return;
+
+    HapticFeedback.heavyImpact();
+    _secondTap?.cancel();
+    _secondTap = Timer(AppMotion.fast, HapticFeedback.heavyImpact);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<RestTimerState>(restTimerProvider, _onRestChanged);
+    return widget.child;
   }
 }
 
 /// The pill itself, usable on its own if you need it somewhere else.
 class RestTimerPill extends ConsumerWidget {
   const RestTimerPill({super.key});
+
+  static const double _dialSize = 34;
+
+  /// [GlassSurface] draws a 1px border on each side.
+  static const double _glassBorder = 1;
+
+  /// Total height of the pill: dial + padding + glass border — 44, a full
+  /// touch target and no taller.
+  static const double height =
+      _dialSize + AppSpacing.xs * 2 + _glassBorder * 2;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,10 +179,7 @@ class RestTimerPill extends ConsumerWidget {
 
     return GlassSurface(
       radius: AppRadius.pill,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.all(AppSpacing.xs),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -76,30 +191,29 @@ class RestTimerPill extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _RestDial(state: rest, theme: t),
-                const SizedBox(width: AppSpacing.md),
+                _RestDial(state: rest, theme: t, size: _dialSize),
+                const SizedBox(width: AppSpacing.sm),
                 _RestLabel(state: rest, theme: t),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
               ],
             ),
           ),
-          // Restart is the action you want most often mid-workout: you moved
-          // straight into another set and the clock should begin again.
-          if (rest.isRunning) ...[
-            _RoundAction(
-              icon: Icons.refresh_rounded,
-              tooltip: 'Restart rest',
-              onTap: notifier.start,
-              theme: t,
-            ),
-            const SizedBox(width: 6),
-          ],
-          _RoundAction(
-            icon: Icons.tune_rounded,
-            tooltip: 'Rest settings',
-            onTap: () => _openSettings(context, ref),
-            theme: t,
-          ),
+          // One trailing action at a time. Mid-rest the one you want is
+          // restart — you moved straight into another set and the clock should
+          // begin again; the target is changed between rests.
+          rest.isRunning
+              ? _RoundAction(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Restart rest',
+                  onTap: notifier.start,
+                  theme: t,
+                )
+              : _RoundAction(
+                  icon: Icons.tune_rounded,
+                  tooltip: 'Rest settings',
+                  onTap: () => _openSettings(context, ref),
+                  theme: t,
+                ),
         ],
       ),
     );
@@ -121,16 +235,22 @@ class RestTimerPill extends ConsumerWidget {
 class _RestDial extends StatelessWidget {
   final RestTimerState state;
   final AppColors theme;
+  final double size;
 
-  const _RestDial({required this.state, required this.theme});
+  const _RestDial({
+    required this.state,
+    required this.theme,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tone = state.isOvertime ? theme.success : theme.primary;
+    final innerSize = size - AppSpacing.sm;
 
     final dial = SizedBox(
-      width: 40,
-      height: 40,
+      width: size,
+      height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -140,7 +260,7 @@ class _RestDial extends StatelessWidget {
               duration: AppMotion.normal,
               curve: AppMotion.standard,
               builder: (context, value, _) => CustomPaint(
-                size: const Size(40, 40),
+                size: Size(size, size),
                 painter: _RingPainter(
                   progress: value,
                   track: theme.outline,
@@ -152,8 +272,8 @@ class _RestDial extends StatelessWidget {
               ),
             ),
           Container(
-            width: 30,
-            height: 30,
+            width: innerSize,
+            height: innerSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: state.isRunning
@@ -162,7 +282,7 @@ class _RestDial extends StatelessWidget {
             ),
             child: Icon(
               state.isRunning ? Icons.stop_rounded : Icons.timer_outlined,
-              size: 17,
+              size: 15,
               color: state.isRunning ? tone : theme.primary,
             ),
           ),
@@ -177,6 +297,9 @@ class _RestDial extends StatelessWidget {
   }
 }
 
+/// "Rest" while idle, the elapsed time while running. The ring already shows
+/// how far along the target the rest is, and the colour flips once it is
+/// reached, so there is no second line spelling it out.
 class _RestLabel extends StatelessWidget {
   final RestTimerState state;
   final AppColors theme;
@@ -188,31 +311,15 @@ class _RestLabel extends StatelessWidget {
     if (!state.isRunning) {
       return Text(
         'Rest',
-        style: AppType.heading(theme).copyWith(fontSize: 15),
+        style: AppType.heading(theme).copyWith(fontSize: 14.5),
       );
     }
 
-    final tone = state.isOvertime ? theme.success : theme.text;
-    final caption = state.targetSeconds <= 0
-        ? 'resting'
-        : state.isOvertime
-            ? 'ready'
-            : '${state.remainingSeconds}s to go';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          state.label,
-          style: AppType.mono(theme, size: 17, weight: FontWeight.w800)
-              .copyWith(color: tone),
-        ),
-        Text(
-          caption,
-          style: AppType.caption(theme).copyWith(fontSize: 10.5),
-        ),
-      ],
+    return Text(
+      state.label,
+      style: AppType.mono(theme, size: 16, weight: FontWeight.w700).copyWith(
+        color: state.isOvertime ? theme.success : theme.text,
+      ),
     );
   }
 }
@@ -230,6 +337,8 @@ class _RoundAction extends StatelessWidget {
     required this.theme,
   });
 
+  static const double _size = 30;
+
   @override
   Widget build(BuildContext context) {
     return Tooltip(
@@ -238,12 +347,11 @@ class _RoundAction extends StatelessWidget {
         onTap: onTap,
         scale: 0.88,
         child: Container(
-          width: 34,
-          height: 34,
+          width: _size,
+          height: _size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: theme.surface,
-            border: Border.all(color: theme.outline),
           ),
           child: Icon(icon, size: 16, color: theme.textSecondary),
         ),
@@ -264,9 +372,10 @@ class _Breathe extends StatefulWidget {
 
 class _BreatheState extends State<_Breathe>
     with SingleTickerProviderStateMixin {
+  // One slow breath in, one out.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
+    duration: AppMotion.lazy * 2,
   )..repeat(reverse: true);
 
   late final Animation<double> _scale =
@@ -338,6 +447,7 @@ class _RingPainter extends CustomPainter {
   bool shouldRepaint(covariant _RingPainter old) =>
       old.progress != progress ||
       old.color != color ||
+      old.track != track ||
       old.indeterminate != indeterminate;
 }
 
@@ -375,15 +485,6 @@ class _RestSettings extends ConsumerWidget {
               ),
           ],
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          rest.targetSeconds == 0
-              ? 'The timer counts up with no goal — useful when your rest '
-                  'varies by exercise.'
-              : 'The ring fills toward your target. The clock keeps counting '
-                  'past it, so you always see the real rest length.',
-          style: AppType.secondary(t).copyWith(fontSize: 13),
-        ),
         const SizedBox(height: AppSpacing.xxl),
         AppCard(
           inset: true,
@@ -399,9 +500,9 @@ class _RestSettings extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text('Start automatically', style: AppType.heading(t)),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xxs),
                     Text(
-                      'Begin the rest as soon as a set is filled in',
+                      'When you log a set',
                       style: AppType.secondary(t).copyWith(fontSize: 12.5),
                     ),
                   ],

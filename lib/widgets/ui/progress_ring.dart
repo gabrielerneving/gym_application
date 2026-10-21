@@ -196,18 +196,19 @@ class WeekStrip extends ConsumerWidget {
                   scale: 0.6 + 0.4 * v.clamp(0.0, 1.2),
                   child: child,
                 ),
+                // A trained day is *done*: flat success, not the brand
+                // gradient — that stays free for the screen's one hero.
                 child: Container(
                   width: dotSize,
                   height: dotSize,
                   decoration: BoxDecoration(
-                    color: days[i] ? null : t.surface,
-                    gradient: days[i] ? t.primaryGradientDiagonal : null,
+                    color: days[i] ? t.success : t.surface,
                     shape: BoxShape.circle,
                     border: days[i] ? null : Border.all(color: t.outline),
                   ),
                   child: days[i]
                       ? Icon(Icons.check_rounded,
-                          size: dotSize * 0.5, color: t.onPrimary)
+                          size: dotSize * 0.5, color: t.onSuccess)
                       : null,
                 ),
               ),

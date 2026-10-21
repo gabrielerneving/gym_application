@@ -3,30 +3,26 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/workout_session_model.dart';
 import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/analytics_service.dart';
-import '../widgets/muscle_bar_chart_widget.dart';
 import '../widgets/muscle_radar_chart_widget.dart';
+import '../widgets/stats_components.dart';
 import '../widgets/training_goal_sheets.dart';
 import '../widgets/ui/ui.dart';
 
 /// ---------------------------------------------------------------------------
 /// Muscle groups — where the work actually went.
 ///
-/// Two views over the same window:
-///   * **Balance**   — the radar plus a plain-language verdict on which groups
-///                     are over- and under-represented against the user's
-///                     weekly set band.
-///   * **Breakdown** — the numbers: a bar per group and a target-banded
-///                     [StatBar] list sorted by weekly volume.
+/// One scroll, three answers: the radar for the *shape* of the training, a
+/// bar per group for the *numbers* against the user's weekly set goal (the
+/// goal drawn as two marks on the track), and the groups with room to grow,
+/// with how much.
 ///
-/// Everything is derived from the cached [trainingDataProvider] snapshot via
-/// [AnalyticsService]; nothing on this screen touches Firestore directly. The
-/// band both views score against is the [TrainingGoals] carried on that same
-/// snapshot, passed down rather than re-read, so a shaded strip and the caption
-/// under it can never describe different numbers.
+/// Everything is derived from the cached [trainingDataProvider] snapshot over
+/// the shared period. Counts and per-week rates come from the same window, and
+/// the band is the [TrainingGoals] carried on that snapshot, so a shaded strip
+/// and the caption under it can never describe different numbers.
 /// ---------------------------------------------------------------------------
 class MuscleGroupsScreen extends ConsumerStatefulWidget {
   const MuscleGroupsScreen({super.key});
@@ -35,10 +31,8 @@ class MuscleGroupsScreen extends ConsumerStatefulWidget {
   ConsumerState<MuscleGroupsScreen> createState() => _MuscleGroupsScreenState();
 }
 
-enum _MuscleView { balance, breakdown }
-
 class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
-  _MuscleView _view = _MuscleView.balance;
+  static const String _title = 'Muscle groups';
 
   Future<void> _refresh() async {
     ref.invalidate(workoutSessionsProvider);
@@ -57,19 +51,17 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
 
     return async.when(
       loading: () => AppScaffold(
-        title: 'Muscle groups',
+        title: _title,
         headerBottom: _PeriodBar(value: period, onChanged: _setPeriod),
         children: const [
-          SizedBox(height: AppSpacing.lg),
-          SkeletonBox(height: 42, radius: AppRadius.pill),
-          SizedBox(height: AppSpacing.xl),
-          SkeletonCard(height: 300),
-          SizedBox(height: AppSpacing.xl),
-          SkeletonCard(height: 180),
+          SizedBox(height: AppSpacing.sm),
+          SkeletonCard(height: 320),
+          SizedBox(height: AppSpacing.xxl),
+          SkeletonCard(height: 420),
         ],
       ),
       error: (error, stackTrace) => AppScaffold(
-        title: 'Muscle groups',
+        title: _title,
         body: ErrorState(
           message: 'Could not load your training history.',
           onRetry: _refresh,
@@ -86,13 +78,12 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
   ) {
     if (data.sessions.isEmpty) {
       return AppScaffold(
-        title: 'Muscle groups',
+        title: _title,
         onRefresh: _refresh,
         body: EmptyState(
           icon: Icons.donut_large_rounded,
           title: 'No training logged yet',
-          message:
-              'Finish a workout and this screen will show how your sets are '
+          message: 'Finish a workout and this screen shows how your sets are '
               'spread across the muscle groups.',
           actionLabel: 'Back to statistics',
           onAction: () => Navigator.of(context).maybePop(),
@@ -100,28 +91,8 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
       );
     }
 
-    final now = DateTime.now();
-    final weeks = _weeksFor(period, data.sessions, now);
-
-    // The exact window AnalyticsService.muscleBalance averages over, rebuilt
-    // here so the counts, the shares and the per-week rates all describe the
-    // same slice of time.
-    final windowStart = AnalyticsService.weekStart(now)
-        .subtract(Duration(days: 7 * (weeks - 1)));
-    final range = DateRange(windowStart, now);
-
-    final counts = AnalyticsService.muscleGroupSets(
-      data.sessions,
-      data.exerciseToMuscle,
-      range: range,
-    );
-    final balance = AnalyticsService.muscleBalance(
-      data.sessions,
-      data.exerciseToMuscle,
-      weeks: weeks,
-      now: now,
-      goals: data.goals,
-    );
+    final counts = data.muscleSetsFor(period);
+    final balance = data.muscleBalanceFor(period);
 
     final groupCounts = <String, int>{
       for (final group in AnalyticsService.defaultMuscleGroups)
@@ -131,19 +102,18 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
     final uncategorised = counts['Other'] ?? 0;
     final categorised = groupCounts.values.fold<int>(0, (sum, v) => sum + v);
     final total = categorised + uncategorised;
-    final windowLabel = _windowLabel(period, weeks);
 
     if (total == 0) {
       return AppScaffold(
-        title: 'Muscle groups',
-        subtitle: windowLabel,
+        title: _title,
+        subtitle: period.longLabel,
         headerBottom: _PeriodBar(value: period, onChanged: _setPeriod),
         onRefresh: _refresh,
         body: EmptyState(
           icon: Icons.event_busy_rounded,
           title: 'Nothing in this window',
-          message: 'No working sets were logged in this window '
-              '($windowLabel). Try a longer period.',
+          message: 'No working sets were logged in the '
+              '${period.longLabel.toLowerCase()}. Try a longer period.',
           actionLabel:
               period == StatsPeriod.all ? 'Back to statistics' : 'Show all time',
           onAction: period == StatsPeriod.all
@@ -153,147 +123,43 @@ class _MuscleGroupsScreenState extends ConsumerState<MuscleGroupsScreen> {
       );
     }
 
+    final goals = data.goals;
+    final summary = MuscleBalanceSummary.of(balance, goals);
+    final lagging = AnalyticsService.weakestGroups(balance, limit: 4);
+
     return AppScaffold(
-      title: 'Muscle groups',
-      subtitle: '$windowLabel · $total ${total == 1 ? 'set' : 'sets'}',
+      title: _title,
+      subtitle: '${period.longLabel} · $total ${total == 1 ? 'set' : 'sets'}',
       headerBottom: _PeriodBar(value: period, onChanged: _setPeriod),
       onRefresh: _refresh,
-      children: _sections(
-        balance: balance,
-        goals: data.goals,
-        groupCounts: groupCounts,
-        categorised: categorised,
-        uncategorised: uncategorised,
-        total: total,
-        windowLabel: windowLabel,
-      ),
-    );
-  }
-
-  List<Widget> _sections({
-    required List<MuscleBalance> balance,
-    required TrainingGoals goals,
-    required Map<String, int> groupCounts,
-    required int categorised,
-    required int uncategorised,
-    required int total,
-    required String windowLabel,
-  }) {
-    final isBalance = _view == _MuscleView.balance;
-    final view = _view.name;
-
-    return [
-      const SizedBox(height: AppSpacing.lg),
-      FadeSlideIn(
-        key: const ValueKey('switcher'),
-        child: _ViewSwitcher(
-          value: _view,
-          onChanged: (v) => setState(() => _view = v),
-        ),
-      ),
-      const SizedBox(height: AppSpacing.xl),
-
-      if (isBalance) ...[
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        FadeSlideIn(child: _RadarCard(groupCounts: groupCounts)),
+        SectionHeader(title: 'Sets per week', subtitle: summary.title),
         FadeSlideIn(
-          key: ValueKey('$view-chart'),
           index: 1,
-          child: _RadarCard(groupCounts: groupCounts, totalSets: categorised),
+          child: _BreakdownList(balance: balance, goals: goals),
         ),
-        SectionHeader(
-          title: 'How balanced are you?',
-          subtitle:
-              'Weekly sets against the ${goals.bandLabel} band · $windowLabel',
-        ),
-        FadeSlideIn(
-          key: ValueKey('$view-verdict'),
-          index: 2,
-          child: _BalanceVerdict(balance: balance, goals: goals),
-        ),
-      ] else ...[
-        FadeSlideIn(
-          key: ValueKey('$view-chart'),
-          index: 1,
-          child: _BarCard(groupCounts: groupCounts, totalSets: categorised),
-        ),
-        SectionHeader(
-          title: 'Sets per week',
-          subtitle: 'Sorted by volume · $windowLabel',
-        ),
-        FadeSlideIn(
-          key: ValueKey('$view-list'),
-          index: 2,
-          child: _BreakdownList(
-            balance: balance,
-            goals: goals,
-            totalSets: categorised,
+        if (categorised > 0 && lagging.isNotEmpty) ...[
+          const SectionHeader(
+            title: 'Room to grow',
+            subtitle: 'Weekly sets to reach the bottom of your target',
           ),
-        ),
+          FadeSlideIn(index: 2, child: _AddList(lagging: lagging)),
+        ],
+        if (uncategorised > 0) ...[
+          const SizedBox(height: AppSpacing.lg),
+          FadeSlideIn(
+            index: 3,
+            child: _UncategorisedNote(sets: uncategorised, total: total),
+          ),
+        ],
       ],
-
-      if (uncategorised > 0) ...[
-        const SizedBox(height: AppSpacing.lg),
-        FadeSlideIn(
-          key: ValueKey('$view-note'),
-          index: 3,
-          child: _UncategorisedNote(sets: uncategorised, total: total),
-        ),
-      ],
-    ];
-  }
-
-  /// How many weeks the selected period covers. Used both for the averaging
-  /// window and for the honest label above the numbers.
-  int _weeksFor(
-    StatsPeriod period,
-    List<WorkoutSession> sessions,
-    DateTime now,
-  ) {
-    switch (period) {
-      case StatsPeriod.week:
-        return 1;
-      case StatsPeriod.month:
-        return 4;
-      case StatsPeriod.quarter:
-        return 13;
-      case StatsPeriod.year:
-        return 52;
-      case StatsPeriod.all:
-        if (sessions.isEmpty) return 1;
-        var oldest = sessions.first.date;
-        for (final session in sessions) {
-          if (session.date.isBefore(oldest)) oldest = session.date;
-        }
-        final firstWeek = AnalyticsService.weekStart(oldest);
-        final thisWeek = AnalyticsService.weekStart(now);
-        // Hours ÷ 24 rather than inDays so daylight-saving shifts do not eat
-        // a week off the count.
-        final days = (thisWeek.difference(firstWeek).inHours / 24).round();
-        return math.max(1, days ~/ 7 + 1);
-    }
-  }
-
-  String _windowLabel(StatsPeriod period, int weeks) {
-    if (period == StatsPeriod.all) {
-      return 'All time · $weeks ${weeks == 1 ? 'week' : 'weeks'}';
-    }
-    if (weeks == 1) return 'This week so far';
-    return 'Last $weeks weeks';
+    );
   }
 }
 
-/// low → warning, optimal → success, high → primary, untrained → muted.
-Color _statusColor(AppColors t, VolumeStatus status) => switch (status) {
-      VolumeStatus.none => t.textSecondary,
-      VolumeStatus.low => t.warning,
-      VolumeStatus.optimal => t.success,
-      VolumeStatus.high => t.primary,
-    };
-
 String _perWeek(double value) => '${AppFormat.weight(value)}/wk';
-
-/// ---------------------------------------------------------------------------
-/// Controls
-/// ---------------------------------------------------------------------------
 
 class _PeriodBar extends StatelessWidget {
   final StatsPeriod value;
@@ -314,42 +180,12 @@ class _PeriodBar extends StatelessWidget {
   }
 }
 
-class _ViewSwitcher extends StatelessWidget {
-  final _MuscleView value;
-  final ValueChanged<_MuscleView> onChanged;
-
-  const _ViewSwitcher({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSegmented<_MuscleView>(
-      value: value,
-      segments: const [
-        AppSegment(
-          value: _MuscleView.balance,
-          label: 'Balance',
-          icon: Icons.radar_rounded,
-        ),
-        AppSegment(
-          value: _MuscleView.breakdown,
-          label: 'Breakdown',
-          icon: Icons.bar_chart_rounded,
-        ),
-      ],
-      onChanged: onChanged,
-    );
-  }
-}
-
-/// ---------------------------------------------------------------------------
-/// Balance view
-/// ---------------------------------------------------------------------------
-
+/// The shape of the training. Axis titles carry the set counts; the rings are
+/// relative to the most-trained group.
 class _RadarCard extends ConsumerWidget {
   final Map<String, int> groupCounts;
-  final int totalSets;
 
-  const _RadarCard({required this.groupCounts, required this.totalSets});
+  const _RadarCard({required this.groupCounts});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -365,31 +201,20 @@ class _RadarCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('Distribution', style: AppType.heading(t)),
-                ),
-                AppBadge(
-                  label: '$totalSets sets',
-                  icon: Icons.fitness_center_rounded,
-                ),
-              ],
+          // The axis titles sit outside the rings; the vertical padding gives
+          // the top and bottom ones room so they never meet the caption.
+          SizedBox(
+            height: 320,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+              child: MuscleRadarChartWidget(muscleGroupCounts: groupCounts),
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            height: 300,
-            child: MuscleRadarChartWidget(muscleGroupCounts: groupCounts),
-          ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.sm),
           Text(
-            'The outer ring is your most-trained group. Numbers are working '
-            'sets in this window.',
+            'Working sets per group, scaled to your most-trained one',
             textAlign: TextAlign.center,
-            style: AppType.caption(t),
+            style: AppType.caption(t).copyWith(color: t.textSecondary),
           ),
         ],
       ),
@@ -397,196 +222,12 @@ class _RadarCard extends ConsumerWidget {
   }
 }
 
-/// The plain-language answer to "am I lopsided?".
-class _BalanceVerdict extends ConsumerWidget {
-  final List<MuscleBalance> balance;
-  final TrainingGoals goals;
-
-  const _BalanceVerdict({required this.balance, required this.goals});
-
-  static const List<VolumeStatus> _order = [
-    VolumeStatus.high,
-    VolumeStatus.optimal,
-    VolumeStatus.low,
-    VolumeStatus.none,
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-
-    // muscleBalance comes back sorted by weekly volume, highest first.
-    final trained = balance.where((b) => b.totalSets > 0).toList();
-    final onTarget =
-        balance.where((b) => b.status == VolumeStatus.optimal).length;
-
-    final buckets = <VolumeStatus, List<MuscleBalance>>{};
-    for (final entry in balance) {
-      buckets.putIfAbsent(entry.status, () => <MuscleBalance>[]).add(entry);
-    }
-
-    final String headline;
-    final String detail;
-    if (trained.isEmpty) {
-      headline = 'Nothing categorised in this window';
-      detail = 'Log a few exercises from your library and the balance shows up '
-          'here.';
-    } else {
-      headline = '$onTarget of ${balance.length} groups sit inside '
-          '${goals.bandSentence}';
-      if (trained.length == 1) {
-        detail = '${trained.first.group} is the only group you trained, at '
-            '${_perWeek(trained.first.setsPerWeek)}.';
-      } else {
-        detail = '${trained.first.group} leads at '
-            '${_perWeek(trained.first.setsPerWeek)}; ${trained.last.group} '
-            'trails at ${_perWeek(trained.last.setsPerWeek)}.';
-      }
-    }
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              IconBadge(
-                icon: Icons.insights_rounded,
-                color: onTarget >= balance.length - 2 ? t.success : t.primary,
-              ),
-              const SizedBox(width: AppSpacing.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(headline, style: AppType.heading(t)),
-                    const SizedBox(height: 4),
-                    Text(detail, style: AppType.secondary(t)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          for (final status in _order)
-            if (buckets[status] != null && buckets[status]!.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xl),
-              _StatusBlock(items: buckets[status]!, status: status),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One "Above target" / "Below target" / … group of badges.
-class _StatusBlock extends ConsumerWidget {
-  final List<MuscleBalance> items;
-  final VolumeStatus status;
-
-  const _StatusBlock({required this.items, required this.status});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-    final tone = _statusColor(t, status);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            // Straight from MuscleBalance.statusLabel so the wording matches
-            // the rest of the app.
-            Text(items.first.statusLabel, style: AppType.overline(t)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: [
-            for (final item in items)
-              AppBadge(
-                label: status == VolumeStatus.none
-                    ? item.group
-                    : '${item.group} · ${_perWeek(item.setsPerWeek)}',
-                color: tone,
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// ---------------------------------------------------------------------------
-/// Breakdown view
-/// ---------------------------------------------------------------------------
-
-class _BarCard extends ConsumerWidget {
-  final Map<String, int> groupCounts;
-  final int totalSets;
-
-  const _BarCard({required this.groupCounts, required this.totalSets});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-
-    return AppCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.lg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('Working sets', style: AppType.heading(t)),
-                ),
-                AppBadge(
-                  label: '$totalSets sets',
-                  icon: Icons.fitness_center_rounded,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          SizedBox(
-            height: 240,
-            child: MuscleBarChartWidget(muscleGroupCounts: groupCounts),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Every group as a target-banded bar, biggest first.
+/// Every group as a bar against the target marks, biggest first.
 class _BreakdownList extends ConsumerWidget {
   final List<MuscleBalance> balance;
   final TrainingGoals goals;
-  final int totalSets;
 
-  const _BreakdownList({
-    required this.balance,
-    required this.goals,
-    required this.totalSets,
-  });
+  const _BreakdownList({required this.balance, required this.goals});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -598,23 +239,36 @@ class _BreakdownList extends ConsumerWidget {
     // Whichever reaches higher sets the scale: the whole band has to stay in
     // the track when every group is far below it, and every bar has to when
     // the user has set a band low enough to be cleared.
-    final barMax = math.max(maxPerWeek * 1.08, goals.setsMax * 1.2);
+    final barMax = math.max(maxPerWeek * 1.08, goals.setsMax * 1.25);
 
     return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.md,
+        AppSpacing.xl,
+        AppSpacing.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (var i = 0; i < balance.length; i++)
             FadeSlideIn(
               index: i,
-              child: StatBar(
-                label: _label(balance[i]),
+              child: RangeBar(
+                label: balance[i].group,
                 value: balance[i].setsPerWeek,
                 max: barMax,
                 valueLabel: _perWeek(balance[i].setsPerWeek),
-                color: _statusColor(t, balance[i].status),
-                targetMin: goals.setsMin,
-                targetMax: goals.setsMax,
+                valueColor: balance[i].status == VolumeStatus.none
+                    ? t.textSecondary
+                    : null,
+                color: muscleStatusColor(t, balance[i].status),
+                valueIcon: balance[i].status == VolumeStatus.optimal
+                    ? Icons.check_rounded
+                    : null,
+                valueIconColor: t.success,
+                rangeMin: goals.setsMin,
+                rangeMax: goals.setsMax,
               ),
             ),
           const SizedBox(height: AppSpacing.md),
@@ -628,31 +282,26 @@ class _BreakdownList extends ConsumerWidget {
             scale: 0.99,
             child: Row(
               children: [
-                Container(
-                  width: 24,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: t.textSecondary.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                ),
+                const RangeLegendGlyph(),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(
-                    // The default band is the one from the literature and can be
-                    // sold as such; a band the user chose is theirs, and saying
-                    // otherwise would put words in the research's mouth.
+                    // The default band is the one from the literature; a band
+                    // the user chose is theirs, and saying otherwise would put
+                    // words in the research's mouth.
                     goals.isDefault
-                        ? 'The shaded band is ${goals.bandLabel} working sets a '
-                            'week — the range most lifters grow on. Tap to '
-                            'change it.'
-                        : 'The shaded band is ${goals.bandLabel} working sets a '
-                            'week — the goal you set for yourself.',
-                    style: AppType.caption(t),
+                        ? 'Target ${goals.bandSentence}'
+                        : 'Your target, ${goals.bandSentence}',
+                    style: AppType.secondary(t),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Icon(Icons.tune_rounded, size: 16, color: t.textTertiary),
+                Text(
+                  'Change',
+                  style: AppType.secondary(t).copyWith(
+                    color: t.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
@@ -660,21 +309,87 @@ class _BreakdownList extends ConsumerWidget {
       ),
     );
   }
+}
 
-  String _label(MuscleBalance item) {
-    if (totalSets <= 0 || item.totalSets == 0) return item.group;
-    final share = (item.totalSets / totalSets) * 100;
-    return '${item.group}  ·  ${share.toStringAsFixed(share < 10 ? 1 : 0)}%';
+/// The groups below the band and roughly how many weekly sets would lift each
+/// one into it. Plain numbers: a gap is a plan, not a warning.
+class _AddList extends ConsumerWidget {
+  final List<MuscleBalance> lagging;
+
+  const _AddList({required this.lagging});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < lagging.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: t.divider),
+            FadeSlideIn(
+              index: i,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            lagging[i].group,
+                            style: AppType.body(t)
+                                .copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            lagging[i].status == VolumeStatus.none
+                                ? 'Not trained in this window'
+                                : 'At ${_perWeek(lagging[i].setsPerWeek)}',
+                            style: AppType.caption(t),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '+${math.max(1, lagging[i].setsToTarget)}',
+                            style: AppType.mono(
+                              t,
+                              size: 16,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' sets/wk',
+                            style: AppType.caption(t)
+                                .copyWith(color: t.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
-/// ---------------------------------------------------------------------------
-/// Honesty note
-/// ---------------------------------------------------------------------------
-
 /// [AnalyticsService.muscleGroupSets] files exercises that are missing from the
 /// master-exercise library under "Other". Rather than quietly dropping them,
-/// say so — otherwise the percentages look wrong to anyone who counts.
+/// say so — otherwise the numbers look wrong to anyone who counts.
 class _UncategorisedNote extends ConsumerWidget {
   final int sets;
   final int total;
@@ -692,26 +407,14 @@ class _UncategorisedNote extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.help_outline_rounded, size: 19, color: t.warning),
+          Icon(Icons.help_outline_rounded, size: 18, color: t.textTertiary),
           const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$sets ${sets == 1 ? 'set is' : 'sets are'} uncategorised',
-                  style: AppType.body(t).copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${share.toStringAsFixed(share < 10 ? 1 : 0)}% of your work '
-                  'came from exercises that are not in your exercise library, '
-                  'so they are counted as "Other" and left out of the charts '
-                  'above.',
-                  style: AppType.secondary(t),
-                ),
-              ],
+            child: Text(
+              '$sets ${sets == 1 ? 'set' : 'sets'} '
+              '(${share.toStringAsFixed(share < 10 ? 1 : 0)}%) came from '
+              'exercises without a muscle group and are left out above.',
+              style: AppType.secondary(t),
             ),
           ),
         ],

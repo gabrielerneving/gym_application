@@ -1,17 +1,23 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/master_exercise_model.dart';
+import '../providers/analytics_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/database_service.dart';
 import '../widgets/ui/ui.dart';
+import 'exercise_list_screen.dart';
 
 /// Adds a movement to the user's master exercise library.
 ///
 /// Pops the created [MasterExercise] so the caller can drop it straight into
-/// the workout being built.
+/// the workout being built. Typing a name that is already in the library pops
+/// that entry instead: statistics map exercises to muscle groups by name, so a
+/// second copy would only split (or overwrite) its history.
 class CreateExerciseScreen extends ConsumerStatefulWidget {
   const CreateExerciseScreen({super.key});
 
@@ -25,6 +31,9 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
   final TextEditingController _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
 
+  StreamSubscription<List<MasterExercise>>? _librarySub;
+  List<MasterExercise> _library = const <MasterExercise>[];
+
   String? _selectedCategory;
   bool _isLoading = false;
 
@@ -32,31 +41,54 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
   /// after a real attempt.
   bool _showCategoryError = false;
 
-  /// The categories a master exercise can be filed under. Kept verbatim — the
-  /// strings are the Firestore values.
-  final List<String> _categories = const [
-    'Shoulders',
-    'Quads',
-    'Hamstrings',
-    'Glutes',
-    'Calves',
-    'Biceps',
-    'Triceps',
-    'Chest',
-    'Back',
-    'Abs',
-    'Cardio',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_onNameChanged);
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _librarySub = watchExerciseLibrary(uid).listen(
+        (library) {
+          if (mounted) setState(() => _library = library);
+        },
+        // Only powers the duplicate check — saving still works without it.
+        onError: (Object _) {},
+      );
+    }
+  }
 
   @override
   void dispose() {
+    _librarySub?.cancel();
+    _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     _nameFocus.dispose();
     super.dispose();
   }
 
+  void _onNameChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// The library entry with the typed name, if there is one.
+  MasterExercise? get _existing {
+    final key = _nameController.text.trim().toLowerCase();
+    if (key.isEmpty) return null;
+    for (final exercise in _library) {
+      if (exercise.name.trim().toLowerCase() == key) return exercise;
+    }
+    return null;
+  }
+
   Future<void> _saveExercise() async {
     _nameFocus.unfocus();
+
+    final existing = _existing;
+    if (existing != null) {
+      Navigator.of(context).pop(existing);
+      return;
+    }
 
     final formValid = _formKey.currentState?.validate() ?? false;
     final categoryValid = _selectedCategory != null;
@@ -75,13 +107,16 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
       );
 
       await DatabaseService(uid: uid).saveMasterExercise(newExercise);
+      // Statistics map names to muscle groups from the library.
+      ref.invalidate(exerciseMuscleMapProvider);
 
       if (!mounted) return;
       AppSnack.show(context, ref, '${newExercise.name} added to your library');
       Navigator.of(context).pop(newExercise);
     } catch (e) {
+      debugPrint('Could not save the exercise: $e');
       if (mounted) {
-        AppSnack.show(context, ref, 'Could not save the exercise: $e',
+        AppSnack.show(context, ref, 'Could not save the exercise. Try again.',
             isError: true);
       }
     } finally {
@@ -99,89 +134,75 @@ class _CreateExerciseScreenState extends ConsumerState<CreateExerciseScreen> {
   @override
   Widget build(BuildContext context) {
     final t = ref.watch(themeProvider);
+    final existing = _existing;
 
     return AppScaffold(
       title: 'New exercise',
-      subtitle: 'Add a movement to your library',
       bottomPadding: AppSpacing.xxxl,
       children: [
+        const SizedBox(height: AppSpacing.sm),
         Form(
           key: _formKey,
           child: FadeSlideIn(
-            child: AppCard(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Overline('Exercise name'),
-                  TextFormField(
-                    controller: _nameController,
-                    focusNode: _nameFocus,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    maxLength: 60,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    style: AppType.body(t).copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Incline dumbbell press',
-                      counterText: '',
-                      prefixIcon: Icon(
-                        Icons.fitness_center_rounded,
-                        size: 19,
-                        color: t.textTertiary,
-                      ),
-                    ),
-                    validator: (value) => (value == null || value.trim().isEmpty)
-                        ? 'Please enter a name'
-                        : null,
-                    onFieldSubmitted: (_) => _nameFocus.unfocus(),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  const Overline('Muscle group'),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    children: [
-                      for (var i = 0; i < _categories.length; i++)
-                        AppChip(
-                          label: _categories[i],
-                          selected: _selectedCategory == _categories[i],
-                          accent: t.dataColor(i),
-                          onTap: () => _selectCategory(_categories[i]),
-                        ),
-                    ],
-                  ),
-                  if (_showCategoryError) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    _InlineError(
-                      message: 'Please choose a muscle group',
-                      theme: t,
-                    ),
-                  ],
-                ],
+            child: TextFormField(
+              controller: _nameController,
+              focusNode: _nameFocus,
+              textInputAction: TextInputAction.done,
+              textCapitalization: TextCapitalization.sentences,
+              maxLength: 60,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              style: AppType.heading(t),
+              decoration: InputDecoration(
+                hintText: 'Exercise name',
+                counterText: '',
+                helperText: existing == null
+                    ? null
+                    : 'Already in your library under ${existing.category}',
+                helperStyle: AppType.caption(t).copyWith(color: t.primary),
               ),
+              validator: (value) => (value == null || value.trim().isEmpty)
+                  ? 'Enter a name'
+                  : null,
+              onFieldSubmitted: (_) => _nameFocus.unfocus(),
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.xxl),
-        AppButton(
-          label: 'Save exercise',
-          icon: Icons.check_rounded,
-          expand: true,
-          size: AppButtonSize.large,
-          loading: _isLoading,
-          onPressed: _isLoading ? null : _saveExercise,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Text(
-          'Saved exercises show up under their muscle group the next time you '
-          'add one to a workout.',
-          textAlign: TextAlign.center,
-          style: AppType.caption(t),
+
+        // An existing exercise keeps its own muscle group.
+        if (existing == null) ...[
+          const SizedBox(height: AppSpacing.xxl),
+          const FadeSlideIn(index: 1, child: Overline('Muscle group')),
+          FadeSlideIn(
+            index: 1,
+            child: Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final category in exerciseCategories)
+                  AppChip(
+                    label: category,
+                    selected: _selectedCategory == category,
+                    onTap: () => _selectCategory(category),
+                  ),
+              ],
+            ),
+          ),
+          if (_showCategoryError) ...[
+            const SizedBox(height: AppSpacing.md),
+            _InlineError(message: 'Choose a muscle group', theme: t),
+          ],
+        ],
+        const SizedBox(height: AppSpacing.xxxl),
+        FadeSlideIn(
+          index: 2,
+          child: AppButton(
+            label: existing == null ? 'Save exercise' : 'Use ${existing.name}',
+            icon: Icons.check_rounded,
+            expand: true,
+            size: AppButtonSize.large,
+            loading: _isLoading,
+            onPressed: _isLoading ? null : _saveExercise,
+          ),
         ),
       ],
     );
@@ -200,7 +221,7 @@ class _InlineError extends StatelessWidget {
     return Row(
       children: [
         Icon(Icons.error_outline_rounded, size: 15, color: theme.error),
-        const SizedBox(width: 6),
+        const SizedBox(width: AppSpacing.xs),
         Flexible(
           child: Text(
             message,

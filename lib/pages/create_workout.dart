@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,11 +18,12 @@ import 'template_detail_page.dart';
 
 /// The workout builder.
 ///
-/// Two modes share this screen:
-///   * **create** — reached as the "Create" tab of `MainScreen`. Shows a
-///     Build/Templates switcher and reports back through [onWorkoutSaved].
-///   * **edit** — pushed as a route with [workoutToEdit]. Templates are hidden
-///     and saving updates the existing program in place.
+/// Three ways in share this screen:
+///   * **tab** — the "Create" tab of `MainScreen`. Shows a Build/Templates
+///     switcher and reports back through [onWorkoutSaved].
+///   * **pushed create** — the same builder pushed as a route (no callback).
+///   * **edit** — pushed with [workoutToEdit]. Templates are hidden and saving
+///     updates the existing program in place, keeping its id.
 class CreateWorkoutScreen extends ConsumerStatefulWidget {
   /// Called with the tab index to show after a successful save (0 = Home).
   final Function(int)? onWorkoutSaved;
@@ -39,6 +42,14 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   static const int _tabBuild = 0;
   static const int _tabTemplates = 1;
 
+  /// Working sets a newly added exercise starts with. Matches the default of
+  /// the active workout's "Add exercise" sheet, and saves two taps per row for
+  /// the most common program shape.
+  static const int _defaultWorkingSets = 3;
+
+  /// How long the "removed — Undo" snack stays up.
+  static const Duration _undoWindow = Duration(seconds: 4);
+
   /// Vertical room the floating save bar needs: the large button plus the gap
   /// above it. Only reserved while the bar is actually on screen.
   static const double _saveBarExtent = 58 + AppSpacing.lg;
@@ -49,41 +60,81 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   List<Exercise> _exercises = <Exercise>[];
   late Stream<List<StandardWorkoutTemplate>> _templateStream;
 
+  /// The user's existing programs — for the duplicate-name check and to mark
+  /// templates that are already copied.
+  StreamSubscription<List<WorkoutProgram>>? _programsSub;
+  List<WorkoutProgram> _programs = const <WorkoutProgram>[];
+
+  /// The form as it was opened (or last saved), to tell whether leaving the
+  /// screen would throw work away.
+  String _savedSignature = '';
+
   bool _isLoading = false;
   bool _isReordering = false;
+
+  /// Set by a save attempt with an empty name, so the field only nags after
+  /// the user actually tried.
+  bool _showNameRequired = false;
+
   int _tab = _tabBuild;
 
   bool get _isEditMode => widget.workoutToEdit != null;
 
-  /// A workout needs a name and at least one exercise before it can be saved.
-  bool get _isFormValid =>
-      _nameController.text.trim().isNotEmpty && _exercises.isNotEmpty;
+  /// Hosted as a tab of `MainScreen` (floating nav bar underneath, no back).
+  bool get _isTab => !_isEditMode && widget.onWorkoutSaved != null;
 
-  bool get _canSave => _isFormValid && !_isLoading;
+  bool get _isDirty => _signature() != _savedSignature;
 
-  /// The save bar rides in only once there is something to save — and stays
-  /// put while the save is in flight, so it does not slide away mid-spinner.
-  bool get _showSaveBar => _isFormValid || _isLoading;
+  /// The save bar rides in once there is something to save — and stays put
+  /// while the save is in flight, so it does not slide away mid-spinner.
+  bool get _showSaveBar => _exercises.isNotEmpty || _isEditMode || _isLoading;
 
-  int get _totalSets =>
-      _exercises.fold<int>(0, (sum, exercise) => sum + exercise.sets);
+  int get _workingSets =>
+      _exercises.fold<int>(0, (sum, exercise) => sum + exercise.workingSets);
+
+  int get _warmUpSets =>
+      _exercises.fold<int>(0, (sum, exercise) => sum + exercise.warmUpSets);
 
   @override
   void initState() {
     super.initState();
 
-    // Edit mode: prefill the form from the program being edited.
-    if (widget.workoutToEdit != null) {
-      _nameController.text = widget.workoutToEdit!.title;
-      _exercises = List<Exercise>.from(widget.workoutToEdit!.exercises);
+    // Edit mode: prefill from the program being edited. The exercises are
+    // copied, not shared — the sets sheet mutates them in place, and backing
+    // out without saving must leave the caller's program untouched.
+    final program = widget.workoutToEdit;
+    if (program != null) {
+      _nameController.text = program.title;
+      _exercises = program.exercises
+          .map((e) => Exercise(
+                id: e.id,
+                name: e.name,
+                sets: e.sets,
+                workingSets: e.workingSets,
+                warmUpSets: e.warmUpSets,
+              ))
+          .toList();
     }
+    _savedSignature = _signature();
 
     _nameController.addListener(_onNameChanged);
     _templateStream = StandardWorkoutService.getStandardWorkouts();
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _programsSub = DatabaseService(uid: user.uid).getWorkoutPrograms().listen(
+        (programs) {
+          if (mounted) setState(() => _programs = programs);
+        },
+        // Only powers a convenience check — never worth surfacing.
+        onError: (Object _) {},
+      );
+    }
   }
 
   @override
   void dispose() {
+    _programsSub?.cancel();
     _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     _nameFocus.dispose();
@@ -91,7 +142,37 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   }
 
   void _onNameChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (_nameController.text.trim().isNotEmpty) _showNameRequired = false;
+    });
+  }
+
+  String _signature() => <String>[
+        _nameController.text.trim(),
+        for (final e in _exercises) '${e.id}:${e.workingSets}:${e.warmUpSets}',
+      ].join('|');
+
+  static String _key(String s) => s.trim().toLowerCase();
+
+  /// Program titles key the "last time" values in the active workout, so two
+  /// programs with the same name would share (and muddle) their history.
+  bool _isTakenName(String title) {
+    final key = _key(title);
+    if (key.isEmpty) return false;
+    // Keeping the current name while editing is always fine.
+    final original = widget.workoutToEdit;
+    if (original != null && _key(original.title) == key) return false;
+    return _programs.any((p) => p.id != original?.id && _key(p.title) == key);
+  }
+
+  String? get _nameError {
+    final name = _nameController.text;
+    if (name.trim().isEmpty) {
+      return _showNameRequired ? 'Name your workout' : null;
+    }
+    if (_isTakenName(name)) return 'You already have a workout with this name';
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -111,15 +192,29 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
 
     if (!mounted || result is! MasterExercise) return;
 
+    // The active workout keys "last time" values by exercise name, so a
+    // repeat is allowed but should be deliberate rather than a double tap.
+    final isRepeat = _exercises.any((e) => _key(e.name) == _key(result.name));
+    if (isRepeat) {
+      final addAgain = await AppDialog.confirm(
+        context: context,
+        ref: ref,
+        title: 'Already in this workout',
+        message: 'Add ${result.name} a second time?',
+        confirmLabel: 'Add again',
+      );
+      if (!addAgain || !mounted) return;
+    }
+
     // The library entry becomes a fresh instance in *this* workout, with its
-    // own id so the same movement can appear twice.
+    // own id so a repeated movement still has a stable identity.
     setState(() {
       _exercises.add(
         Exercise(
           id: const Uuid().v4(),
           name: result.name,
-          sets: 1,
-          workingSets: 1,
+          sets: _defaultWorkingSets,
+          workingSets: _defaultWorkingSets,
           warmUpSets: 0,
         ),
       );
@@ -142,14 +237,13 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
       context: context,
       ref: ref,
       title: exercise.name,
-      subtitle: 'Working sets count towards your statistics',
       builder: (sheetContext) => _EditSetsSheet(
         workingSets: exercise.workingSets,
         warmUpSets: exercise.warmUpSets,
         onChanged: (working, warmUp) => _applySets(exercise, working, warmUp),
         onRemove: () {
           Navigator.of(sheetContext).pop();
-          _confirmRemove(exercise);
+          _removeExercise(exercise);
         },
       ),
     );
@@ -163,26 +257,34 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
     });
   }
 
-  Future<void> _confirmRemove(Exercise exercise) async {
-    final confirmed = await AppDialog.confirm(
-      context: context,
-      ref: ref,
-      title: 'Remove exercise?',
-      message: '${exercise.name} will be removed from this workout.',
-      confirmLabel: 'Remove',
-      destructive: true,
-    );
-
-    if (!confirmed || !mounted) return;
+  /// Removes straight away and offers Undo — nothing is persisted until the
+  /// workout is saved, so a confirmation dialog would only add friction.
+  void _removeExercise(Exercise exercise) {
+    final index = _exercises.indexWhere((e) => e.id == exercise.id);
+    if (index < 0) return;
 
     setState(() {
-      _exercises.removeWhere((e) => e.id == exercise.id);
+      _exercises.removeAt(index);
       if (_exercises.length < 2) _isReordering = false;
     });
 
-    if (mounted) {
-      AppSnack.show(context, ref, '${exercise.name} removed');
-    }
+    final t = ref.read(themeProvider);
+    AppSnack.show(
+      context,
+      ref,
+      '${exercise.name} removed',
+      duration: _undoWindow,
+      action: SnackBarAction(
+        label: 'Undo',
+        textColor: t.primary,
+        onPressed: () {
+          if (!mounted || _exercises.any((e) => e.id == exercise.id)) return;
+          setState(() {
+            _exercises.insert(index.clamp(0, _exercises.length), exercise);
+          });
+        },
+      ),
+    );
   }
 
   void _toggleReordering() {
@@ -191,19 +293,30 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Saving
+  // Saving and leaving
   // ---------------------------------------------------------------------------
 
   Future<void> _saveWorkout() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final title = _nameController.text.trim();
 
     if (title.isEmpty) {
-      AppSnack.show(context, ref, 'Give the workout a name first.',
-          isError: true);
+      setState(() => _showNameRequired = true);
+      _nameFocus.requestFocus();
+      return;
+    }
+    if (_isTakenName(title)) {
+      _nameFocus.requestFocus();
       return;
     }
     if (_exercises.isEmpty) {
-      AppSnack.show(context, ref, 'Add at least one exercise.', isError: true);
+      AppSnack.show(context, ref, 'Add at least one exercise', isError: true);
+      return;
+    }
+
+    // Editing without changes: nothing to write.
+    if (_isEditMode && !_isDirty) {
+      Navigator.of(context).pop();
       return;
     }
 
@@ -236,31 +349,33 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
         );
       }
 
-      FocusManager.instance.primaryFocus?.unfocus();
-
       if (!mounted) return;
 
       AppSnack.show(
         context,
         ref,
-        widget.workoutToEdit != null ? 'Workout updated' : 'Workout saved',
+        _isEditMode ? 'Workout updated' : 'Workout saved',
       );
 
-      _nameController.clear();
-      setState(() {
-        _exercises.clear();
-        _isReordering = false;
-      });
-
-      // Hand control back to the shell, or pop when pushed as a route.
-      if (widget.onWorkoutSaved != null) {
+      if (_isTab) {
+        // The tab stays alive, so clear it for the next program and hand
+        // control back to the shell.
+        _nameController.clear();
+        setState(() {
+          _exercises = <Exercise>[];
+          _isReordering = false;
+          _showNameRequired = false;
+          _savedSignature = _signature();
+        });
         widget.onWorkoutSaved!(0); // 0 = Home tab
       } else {
+        _savedSignature = _signature();
         Navigator.of(context).pop();
       }
     } catch (e) {
+      debugPrint('Could not save the workout: $e');
       if (mounted) {
-        AppSnack.show(context, ref, 'Could not save the workout: $e',
+        AppSnack.show(context, ref, 'Could not save the workout. Try again.',
             isError: true);
       }
     } finally {
@@ -268,85 +383,64 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
     }
   }
 
+  Future<void> _confirmDiscard() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final discard = await AppDialog.confirm(
+      context: context,
+      ref: ref,
+      title: 'Discard changes?',
+      message: _isEditMode
+          ? 'Your edits to this workout will be lost.'
+          : 'This workout has not been saved.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      destructive: true,
+    );
+    if (discard && mounted) Navigator.of(context).pop();
+  }
+
   // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
 
-  String get _builderSubtitle {
-    if (_isReordering) return 'Drag the rows into the order you want';
-    if (_exercises.isEmpty) return 'Name it, then add your exercises';
-
-    final count = _exercises.length;
-    final plural = count == 1 ? '' : 's';
-
-    // The save bar is hidden until the form is valid, so the subtitle carries
-    // the "what's missing" hint the greyed-out button used to imply.
-    if (_nameController.text.trim().isEmpty) {
-      return '$count exercise$plural · name it to save';
-    }
-    return '$count exercise$plural · $_totalSets sets';
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = ref.watch(themeProvider);
-    final isEdit = _isEditMode;
-    final showBuilder = isEdit || _tab == _tabBuild;
+    final showBuilder = _isEditMode || _tab == _tabBuild;
 
     final media = MediaQuery.of(context);
     final keyboard = media.viewInsets.bottom;
 
-    // In tab mode the floating nav bar overlays the bottom of the screen, so
-    // the sticky save bar has to clear it. Pushed as a route there is no bar.
+    // As a tab the floating nav bar overlays the bottom of the screen, so the
+    // sticky save bar has to clear it. Pushed as a route there is no bar.
     // `AppSpacing.md` of air keeps the button from sitting kerb-to-kerb on the
     // nav bar — they should read as two separate things, not one tall slab.
-    final double navClearance = isEdit ? 0 : NavBarMetrics.totalHeight;
+    final double navClearance = _isTab ? NavBarMetrics.totalHeight : 0;
     final double barBottom = keyboard > 0
         ? keyboard + AppSpacing.sm
         : media.padding.bottom + navClearance + AppSpacing.md;
 
-    // The bar floats over the content, so the list has to end above it — but
-    // only while it is showing, otherwise the empty screen carries dead space.
-    final double builderBottomPadding =
-        (isEdit ? AppSpacing.xxl : AppSpacing.navBarClearance) +
-            (_showSaveBar ? _saveBarExtent : 0);
+    final double baseBottom =
+        _isTab ? AppSpacing.navBarClearance : AppSpacing.xxl;
 
-    return Stack(
+    // The bar floats over the content, so the list has to end above it — but
+    // only while it is showing, otherwise the screen carries dead space.
+    final double builderBottomPadding =
+        baseBottom + (_showSaveBar ? _saveBarExtent : 0);
+
+    final screen = Stack(
       fit: StackFit.expand,
       children: [
         AppScaffold(
-          title: isEdit ? 'Edit workout' : 'Create workout',
-          subtitle:
-              showBuilder ? _builderSubtitle : 'Curated programs, ready to copy',
-          showBack: isEdit,
-          bottomPadding: showBuilder
-              ? builderBottomPadding
-              : AppSpacing.navBarClearance,
-          actions: [
-            if (showBuilder && _exercises.length > 1)
-              AppIconButton(
-                icon: _isReordering
-                    ? Icons.check_rounded
-                    : Icons.swap_vert_rounded,
-                active: _isReordering,
-                onPressed: _toggleReordering,
-              ),
-          ],
-          headerBottom: isEdit
+          title: _isEditMode ? 'Edit workout' : 'Create workout',
+          bottomPadding: showBuilder ? builderBottomPadding : baseBottom,
+          headerBottom: _isEditMode
               ? null
               : AppSegmented<int>(
                   value: _tab,
                   segments: const <AppSegment<int>>[
-                    AppSegment(
-                      value: _tabBuild,
-                      label: 'Build',
-                      icon: Icons.tune_rounded,
-                    ),
-                    AppSegment(
-                      value: _tabTemplates,
-                      label: 'Templates',
-                      icon: Icons.star_rounded,
-                    ),
+                    AppSegment(value: _tabBuild, label: 'Build'),
+                    AppSegment(value: _tabTemplates, label: 'Templates'),
                   ],
                   onChanged: (value) {
                     FocusScope.of(context).unfocus();
@@ -360,7 +454,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
         ),
 
         // Sticky save bar — floats over the content, above the nav bar, and
-        // only once the workout is actually saveable.
+        // only once there is something to save.
         if (showBuilder)
           Positioned(
             left: 0,
@@ -369,14 +463,25 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
             child: Material(
               type: MaterialType.transparency,
               child: _SaveBar(
-                label: isEdit ? 'Save changes' : 'Save workout',
+                label: _isEditMode ? 'Save changes' : 'Save workout',
                 visible: _showSaveBar,
                 loading: _isLoading,
-                onPressed: _canSave ? _saveWorkout : null,
+                onPressed: _isLoading ? null : _saveWorkout,
               ),
             ),
           ),
       ],
+    );
+
+    // A tab has nothing to pop; as a route, leaving with unsaved work asks.
+    if (_isTab) return screen;
+
+    return PopScope<Object?>(
+      canPop: !_isDirty || _isLoading,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: screen,
     );
   }
 
@@ -384,7 +489,17 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
   // Builder tab
   // ---------------------------------------------------------------------------
 
+  String? get _setsSummary {
+    if (_exercises.isEmpty) return null;
+    final working = _workingSets;
+    final warmUp = _warmUpSets;
+    final base = '$working working ${working == 1 ? 'set' : 'sets'}';
+    return warmUp == 0 ? base : '$base · $warmUp warm-up';
+  }
+
   List<Widget> _builderSlivers(AppColors t) {
+    final hasExercises = _exercises.isNotEmpty;
+
     return <Widget>[
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(
@@ -395,82 +510,58 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
         ),
         sliver: SliverToBoxAdapter(
           child: FadeSlideIn(
-            child: AppCard(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Overline('Workout name'),
-                  TextField(
-                    controller: _nameController,
-                    focusNode: _nameFocus,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    maxLength: 60,
-                    style: AppType.body(t).copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'e.g. Push day',
-                      counterText: '',
-                      prefixIcon: Icon(
-                        Icons.edit_rounded,
-                        size: 19,
-                        color: t.textTertiary,
-                      ),
-                    ),
-                    onSubmitted: (_) => _nameFocus.unfocus(),
-                  ),
-                ],
+            child: TextField(
+              controller: _nameController,
+              focusNode: _nameFocus,
+              textInputAction: TextInputAction.done,
+              textCapitalization: TextCapitalization.sentences,
+              maxLength: 60,
+              style: AppType.heading(t),
+              decoration: InputDecoration(
+                hintText: 'Workout name',
+                counterText: '',
+                errorText: _nameError,
               ),
+              onSubmitted: (_) => _nameFocus.unfocus(),
             ),
           ),
         ),
       ),
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-        sliver: SliverToBoxAdapter(
-          child: SectionHeader(
-            title: 'Exercises',
-            subtitle: _exercises.isEmpty
-                ? null
-                : (_isReordering
-                    ? 'Drag a row by its handle'
-                    : 'Tap a row to edit its sets · long-press to drag'),
-            padding: const EdgeInsets.only(
-              top: AppSpacing.xl,
-              bottom: AppSpacing.md,
-            ),
-          ),
-        ),
-      ),
-      if (_exercises.isEmpty)
+      // The "Exercises" header only earns its place once there is a list
+      // under it; the empty guide explains itself.
+      if (hasExercises)
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenH,
+            AppSpacing.xxl,
+            AppSpacing.screenH,
+            AppSpacing.md,
+          ),
           sliver: SliverToBoxAdapter(
-            child: AppCard(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.xxl,
-              ),
-              child: SizedBox(
-                height: 288,
-                child: EmptyState(
-                  icon: Icons.fitness_center_rounded,
-                  title: 'No exercises yet',
-                  message:
-                      'Pick movements from your library to build this workout.',
-                  actionLabel: 'Add exercise',
-                  onAction: _navigateAndAddExercise,
-                  padding: EdgeInsets.zero,
+            child: Row(
+              children: [
+                Expanded(
+                  child: SectionHeader(
+                    title: 'Exercises',
+                    subtitle: _setsSummary,
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
+                // The toggle sits with the list it rearranges.
+                if (_exercises.length > 1)
+                  AppButton.ghost(
+                    label: _isReordering ? 'Done' : 'Reorder',
+                    icon: _isReordering
+                        ? Icons.check_rounded
+                        : Icons.swap_vert_rounded,
+                    size: AppButtonSize.small,
+                    onPressed: _toggleReordering,
+                  ),
+              ],
             ),
           ),
-        )
-      else ...[
+        ),
+      if (hasExercises)
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
           sliver: SliverReorderableList(
@@ -508,23 +599,32 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
             },
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenH,
-            AppSpacing.xs,
-            AppSpacing.screenH,
-            0,
-          ),
-          sliver: SliverToBoxAdapter(
-            child: AppButton.secondary(
-              label: 'Add exercise',
-              icon: Icons.add_rounded,
-              expand: true,
-              onPressed: _navigateAndAddExercise,
-            ),
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.screenH,
+          hasExercises ? AppSpacing.xxs : AppSpacing.lg,
+          AppSpacing.screenH,
+          0,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: FadeSlideIn(
+            // Empty: a short guide that ends in the one accented action.
+            // Filled: the next slot in the list, so Save is the only primary.
+            child: hasExercises
+                ? _AddExerciseRow(onTap: _navigateAndAddExercise)
+                : _BuildGuide(
+                    named: _nameController.text.trim().isNotEmpty,
+                    onAddExercise: _navigateAndAddExercise,
+                    onBrowseTemplates: _isEditMode
+                        ? null
+                        : () {
+                            FocusScope.of(context).unfocus();
+                            setState(() => _tab = _tabTemplates);
+                          },
+                  ),
           ),
         ),
-      ],
+      ),
     ];
   }
 
@@ -571,11 +671,11 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
               sliver: SliverToBoxAdapter(
                 child: Column(
                   children: [
-                    SkeletonCard(height: 210),
-                    SizedBox(height: AppSpacing.lg),
-                    SkeletonCard(height: 210),
-                    SizedBox(height: AppSpacing.lg),
-                    SkeletonCard(height: 210),
+                    SkeletonCard(height: 132),
+                    SizedBox(height: AppSpacing.md),
+                    SkeletonCard(height: 132),
+                    SizedBox(height: AppSpacing.md),
+                    SkeletonCard(height: 132),
                   ],
                 ),
               ),
@@ -602,10 +702,7 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
               child: EmptyState(
                 icon: Icons.star_rounded,
                 title: 'No templates yet',
-                message:
-                    'Curated programs will show up here. In the meantime you '
-                    'can build your own.',
-                actionLabel: 'Build a workout',
+                actionLabel: 'Build your own',
                 onAction: () => setState(() => _tab = _tabBuild),
               ),
             );
@@ -620,13 +717,19 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => FadeSlideIn(
-                  index: index,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                    child: _TemplateCard(template: templates[index]),
-                  ),
-                ),
+                (context, index) {
+                  final template = templates[index];
+                  return FadeSlideIn(
+                    index: index,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: _TemplateCard(
+                        template: template,
+                        alreadyAdded: isTemplateInPrograms(template, _programs),
+                      ),
+                    ),
+                  );
+                },
                 childCount: templates.length,
               ),
             ),
@@ -634,6 +737,237 @@ class _CreateWorkoutScreenState extends ConsumerState<CreateWorkoutScreen> {
         },
       ),
     ];
+  }
+}
+
+/// ---------------------------------------------------------------------------
+/// The empty builder: what the three steps are, then the one way forward —
+/// and, for anyone who would rather not start from nothing, the templates.
+/// ---------------------------------------------------------------------------
+class _BuildGuide extends ConsumerWidget {
+  /// Step one is done — it gets a check instead of its number.
+  final bool named;
+
+  final VoidCallback onAddExercise;
+
+  /// Null hides the templates hint (edit mode has no templates tab).
+  final VoidCallback? onBrowseTemplates;
+
+  const _BuildGuide({
+    required this.named,
+    required this.onAddExercise,
+    required this.onBrowseTemplates,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppCard(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Three steps to a workout', style: AppType.heading(t)),
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                'Set it up once, then start it in one tap.',
+                style: AppType.secondary(t),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              _GuideStep(
+                number: 1,
+                done: named,
+                title: 'Name it',
+                detail: 'Like Push Day, Legs or Upper A.',
+              ),
+              const _GuideStep(
+                number: 2,
+                title: 'Add exercises',
+                detail: 'From your library, or create your own.',
+              ),
+              const _GuideStep(
+                number: 3,
+                title: 'Set the sets',
+                detail: 'Working sets and warm-ups for each.',
+                last: true,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Add exercise',
+                icon: Icons.add_rounded,
+                expand: true,
+                onPressed: onAddExercise,
+              ),
+            ],
+          ),
+        ),
+        if (onBrowseTemplates != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  'Rather start from a plan?',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.secondary(t),
+                ),
+              ),
+              AppButton.ghost(
+                label: 'Browse templates',
+                size: AppButtonSize.small,
+                onPressed: onBrowseTemplates,
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One numbered step of [_BuildGuide], with a hairline running down to the
+/// next so the three read as a sequence.
+class _GuideStep extends ConsumerWidget {
+  final int number;
+  final String title;
+  final String detail;
+  final bool done;
+  final bool last;
+
+  const _GuideStep({
+    required this.number,
+    required this.title,
+    required this.detail,
+    this.done = false,
+    this.last = false,
+  });
+
+  static const double _marker = 28;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              AnimatedContainer(
+                duration: AppMotion.fast,
+                width: _marker,
+                height: _marker,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done
+                      ? t.success.withValues(alpha: t.isDark ? 0.18 : 0.14)
+                      : t.surface,
+                  border: Border.all(
+                    color: done
+                        ? t.success.withValues(alpha: 0.45)
+                        : t.outline,
+                  ),
+                ),
+                child: done
+                    ? Icon(Icons.check_rounded, size: 16, color: t.success)
+                    : Text(
+                        '$number',
+                        style: AppType.mono(
+                          t,
+                          size: 13,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+              if (!last)
+                Expanded(
+                  child: Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.xs,
+                    ),
+                    color: t.divider,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                top: AppSpacing.xs,
+                bottom: last ? 0 : AppSpacing.md + 2,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: AppType.body(t).copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(detail, style: AppType.secondary(t)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The last slot of the exercise list: an outlined, see-through row that adds
+/// the next exercise. Quieter than the Save button below it on purpose.
+class _AddExerciseRow extends ConsumerWidget {
+  final VoidCallback onTap;
+
+  const _AddExerciseRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Semantics(
+      button: true,
+      child: Pressable(
+        onTap: onTap,
+        scale: 0.985,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: t.outline, width: 1.2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_rounded, size: 20, color: t.primary),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Add exercise',
+                style: AppType.button(t).copyWith(
+                  color: t.primary,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -695,7 +1029,8 @@ class _SaveBar extends StatelessWidget {
 }
 
 /// ---------------------------------------------------------------------------
-/// The per-exercise sheet: two steppers plus the destructive action.
+/// The per-exercise sheet: two steppers plus the destructive action. Changes
+/// apply as they are made — there is no separate save step.
 /// ---------------------------------------------------------------------------
 class _EditSetsSheet extends StatefulWidget {
   final int workingSets;
@@ -723,76 +1058,51 @@ class _EditSetsSheetState extends State<_EditSetsSheet> {
       _working = working;
       _warmUp = warmUp;
     });
-    // Applied straight away — the sheet has no separate save step.
     widget.onChanged(working, warmUp);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final t = ref.watch(themeProvider);
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SetStepper(
+          label: 'Working sets',
+          value: _working,
+          min: 1,
+          max: 20,
+          onChanged: (value) => _apply(value, _warmUp),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _SetStepper(
+          label: 'Warm-up sets',
+          hint: 'Not counted in stats',
+          value: _warmUp,
+          min: 0,
+          max: 10,
+          onChanged: (value) => _apply(_working, value),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Row(
           children: [
-            _SetStepper(
-              label: 'Working sets',
-              hint: 'Counted in your statistics',
-              icon: Icons.bolt_rounded,
-              accent: t.primary,
-              value: _working,
-              min: 1,
-              max: 20,
-              onChanged: (value) => _apply(value, _warmUp),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SetStepper(
-              label: 'Warm-up sets',
-              hint: 'Left out of your statistics',
-              icon: Icons.local_fire_department_rounded,
-              accent: t.warning,
-              value: _warmUp,
-              min: 0,
-              max: 10,
-              onChanged: (value) => _apply(_working, value),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            AppCard(
-              inset: true,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.xs,
-              ),
-              child: MetricRow(
-                label: 'Total sets',
-                value: '${_working + _warmUp}',
-                icon: Icons.format_list_numbered_rounded,
+            Expanded(
+              child: AppButton.danger(
+                label: 'Remove',
+                icon: Icons.delete_outline_rounded,
+                onPressed: widget.onRemove,
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton.danger(
-                    label: 'Remove',
-                    icon: Icons.delete_outline_rounded,
-                    onPressed: widget.onRemove,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AppButton(
-                    label: 'Done',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: AppButton(
+                label: 'Done',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
           ],
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -800,9 +1110,7 @@ class _EditSetsSheetState extends State<_EditSetsSheet> {
 /// A large, unambiguous −/+ control for one set count.
 class _SetStepper extends ConsumerWidget {
   final String label;
-  final String hint;
-  final IconData icon;
-  final Color accent;
+  final String? hint;
   final int value;
   final int min;
   final int max;
@@ -810,9 +1118,7 @@ class _SetStepper extends ConsumerWidget {
 
   const _SetStepper({
     required this.label,
-    required this.hint,
-    required this.icon,
-    required this.accent,
+    this.hint,
     required this.value,
     required this.min,
     required this.max,
@@ -836,22 +1142,16 @@ class _SetStepper extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 16, color: accent),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.heading(t).copyWith(fontSize: 15),
-                      ),
-                    ),
-                  ],
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body(t).copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 3),
-                Text(hint, style: AppType.caption(t), maxLines: 2),
+                if (hint != null) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(hint!, style: AppType.caption(t), maxLines: 2),
+                ],
               ],
             ),
           ),
@@ -888,12 +1188,16 @@ class _SetStepper extends ConsumerWidget {
 }
 
 /// ---------------------------------------------------------------------------
-/// A standard workout template, with the "copy to my workouts" action.
+/// A standard workout template: what it is at a glance, plus a one-tap copy.
+/// The full breakdown lives on [TemplateDetailPage].
 /// ---------------------------------------------------------------------------
 class _TemplateCard extends ConsumerStatefulWidget {
   final StandardWorkoutTemplate template;
 
-  const _TemplateCard({required this.template});
+  /// The user already has a program with this template's name.
+  final bool alreadyAdded;
+
+  const _TemplateCard({required this.template, required this.alreadyAdded});
 
   @override
   ConsumerState<_TemplateCard> createState() => _TemplateCardState();
@@ -901,51 +1205,24 @@ class _TemplateCard extends ConsumerStatefulWidget {
 
 class _TemplateCardState extends ConsumerState<_TemplateCard> {
   bool _isAdding = false;
-  bool _added = false;
 
-  Future<void> _addToMyWorkouts() async {
+  /// Bridges the moment between a successful copy and the programs stream
+  /// catching up with it.
+  bool _justAdded = false;
+
+  bool get _added => widget.alreadyAdded || _justAdded;
+
+  Future<void> _add() async {
     if (_isAdding || _added) return;
-
     setState(() => _isAdding = true);
 
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        if (mounted) {
-          AppSnack.show(context, ref, 'You need to be signed in.',
-              isError: true);
-          setState(() => _isAdding = false);
-        }
-        return;
-      }
+    final ok = await addTemplateToMyWorkouts(context, ref, widget.template);
 
-      await DatabaseService(uid: user.uid)
-          .saveStandardWorkoutAsOwn(widget.template);
-
-      if (!mounted) return;
-      setState(() {
-        _isAdding = false;
-        _added = true;
-      });
-      AppSnack.show(
-        context,
-        ref,
-        '"${widget.template.title}" added to your workouts',
-      );
-
-      // Keep the confirmation on screen for a moment before re-arming.
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (mounted) setState(() => _added = false);
-    } catch (e) {
-      if (mounted) {
-        AppSnack.show(context, ref, 'Could not add the workout: $e',
-            isError: true);
-        setState(() {
-          _isAdding = false;
-          _added = false;
-        });
-      }
-    }
+    if (!mounted) return;
+    setState(() {
+      _isAdding = false;
+      _justAdded = ok;
+    });
   }
 
   void _openDetails() {
@@ -961,88 +1238,126 @@ class _TemplateCardState extends ConsumerState<_TemplateCard> {
     final t = ref.watch(themeProvider);
     final template = widget.template;
 
+    final description = template.description.trim();
+
+    // The title shares its line with the action; the description and the
+    // level · length footer get the card's full width, so neither wraps a
+    // stray word onto a line of its own.
     return AppCard(
       onTap: _openDetails,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              const IconBadge(icon: Icons.star_rounded),
-              const SizedBox(width: AppSpacing.lg),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      template.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.heading(t).copyWith(fontSize: 18),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      template.category,
-                      style: AppType.caption(t).copyWith(
-                        color: t.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  template.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.heading(t),
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: t.textTertiary, size: 22),
+              const SizedBox(width: AppSpacing.md),
+              SizedBox(
+                width: _actionWidth,
+                child: _added
+                    ? _AddedBadge(
+                        onTap: () => AppSnack.show(
+                          context,
+                          ref,
+                          'Already in your workouts',
+                        ),
+                      )
+                    : Tooltip(
+                        message: 'Add to my workouts',
+                        excludeFromSemantics: true,
+                        child: AppButton.secondary(
+                          label: 'Add',
+                          icon: Icons.add_rounded,
+                          size: AppButtonSize.small,
+                          loading: _isAdding,
+                          onPressed: _isAdding ? null : _add,
+                        ),
+                      ),
+              ),
             ],
           ),
-          if (template.description.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              template.description,
-              style: AppType.secondary(t).copyWith(height: 1.45),
+              description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.secondary(t).copyWith(height: 1.4),
             ),
           ],
-          const SizedBox(height: AppSpacing.lg),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            templateSummary(template),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.caption(t).copyWith(
+              color: t.textSecondary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Fits "Add" and "Added", so the card does not reflow when it flips.
+  static const double _actionWidth = 92;
+}
+
+/// The template is already one of your workouts — said in the success colour,
+/// at the size of the button it replaces.
+class _AddedBadge extends ConsumerWidget {
+  final VoidCallback onTap;
+
+  const _AddedBadge({required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+
+    return Semantics(
+      label: 'In your workouts',
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: onTap,
+        scale: 0.96,
+        child: Container(
+          height: 38,
+          decoration: BoxDecoration(
+            color: t.success.withValues(alpha: t.isDark ? 0.14 : 0.10),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: t.success.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AppBadge(
-                label: '${template.exercises.length} exercises',
-                color: t.dataColor(1),
-                icon: Icons.fitness_center_rounded,
-              ),
-              AppBadge(
-                label: AppFormat.duration(template.estimatedDurationMinutes),
-                color: t.dataColor(2),
-                icon: Icons.schedule_rounded,
-              ),
-              if (template.type.isNotEmpty)
-                AppBadge(
-                  label: template.type,
-                  color: t.dataColor(4),
-                  icon: Icons.category_rounded,
+              Icon(Icons.check_rounded, size: 17, color: t.success),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Added',
+                style: AppType.button(t).copyWith(
+                  color: t.success,
+                  fontSize: 14,
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          if (_added)
-            const AppButton.secondary(
-              label: 'Added to my workouts',
-              icon: Icons.check_rounded,
-              expand: true,
-              onPressed: null,
-            )
-          else
-            AppButton.secondary(
-              label: 'Add to my workouts',
-              icon: Icons.add_rounded,
-              expand: true,
-              loading: _isAdding,
-              onPressed: _isAdding ? null : _addToMyWorkouts,
-            ),
-        ],
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../pages/main_screen.dart';
 import '../auth_screen.dart';
 import '../services/auth_service.dart';
 import '../providers/analytics_provider.dart';
+import '../providers/rest_timer_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/workout_provider.dart';
 import 'ui/ui.dart';
@@ -29,6 +30,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     ref.invalidate(workoutSessionsProvider);
     ref.invalidate(exerciseMuscleMapProvider);
     ref.invalidate(trainingDataProvider);
+    // En vila som pågick hos förra kontot ska inte dyka upp i nästa kontos pill
+    ref.invalidate(restTimerProvider);
   }
 
   @override
@@ -55,8 +58,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           _wasLoggedIn = true;
           
           // Om user ID har ändrats, invalidera workout provider
-          // Detta säkerställer att varje användare får sin egen isolerad data
-          if (_lastUid != null && _lastUid != currentUid) {
+          // Detta säkerställer att varje användare får sin egen isolerad data.
+          // Även null → uid (inloggning efter utloggning): providers som hölls
+          // vid liv under utloggningen har då byggts om utan användare och
+          // cachat det — de måste byggas om för det nya kontot.
+          if (_lastUid != currentUid) {
             debugPrint('User changed from $_lastUid to $currentUid - invalidating providers');
             _invalidateUserScopedProviders();
           }

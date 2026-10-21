@@ -156,6 +156,14 @@ class GlassSurface extends ConsumerWidget {
 }
 
 /// A rounded square holding an icon — the visual anchor of a list row.
+///
+/// Three looks:
+///  * default — a soft wash of [color] (primary when null) with the icon in
+///    that colour: for rows whose icon *means* something;
+///  * [neutral] — a neutral wash with the icon in the text colour: for idle
+///    rows (settings, menus), so a list is calm grey instead of a column of
+///    identical accent squares;
+///  * [filled] — the primary gradient (or solid [color]).
 class IconBadge extends ConsumerWidget {
   final IconData icon;
   final double size;
@@ -167,6 +175,9 @@ class IconBadge extends ConsumerWidget {
   /// Overrides the tint colour (defaults to the theme primary).
   final Color? color;
 
+  /// Neutral tile (ignored when [color] or [filled] is set).
+  final bool neutral;
+
   final double radius;
 
   const IconBadge({
@@ -176,26 +187,43 @@ class IconBadge extends ConsumerWidget {
     this.iconSize = 21,
     this.filled = false,
     this.color,
+    this.neutral = false,
     this.radius = AppRadius.md,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
+
+    if (neutral && color == null && !filled) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: t.neutralWash,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        child: Icon(icon, size: iconSize, color: t.text),
+      );
+    }
+
     final tone = color ?? t.primary;
+    final gradient = filled && color == null;
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: filled ? tone : tone.withValues(alpha: t.isDark ? 0.16 : 0.11),
-        gradient: filled && color == null ? t.primaryGradientDiagonal : null,
+        gradient: gradient ? t.primaryGradientDiagonal : null,
         borderRadius: BorderRadius.circular(radius),
       ),
       child: Icon(
         icon,
         size: iconSize,
-        color: filled ? AppColors.contrastOn(tone) : tone,
+        color: gradient
+            ? t.onPrimary
+            : (filled ? AppColors.contrastOn(tone) : tone),
       ),
     );
   }
@@ -203,6 +231,11 @@ class IconBadge extends ConsumerWidget {
 
 /// A tappable navigation row: icon, title, optional subtitle, chevron.
 /// This is the building block for the Statistics hub and Settings.
+///
+/// The icon tile is neutral by default — colour is reserved for meaning.
+/// Pass [iconColor] to tint it, or [destructive] for a row that deletes or
+/// signs out: error-toned tile *and* title. (`iconColor: t.error` implies
+/// [destructive].)
 class AppTile extends ConsumerWidget {
   final IconData icon;
   final String title;
@@ -220,6 +253,9 @@ class AppTile extends ConsumerWidget {
   /// Renders without the card background — for rows stacked inside a card.
   final bool bare;
 
+  /// Error-toned tile and title.
+  final bool destructive;
+
   const AppTile({
     super.key,
     required this.icon,
@@ -232,22 +268,33 @@ class AppTile extends ConsumerWidget {
     this.showChevron = true,
     this.padding,
     this.bare = false,
+    this.destructive = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
+    final isDestructive = destructive || iconColor == t.error;
 
     final row = Row(
       children: [
-        IconBadge(icon: icon, color: iconColor, filled: filledIcon),
+        IconBadge(
+          icon: icon,
+          color: isDestructive ? t.error : iconColor,
+          filled: filledIcon,
+          neutral: true,
+        ),
         const SizedBox(width: AppSpacing.lg),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(title, style: AppType.heading(t)),
+              Text(
+                title,
+                style: AppType.heading(t)
+                    .copyWith(color: isDestructive ? t.error : null),
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 3),
                 Text(

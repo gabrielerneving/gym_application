@@ -1,49 +1,122 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+/// Ett inloggningsfel formulerat för den som sitter framför skärmen.
+///
+/// [code] är Firebase-koden (för loggning och specialfall), [message] är det
+/// som visas i UI:t.
+class AuthFailure implements Exception {
+  final String code;
+  final String message;
+
+  const AuthFailure(this.code, this.message);
+
+  @override
+  String toString() => message;
+}
+
 class AuthService {
   // Skapa en instans av FirebaseAuth
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  /// Korta, mänskliga meddelanden för de Firebase-fel en användare faktiskt
+  /// kan orsaka. Allt annat blir ett generiskt "försök igen".
+  static String messageFor(String code) {
+    switch (code) {
+      case 'invalid-email':
+        return 'That email address does not look right.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      // Nyare Firebase-projekt (email enumeration protection) svarar
+      // 'invalid-credential' både för okänd e-post och fel lösenord.
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+      case 'INVALID_LOGIN_CREDENTIALS':
+        return 'Wrong email or password.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists. Sign in instead.';
+      case 'weak-password':
+        return 'Choose a stronger password (at least 6 characters).';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a moment and try again.';
+      case 'network-request-failed':
+        return 'No connection. Check your internet and try again.';
+      case 'requires-recent-login':
+        return 'For your security, enter your password again.';
+      case 'operation-not-allowed':
+        return 'Email sign-in is not enabled for this app.';
+      default:
+        return 'Something went wrong. Try again.';
+    }
+  }
+
+  static AuthFailure _failure(FirebaseAuthException e) {
+    debugPrint('Firebase Auth Exception (${e.code}): ${e.message}');
+    return AuthFailure(e.code, messageFor(e.code));
+  }
+
   // METOD FÖR REGISTRERING
-  Future<User?> registerWithEmailAndPassword(String email, String password) async {
+  /// Kastar [AuthFailure] om registreringen misslyckas.
+  Future<User?> registerWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
     try {
-      // Använd FirebaseAuth för att skapa en ny användare
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email,
+      final result = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
         password: password,
       );
-      // Returnera användarobjektet om det lyckas
       return result.user;
     } on FirebaseAuthException catch (e) {
-      // Hantera specifika fel, t.ex. om e-posten redan används
-      debugPrint('Firebase Auth Exception: ${e.message}');
-      return null;
-    } catch (e) {
-      // Hantera alla andra typer av fel
-      debugPrint('An unknown error occurred: $e');
-      return null;
+      throw _failure(e);
     }
   }
 
   // METOD FÖR INLOGGNING
-  Future<User?> signInWithEmailAndPassword(String email, String password) async {
+  /// Kastar [AuthFailure] om inloggningen misslyckas.
+  Future<User?> signInWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
     try {
-      // Använd FirebaseAuth för att logga in en befintlig användare
-      UserCredential result = await _auth.signInWithEmailAndPassword(
-        email: email,
+      final result = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
         password: password,
       );
-      // Returnera användarobjektet om det lyckas
       return result.user;
     } on FirebaseAuthException catch (e) {
-      // Hantera specifika fel, t.ex. fel lösenord eller ingen användare hittades
-      debugPrint('Firebase Auth Exception: ${e.message}');
-      return null;
-    } catch (e) {
-      // Hantera alla andra typer av fel
-      debugPrint('An unknown error occurred: $e');
-      return null;
+      throw _failure(e);
+    }
+  }
+
+  // METOD FÖR ÅTERSTÄLLNING AV LÖSENORD
+  /// Skickar en återställningslänk. Med email enumeration protection
+  /// påslaget svarar Firebase likadant oavsett om kontot finns, så UI:t ska
+  /// inte påstå att det gör det. Kastar [AuthFailure].
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw _failure(e);
+    }
+  }
+
+  // METOD FÖR ATT BEKRÄFTA LÖSENORDET IGEN
+  /// Loggar in den aktuella användaren på nytt med [password]. Firebase kräver
+  /// en färsk inloggning innan ett konto får raderas. Kastar [AuthFailure].
+  Future<void> reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) {
+      throw const AuthFailure('no-current-user', 'No account is signed in.');
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } on FirebaseAuthException catch (e) {
+      throw _failure(e);
     }
   }
 
@@ -53,27 +126,20 @@ class AuthService {
   }
 
   // METOD FÖR ATT RADERA KONTO
-  /// Raderar det aktuella användarens Firebase Auth-konto
-  /// OBS: Detta är irreversibelt!
+  /// Raderar det aktuella användarens Firebase Auth-konto.
+  /// OBS: Detta är irreversibelt! Radera användarens data i Firestore FÖRST —
+  /// efter det här anropet är användaren utloggad och säkerhetsreglerna
+  /// släpper inte längre in någon i datan. Kastar [AuthFailure].
   Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure('no-current-user', 'No account is signed in.');
+    }
     try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        await user.delete();
-        debugPrint('User account deleted successfully');
-      } else {
-        throw Exception('No user is currently logged in');
-      }
+      await user.delete();
+      debugPrint('User account deleted successfully');
     } on FirebaseAuthException catch (e) {
-      debugPrint('Firebase Auth Exception during account deletion: ${e.message}');
-      // Re-authentication might be needed for recent sign-in requirement
-      if (e.code == 'requires-recent-login') {
-        throw Exception('Account deletion requires recent authentication. Please log in again and try again.');
-      }
-      rethrow;
-    } catch (e) {
-      debugPrint('An unknown error occurred during account deletion: $e');
-      rethrow;
+      throw _failure(e);
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/workout_model.dart';
@@ -23,6 +24,18 @@ class DatabaseService {
   final String uid;
   DatabaseService({required this.uid});
 
+  /// Firestore lägger skrivningar i den lokala cachen direkt, men deras Future
+  /// blir klar först när servern har svarat. Utan täckning (källargym) väntar
+  /// UI:t då för evigt på t.ex. "Finish". Efter en kort stund räknas
+  /// skrivningen som köad — Firestore synkar den när nätet kommer tillbaka.
+  static const Duration _ackTimeout = Duration(seconds: 4);
+
+  Future<void> _committed(Future<void> write) {
+    return write.timeout(_ackTimeout, onTimeout: () {
+      debugPrint('Firestore write queued until the device is back online');
+    });
+  }
+
   // Sparar träningsprogram i Firebase
   Future<void> saveWorkoutProgram(WorkoutProgram program) async {
     try {
@@ -31,7 +44,7 @@ class DatabaseService {
       // Referens till användarens träningsprogram
       final collectionRef = _db.collection('users').doc(uid).collection('workout_programs');
 
-      await collectionRef.doc(program.id).set({
+      await _committed(collectionRef.doc(program.id).set({
         'title': program.title,
         'id': program.id,
         // Konvertera övningar till Firestore-format
@@ -42,7 +55,7 @@ class DatabaseService {
           'workingSets': exercise.workingSets,
           'warmUpSets': exercise.warmUpSets,
         }).toList(),
-      });
+      }));
     } catch (e) {
       debugPrint('Error saving workout program: $e');
       rethrow;
@@ -55,7 +68,9 @@ Stream<List<WorkoutProgram>> getWorkoutPrograms() {
 
   return collectionRef.snapshots().map((snapshot) {
     return snapshot.docs.map((doc) {
-      return WorkoutProgram.fromFirestore(doc.data());
+      // Dokument-id:t är sanningen — äldre dokument saknar ibland 'id'-fältet,
+      // och ett tomt id gick varken att redigera eller radera.
+      return WorkoutProgram.fromFirestore({...doc.data(), 'id': doc.id});
     }).toList();
   });
 }
@@ -63,7 +78,7 @@ Stream<List<WorkoutProgram>> getWorkoutPrograms() {
 // Metod för att spara en ny "master"-övning
 Future<void> saveMasterExercise(MasterExercise exercise) async {
   final collectionRef = _db.collection('users').doc(uid).collection('master_exercises');
-  await collectionRef.doc(exercise.id).set(exercise.toMap());
+  await _committed(collectionRef.doc(exercise.id).set(exercise.toMap()));
 }
 
 // Metod för att hämta en STREAM av "master"-övningar för en specifik kategori
@@ -82,7 +97,7 @@ Future<void> deleteWorkoutProgram(String programId) async {
     final docRef = _db.collection('users').doc(uid).collection('workout_programs').doc(programId);
     
     // Anropa .delete() för att ta bort det
-    await docRef.delete();
+    await _committed(docRef.delete());
   } catch (e) {
     debugPrint('Error deleting workout program: $e');
     // Kasta felet vidare om du vill hantera det i UI:t
@@ -98,7 +113,7 @@ Future<void> updateWorkoutProgram(WorkoutProgram program) async {
     
     // Använd .update() för att ändra fälten i dokumentet.
     // Vi måste konvertera vårt program-objekt till en Map igen.
-    await docRef.update({
+    await _committed(docRef.update({
       'title': program.title,
       'exercises': program.exercises.map((exercise) => {
         'id': exercise.id,
@@ -107,7 +122,7 @@ Future<void> updateWorkoutProgram(WorkoutProgram program) async {
         'workingSets': exercise.workingSets,
         'warmUpSets': exercise.warmUpSets,
       }).toList(),
-    });
+    }));
   } catch (e) {
     debugPrint('Error updating workout program: $e');
     rethrow;
@@ -121,7 +136,7 @@ Future<void> saveWorkoutSession(WorkoutSession session) async {
     final collectionRef = _db.collection('users').doc(uid).collection('workout_sessions');
     
     // Spara sessionen med sitt unika ID
-    await collectionRef.doc(session.id).set(session.toMap());
+    await _committed(collectionRef.doc(session.id).set(session.toMap()));
   } catch (e) {
     debugPrint('Error saving workout session: $e');
     rethrow;
@@ -141,84 +156,63 @@ Stream<List<WorkoutSession>> getWorkoutSessions() {
   });
 }
 
-// Spara det pågående passets state
-Future<void> saveActiveWorkoutState(WorkoutSession session) async {
+// Sparar det pågående passet och dess redigerade fält i en och samma skrivning
+Future<void> saveActiveWorkout(WorkoutSession session, Set<String> editedKeys) async {
   final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  // merge: true för att inte radera extra fält (t.ex. editedKeys)
-  await docRef.set(session.toMap(), SetOptions(merge: true));
+  // merge: true för att inte radera placeholders och startTime
+  await docRef.set(
+    {...session.toMap(), 'editedKeys': editedKeys.toList()},
+    SetOptions(merge: true),
+  );
 }
 
-// Spara vilka fält som användaren redigerat under pågående pass
-Future<void> saveActiveEditedKeys(Set<String> editedKeys) async {
-  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  await docRef.set({'editedKeys': editedKeys.toList()}, SetOptions(merge: true));
-}
-
-// Läs det pågående passet (om det finns)
-Future<WorkoutSession?> loadActiveWorkoutState() async {
+// Läser hela det pågående passet i en enda läsning: passet, redigerade fält,
+// placeholders och starttid ligger i samma dokument.
+Future<
+  ({
+    WorkoutSession session,
+    Set<String> editedKeys,
+    Map<String, dynamic> placeholders,
+    DateTime? startTime,
+  })?
+> loadActiveSession() async {
   final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
   final snapshot = await docRef.get();
-  if (snapshot.exists) {
-    return WorkoutSession.fromFirestore(snapshot.data()!);
-  }
-  return null;
-}
-
-// Läs tillbaka editedKeys för det pågående passet
-Future<Set<String>> loadActiveEditedKeys() async {
-  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  final snapshot = await docRef.get();
-  if (!snapshot.exists) return <String>{};
   final data = snapshot.data();
-  if (data == null) return <String>{};
-  final list = data['editedKeys'];
-  if (list is List) {
-    return Set<String>.from(list.map((e) => e.toString()));
-  }
-  return <String>{};
+  // Ett dokument utan övningar är bara rester (t.ex. placeholders som skrevs
+  // efter att passet raderats) — inget att återuppta.
+  if (data == null || data['completedExercises'] == null) return null;
+
+  final editedKeys = data['editedKeys'];
+  final placeholders = data['placeholders'];
+  final startTime = data['startTime'];
+  return (
+    session: WorkoutSession.fromFirestore(data),
+    editedKeys: editedKeys is List
+        ? editedKeys.map((e) => e.toString()).toSet()
+        : <String>{},
+    placeholders: placeholders is Map
+        ? Map<String, dynamic>.from(placeholders)
+        : <String, dynamic>{},
+    startTime: startTime is String ? DateTime.tryParse(startTime) : null,
+  );
 }
 
 // Spara placeholders (förra passets värden) per fält
 Future<void> saveActivePlaceholders(Map<String, dynamic> placeholders) async {
   final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  await docRef.set({'placeholders': placeholders}, SetOptions(merge: true));
-}
-
-Future<Map<String, dynamic>> loadActivePlaceholders() async {
-  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  final snapshot = await docRef.get();
-  if (!snapshot.exists) return <String, dynamic>{};
-  final data = snapshot.data();
-  if (data == null) return <String, dynamic>{};
-  final placeholders = data['placeholders'];
-  if (placeholders is Map) {
-    return Map<String, dynamic>.from(placeholders);
-  }
-  return <String, dynamic>{};
+  // mergeFields ersätter hela fältet — merge: true skulle djup-merga mappen
+  // och lämna kvar nycklar som tagits bort (t.ex. efter att ett set raderats).
+  await docRef.set(
+    {'placeholders': placeholders},
+    SetOptions(mergeFields: ['placeholders']),
+  );
 }
 
 // Spara starttid för träningspass
 Future<void> saveActiveStartTime(DateTime startTime) async {
   final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
   await docRef.set({'startTime': startTime.toIso8601String()}, SetOptions(merge: true));
-}
-
-// Ladda starttid för träningspass
-Future<DateTime?> loadActiveStartTime() async {
-  final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
-  final snapshot = await docRef.get();
-  if (!snapshot.exists) return null;
-  final data = snapshot.data();
-  if (data == null) return null;
-  final startTimeStr = data['startTime'];
-  if (startTimeStr is String) {
-    try {
-      return DateTime.parse(startTimeStr);
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
 }
 
  // Metod för att ta bort det temporära "pågående pass"-dokumentet
@@ -228,7 +222,7 @@ Future<DateTime?> loadActiveStartTime() async {
       final docRef = _db.collection('users').doc(uid).collection('active_session').doc('current');
       
       // Anropa .delete() för att ta bort det
-      await docRef.delete();
+      await _committed(docRef.delete());
     } catch (e) {
       debugPrint('Error deleting active workout state: $e');
       // Vi behöver inte nödvändigtvis kasta felet vidare här,
@@ -239,13 +233,13 @@ Future<DateTime?> loadActiveStartTime() async {
   // Metod för att radera ett träningspass från historiken
   Future<void> deleteWorkoutSession(String sessionId) async {
     try {
-      await _db
+      await _committed(_db
           .collection('users')
           .doc(uid)
           .collection('workout_sessions')
           .doc(sessionId)
-          .delete();
-      debugPrint('Workout session deleted successfully: $sessionId');
+          .delete());
+      debugPrint('Workout session deleted: $sessionId');
     } catch (e) {
       debugPrint('Error deleting workout session: $e');
       rethrow;
@@ -282,6 +276,27 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   }
 }
 
+// Hämtar de senaste passen (nyast först) — underlag för placeholders när en
+// övning hoppades över senast eller saknas i förra passet av samma program.
+Future<List<WorkoutSession>> getRecentWorkoutSessions({int limit = 40}) async {
+  try {
+    final querySnapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workout_sessions')
+        .orderBy('date', descending: true)
+        .limit(limit)
+        .get();
+
+    return querySnapshot.docs
+        .map((doc) => WorkoutSession.fromFirestore(doc.data()))
+        .toList();
+  } catch (e) {
+    debugPrint("Error fetching recent sessions: $e");
+    return [];
+  }
+}
+
   // STATISTIK METODER
   
   // Hämta alla träningspass för statistik
@@ -298,8 +313,10 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .map((doc) => WorkoutSession.fromFirestore(doc.data()))
           .toList();
     } catch (e) {
+      // Kastas vidare: en tom lista skulle visa "inga pass ännu" i stället för
+      // statistikens felruta med "försök igen" — och cachas dessutom.
       debugPrint("Error fetching workout sessions: $e");
-      return [];
+      rethrow;
     }
   }
 
@@ -323,39 +340,11 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
   // Hämta alla MasterExercises för att koppla övningsnamn till muskelgrupper
   Future<Map<String, String>> getExerciseToMuscleGroupMap() async {
     try {
-      final exerciseToMuscleGroup = <String, String>{};
-      
-      for (final muscleGroup in muscleGroups) {
-        final snapshot = await _db
-            .collection('users')
-            .doc(uid)
-            .collection('master_exercises')
-            .where('category', isEqualTo: muscleGroup)  
-            .get();
-            
-        for (final doc in snapshot.docs) {
-          final exerciseData = doc.data();
-          final exerciseName = exerciseData['name'] as String;
-          exerciseToMuscleGroup[exerciseName] = muscleGroup;
-        }
-      }
-      
-      // Läs in kategorinamn som appen inte längre använder, så att gamla
-      // övningar fortfarande räknas i statistiken.
-      for (final entry in legacyCategoryAliases.entries) {
-        final snapshot = await _db
-            .collection('users')
-            .doc(uid)
-            .collection('master_exercises')
-            .where('category', isEqualTo: entry.key)
-            .get();
-
-        for (final doc in snapshot.docs) {
-          final exerciseData = doc.data();
-          final exerciseName = exerciseData['name'] as String;
-          exerciseToMuscleGroup[exerciseName] = entry.value;
-        }
-      }
+      final snapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('master_exercises')
+          .get();
 
       // Migration: Run only once per app session to avoid repeated writes on every read
       if (!_legacyCategoryMigrationDone) {
@@ -363,11 +352,45 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
         _legacyCategoryMigrationDone = true;
       }
 
-      return exerciseToMuscleGroup;
+      return _muscleMapFrom(snapshot.docs.map((d) => d.data()));
     } catch (e) {
       debugPrint('Error fetching exercise to muscle group mapping: $e');
       return {};
     }
+  }
+
+  /// Samma koppling som [getExerciseToMuscleGroupMap], men levande: en ny
+  /// övning eller en ändrad kategori slår igenom i statistiken direkt.
+  Stream<Map<String, String>> watchExerciseToMuscleGroupMap() {
+    if (!_legacyCategoryMigrationDone) {
+      _legacyCategoryMigrationDone = true;
+      unawaited(_migrateLegacyCategories());
+    }
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('master_exercises')
+        .snapshots()
+        .map((snapshot) => _muscleMapFrom(snapshot.docs.map((d) => d.data())));
+  }
+
+  /// Övningsnamn → muskelgrupp. Gamla kategorinamn översätts så att äldre
+  /// övningar fortfarande räknas; kategorier utan muskelgrupp (t.ex. Cardio)
+  /// och dokument utan namn hoppas över i stället för att fälla hela kartan.
+  static Map<String, String> _muscleMapFrom(
+    Iterable<Map<String, dynamic>> exercises,
+  ) {
+    final exerciseToMuscleGroup = <String, String>{};
+    for (final data in exercises) {
+      final name = data['name'];
+      final rawCategory = data['category'];
+      if (name is! String || rawCategory is! String) continue;
+      final category = legacyCategoryAliases[rawCategory] ?? rawCategory;
+      if (muscleGroups.contains(category)) {
+        exerciseToMuscleGroup[name] = category;
+      }
+    }
+    return exerciseToMuscleGroup;
   }
 
   /// Kategorinamn som har använts tidigare, och vad de heter idag.
@@ -411,11 +434,20 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     await saveWorkoutProgram(workoutProgram);
     
     // Also add all exercises to user's master exercises
-    await _addExercisesToMasterExercises(workoutProgram.exercises);
+    await _addExercisesToMasterExercises(
+      workoutProgram.exercises,
+      muscleGroupsByName: {
+        for (final e in template.exercises)
+          if (e.muscleGroups != null) e.name: e.muscleGroups!,
+      },
+    );
   }
 
   // Helper method to add exercises to master exercises collection
-  Future<void> _addExercisesToMasterExercises(List<Exercise> exercises) async {
+  Future<void> _addExercisesToMasterExercises(
+    List<Exercise> exercises, {
+    Map<String, List<String>> muscleGroupsByName = const {},
+  }) async {
     try {
       // Get existing master exercises to avoid duplicates
       final existingExercisesSnapshot = await _db
@@ -425,7 +457,8 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           .get();
       
       final existingExerciseNames = existingExercisesSnapshot.docs
-          .map((doc) => doc.data()['name'] as String)
+          .map((doc) => doc.data()['name'])
+          .whereType<String>()
           .toSet();
 
       // Add new exercises that don't already exist
@@ -434,7 +467,11 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
           final masterExercise = MasterExercise(
             id: exercise.id,
             name: exercise.name,
-            category: _getCategoryForExercise(exercise.name), // Helper to determine category
+            // Mallens egna muskelgrupper först, namnregler som reserv
+            category: _categoryFromMuscleGroups(
+                  muscleGroupsByName[exercise.name],
+                ) ??
+                _getCategoryForExercise(exercise.name),
           );
           
           await saveMasterExercise(masterExercise);
@@ -444,6 +481,40 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
       debugPrint('Error adding exercises to master exercises: $e');
       // Don't throw error here - we still want the workout to be saved even if this fails
     }
+  }
+
+  /// Mallarnas muskelnamn ("Lats", "Side Delts", "Upper Back" …) översatta
+  /// till appens kategorier.
+  static const Map<String, String> _muscleAliases = {
+    'lats': 'Back',
+    'upper back': 'Back',
+    'lower back': 'Back',
+    'traps': 'Back',
+    'rhomboids': 'Back',
+    'side delts': 'Shoulders',
+    'rear delts': 'Shoulders',
+    'front delts': 'Shoulders',
+    'delts': 'Shoulders',
+    'legs': 'Quads',
+    'quadriceps': 'Quads',
+    'calf': 'Calves',
+    'core': 'Abs',
+    'obliques': 'Abs',
+    'forearms': 'Biceps',
+  };
+
+  /// Första muskelgruppen i listan som går att placera i en kategori.
+  static String? _categoryFromMuscleGroups(List<String>? groups) {
+    if (groups == null) return null;
+    for (final group in groups) {
+      final key = group.trim().toLowerCase();
+      for (final canonical in muscleGroups) {
+        if (canonical.toLowerCase() == key) return canonical;
+      }
+      final alias = _muscleAliases[key];
+      if (alias != null) return alias;
+    }
+    return null;
   }
 
   // Helper method to determine category based on exercise name
@@ -457,8 +528,21 @@ Future<WorkoutSession?> findLastSessionOfProgram(String programTitle) async {
     if (name.contains('leg') && name.contains('extension')) return 'Quads';
     if (name.contains('hamstring')) return 'Hamstrings';
     
-    // Reverse pec deck = Shoulders
-    if (name.contains('reverse') && name.contains('pec')) return 'Shoulders';
+    // Reverse pec deck, reverse fly och rear delt = Shoulders (före "fly")
+    if (name.contains('reverse') && (name.contains('pec') || name.contains('fly'))) {
+      return 'Shoulders';
+    }
+    if (name.contains('rear') && name.contains('delt')) return 'Shoulders';
+
+    // Triceps-extension över huvudet måste fångas före "overhead" = Shoulders
+    if (name.contains('tricep')) return 'Triceps';
+
+    // Back extension / shrugs / chins hör till ryggen, inte bröstet
+    if (name.contains('back') && name.contains('extension')) return 'Back';
+    if (name.contains('shrug') || name.contains('chin')) return 'Back';
+
+    // Leg raise = Abs (före vadregeln som tittar på "raise")
+    if (name.contains('leg') && name.contains('raise')) return 'Abs';
     
     // Chest exercises
     if (name.contains('press') && (name.contains('chest') || name.contains('bench') || name.contains('incline') || name.contains('decline'))) {

@@ -41,6 +41,97 @@ class NavBarMetrics {
   /// stays centred and never stretches to a full-width banner on a tablet.
   static const double minSlotWidth = 60;
   static const double maxSlotWidth = 78;
+
+  /// Backdrop blur of the frosted capsule.
+  static const double blurSigma = 18;
+
+  /// Height of the bar's accessory — the live-workout pill that floats just
+  /// above it while a session is running.
+  static const double accessoryHeight = 48;
+
+  /// Air between the accessory and the bar. The same as the bar leaves below
+  /// itself, so inset → bar → pill keeps one rhythm.
+  static const double accessoryGap = bottomGap;
+
+  /// Extra bottom clearance content needs while the accessory is showing.
+  static const double accessoryClearance = accessoryHeight + accessoryGap;
+
+  /// Width of one tab slot when [count] tabs share [available] width.
+  static double slotWidthFor(double available, int count) =>
+      ((available - horizontalChrome) / count)
+          .clamp(minSlotWidth, maxSlotWidth);
+
+  /// Width of the whole bar for [count] tabs. Anything that floats with the
+  /// bar uses this as its ceiling so it never reads wider than the bar.
+  static double widthFor(double available, int count) => math.min(
+        slotWidthFor(available, count) * count + horizontalChrome,
+        available,
+      );
+}
+
+/// The frosted capsule the nav bar is made of.
+///
+/// Anything that floats *with* the bar — the live-workout pill — is cut from
+/// the same material, so the two read as one family instead of two unrelated
+/// overlays.
+class FloatingCapsule extends ConsumerWidget {
+  final Widget child;
+  final double? height;
+  final EdgeInsetsGeometry? padding;
+
+  /// Defaults to [AppColors.shadowFloating].
+  final List<BoxShadow>? shadow;
+
+  const FloatingCapsule({
+    super.key,
+    required this.child,
+    this.height,
+    this.padding,
+    this.shadow,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final radius = BorderRadius.circular(AppRadius.pill);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: shadow ?? t.shadowFloating,
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: NavBarMetrics.blurSigma,
+            sigmaY: NavBarMetrics.blurSigma,
+          ),
+          child: Container(
+            height: height,
+            padding: padding,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              // Dark: translucent enough to read as sitting over the page,
+              // opaque enough that the labels never fight the content behind.
+              // Light: white-on-near-white has no contrast of its own, so the
+              // capsule is nearly opaque and carries a real rim — together
+              // with the stronger light-palette floating shadow that is what
+              // lifts it off the page.
+              color: t.elevated.withValues(alpha: t.isDark ? 0.62 : 0.92),
+              border: Border.all(
+                color: t.isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : t.text.withValues(alpha: 0.12),
+                width: NavBarMetrics.borderWidth,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// A single destination in the [FloatingNavBar].
@@ -184,16 +275,10 @@ class _FloatingNavBarState extends ConsumerState<FloatingNavBar>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final count = widget.destinations.length;
-              final usable =
-                  constraints.maxWidth - NavBarMetrics.horizontalChrome;
-              final slot = (usable / count).clamp(
-                NavBarMetrics.minSlotWidth,
-                NavBarMetrics.maxSlotWidth,
-              );
-              final barWidth = math.min(
-                slot * count + NavBarMetrics.horizontalChrome,
-                constraints.maxWidth,
-              );
+              final slot =
+                  NavBarMetrics.slotWidthFor(constraints.maxWidth, count);
+              final barWidth =
+                  NavBarMetrics.widthFor(constraints.maxWidth, count);
 
               // A Row, never a Center. The bottom Align hands down *loose*
               // constraints, and a Center with a bounded-but-loose height
@@ -218,72 +303,42 @@ class _FloatingNavBarState extends ConsumerState<FloatingNavBar>
   }
 
   Widget _capsule(AppColors t, double slot) {
-    final radius = BorderRadius.circular(AppRadius.pill);
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onHorizontalDragEnd: _handleSwipe,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: t.shadowFloating,
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              height: NavBarMetrics.height,
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                // Translucent enough to read as sitting over the page, opaque
-                // enough that the labels never fight the content behind them.
-                color: t.elevated.withValues(alpha: t.isDark ? 0.62 : 0.74),
-                border: Border.all(
-                  color: t.isDark
-                      ? Colors.white.withValues(alpha: 0.07)
-                      : Colors.black.withValues(alpha: 0.05),
-                  width: NavBarMetrics.borderWidth,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(NavBarMetrics.innerPadding),
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, _) {
-                    final position = _position;
-                    return Stack(
-                      children: [
-                        _bubble(t, slot, position),
-                        Positioned.fill(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (var i = 0;
-                                  i < widget.destinations.length;
-                                  i++)
-                                SizedBox(
-                                  width: slot,
-                                  child: _NavItem(
-                                    theme: t,
-                                    destination: widget.destinations[i],
-                                    // Falls off linearly with distance, so an
-                                    // icon the bubble passes over lights up
-                                    // partially on the way through.
-                                    selection: 1 - (position - i).abs(),
-                                    onTap: () => widget.onTap(i),
-                                  ),
-                                ),
-                            ],
+      child: FloatingCapsule(
+        height: NavBarMetrics.height,
+        padding: const EdgeInsets.all(NavBarMetrics.innerPadding),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final position = _position;
+            return Stack(
+              children: [
+                _bubble(t, slot, position),
+                Positioned.fill(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < widget.destinations.length; i++)
+                        SizedBox(
+                          width: slot,
+                          child: _NavItem(
+                            theme: t,
+                            destination: widget.destinations[i],
+                            // Falls off linearly with distance, so an icon
+                            // the bubble passes over lights up partially on
+                            // the way through.
+                            selection: 1 - (position - i).abs(),
+                            onTap: () => widget.onTap(i),
                           ),
                         ),
-                      ],
-                    );
-                  },
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -306,18 +361,12 @@ class _FloatingNavBarState extends ConsumerState<FloatingNavBar>
         child: Transform.scale(
           scaleX: 1 + stretch,
           scaleY: 1 - stretch * 0.5,
+          // A quiet primary wash, not the gradient: the screen's own CTA is
+          // the one hero element, and the bar should never compete with it.
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.pill),
-              gradient: t.primaryGradientDiagonal,
-              boxShadow: [
-                BoxShadow(
-                  color: t.primary.withValues(alpha: 0.26),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                  spreadRadius: -3,
-                ),
-              ],
+              color: t.primary.withValues(alpha: t.isDark ? 0.17 : 0.11),
             ),
           ),
         ),
@@ -346,7 +395,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = selection.clamp(0.0, 1.0);
-    final tint = Color.lerp(theme.textSecondary, theme.onPrimary, v)!;
+    final tint = Color.lerp(theme.textSecondary, theme.primary, v)!;
 
     return Pressable(
       onTap: onTap,

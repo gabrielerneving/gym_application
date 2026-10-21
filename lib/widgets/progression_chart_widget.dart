@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/theme_provider.dart';
+import 'stats_components.dart';
 import 'ui/ui.dart';
 
 /// ---------------------------------------------------------------------------
@@ -17,8 +18,9 @@ import 'ui/ui.dart';
 ///
 /// Everything visual comes from the theme: the line takes the series colour,
 /// the area fill uses [AppColors.chartFillGradient], grid lines are hairlines
-/// in [AppColors.outline] and axis labels sit in [AppColors.textTertiary], so
-/// the chart stays legible on the light and the dark palettes alike.
+/// in [AppColors.divider] and axis labels sit in [AppColors.textTertiary], so
+/// the chart stays legible on the light and the dark palettes alike. The value
+/// axis uses round steps ([NiceAxis]) so every label sits on a gridline.
 /// ---------------------------------------------------------------------------
 class ProgressionSeries {
   /// Shown in the legend and in the tooltip when more than one line is drawn.
@@ -208,7 +210,7 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         drawHorizontalLine: true,
         horizontalInterval: g.yInterval,
         getDrawingHorizontalLine: (value) => FlLine(
-          color: t.outline,
+          color: t.divider,
           strokeWidth: 1,
         ),
       ),
@@ -223,30 +225,39 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 46,
+            reservedSize: 42,
             interval: g.yInterval,
-            getTitlesWidget: (value, meta) => Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
-              child: Text(
-                _formatAxis(value),
-                textAlign: TextAlign.right,
-                style: labelStyle,
-              ),
-            ),
+            getTitlesWidget: (value, meta) {
+              if (!g.axis.isTick(value)) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: Text(
+                  _formatAxis(value),
+                  textAlign: TextAlign.right,
+                  style: labelStyle,
+                ),
+              );
+            },
           ),
         ),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 30,
+            reservedSize: 28,
             interval: g.xInterval,
+            // The raw ends of the axis are padding, not dates worth naming —
+            // labelled, they landed on top of the first real tick.
+            minIncluded: false,
+            maxIncluded: false,
             getTitlesWidget: (value, meta) {
               // A single session has no span to label — one date is enough.
               if (g.singlePoint && value.abs() > 0.01) {
                 return const SizedBox.shrink();
               }
-              return Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.sm),
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                space: AppSpacing.sm,
+                fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
                 child: Text(
                   AppFormat.dayMonth(g.dateAt(value)),
                   style: labelStyle,
@@ -256,7 +267,14 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
           ),
         ),
       ),
-      borderData: FlBorderData(show: false),
+      // The top and bottom ticks get the lines the grid leaves out.
+      borderData: FlBorderData(
+        show: true,
+        border: Border(
+          top: BorderSide(color: t.divider),
+          bottom: BorderSide(color: t.outline),
+        ),
+      ),
       lineBarsData: [
         for (var i = 0; i < series.length; i++)
           _barData(
@@ -298,6 +316,10 @@ class _ProgressionChartWidgetState extends ConsumerState<ProgressionChartWidget>
     return LineChartBarData(
       spots: spots,
       isCurved: true,
+      curveSmoothness: 0.25,
+      // Without this a jump between two close sessions swings past both
+      // points before settling — a wobble the data does not have.
+      preventCurveOverShooting: true,
       color: s.color,
       barWidth: 3,
       isStrokeCapRound: true,
@@ -411,10 +433,8 @@ class _ChartGeometry {
   final DateTime origin;
   final double minX;
   final double maxX;
-  final double minY;
-  final double maxY;
+  final NiceAxis axis;
   final double xInterval;
-  final double yInterval;
 
   /// True when every point falls on (roughly) the same day.
   final bool singlePoint;
@@ -425,13 +445,15 @@ class _ChartGeometry {
     required this.origin,
     required this.minX,
     required this.maxX,
-    required this.minY,
-    required this.maxY,
+    required this.axis,
     required this.xInterval,
-    required this.yInterval,
     required this.singlePoint,
     required this.totalPoints,
   });
+
+  double get minY => axis.min;
+  double get maxY => axis.max;
+  double get yInterval => axis.step;
 
   factory _ChartGeometry.of(List<ProgressionSeries> series) {
     DateTime? first;
@@ -461,13 +483,13 @@ class _ChartGeometry {
       highest = 1.0;
     }
 
-    // Pad the value axis so the line never touches the top or the baseline.
-    final range = highest - lowest;
-    final margin = range > 0 ? range * 0.14 : math.max(1.0, highest.abs() * 0.1);
-    var low = lowest - margin;
-    final high = highest + margin;
-    if (lowest >= 0 && low < 0) low = 0.0;
-    final paddedRange = high - low;
+    // Round-number bounds a little outside the data, so the line rarely
+    // touches the frame and every label names a gridline.
+    final pad = (highest - lowest) * 0.06;
+    final axis = NiceAxis.of(
+      lowest >= 0 ? math.max(0.0, lowest - pad) : lowest - pad,
+      highest + pad,
+    );
 
     final singlePoint = span < 0.75;
     final minX = singlePoint ? -1.0 : -span * 0.03;
@@ -477,12 +499,10 @@ class _ChartGeometry {
       origin: start,
       minX: minX,
       maxX: maxX,
-      minY: low,
-      maxY: high,
-      // Whole-day steps keep the date labels distinct.
-      xInterval:
-          singlePoint ? 1.0 : math.max(1.0, ((maxX - minX) / 3).roundToDouble()),
-      yInterval: paddedRange > 0 ? paddedRange / 3 : 1.0,
+      axis: axis,
+      // Whole-day steps keep the date labels distinct; rounding down keeps
+      // the fourth label (three steps on) inside the data.
+      xInterval: singlePoint ? 1.0 : math.max(1.0, (span / 3).floorToDouble()),
       singlePoint: singlePoint,
       totalPoints: total,
     );

@@ -45,6 +45,10 @@ class AppButton extends ConsumerWidget {
 
   final HapticStrength haptic;
 
+  /// Corner radius. Defaults to [AppRadius.md]; pass [AppRadius.pill] for a
+  /// button that sits inside a pill (a capsule header) so the corners nest.
+  final double? radius;
+
   const AppButton({
     super.key,
     required this.label,
@@ -56,6 +60,7 @@ class AppButton extends ConsumerWidget {
     this.expand = false,
     this.loading = false,
     this.haptic = HapticStrength.medium,
+    this.radius,
   });
 
   const AppButton.secondary({
@@ -68,6 +73,7 @@ class AppButton extends ConsumerWidget {
     this.expand = false,
     this.loading = false,
     this.haptic = HapticStrength.light,
+    this.radius,
   }) : variant = AppButtonVariant.secondary;
 
   const AppButton.outline({
@@ -80,6 +86,7 @@ class AppButton extends ConsumerWidget {
     this.expand = false,
     this.loading = false,
     this.haptic = HapticStrength.light,
+    this.radius,
   }) : variant = AppButtonVariant.outline;
 
   const AppButton.ghost({
@@ -92,6 +99,7 @@ class AppButton extends ConsumerWidget {
     this.expand = false,
     this.loading = false,
     this.haptic = HapticStrength.light,
+    this.radius,
   }) : variant = AppButtonVariant.ghost;
 
   const AppButton.danger({
@@ -104,6 +112,7 @@ class AppButton extends ConsumerWidget {
     this.expand = false,
     this.loading = false,
     this.haptic = HapticStrength.medium,
+    this.radius,
   }) : variant = AppButtonVariant.danger;
 
   @override
@@ -175,8 +184,12 @@ class AppButton extends ConsumerWidget {
           color: bg,
           gradient: grad,
           border: border,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          boxShadow: variant == AppButtonVariant.primary && enabled
+          borderRadius: BorderRadius.circular(radius ?? AppRadius.md),
+          // Small buttons sit in toolbars and rows; a glow there spills over
+          // the surrounding chrome. Only full-size CTAs get the lift.
+          boxShadow: variant == AppButtonVariant.primary &&
+                  enabled &&
+                  size != AppButtonSize.small
               ? t.shadowPrimaryGlow
               : null,
         ),

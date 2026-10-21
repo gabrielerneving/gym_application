@@ -31,8 +31,8 @@ class AppThemeData {
       tertiary: t.primaryLight,
       onTertiary: AppColors.contrastOn(t.primaryLight),
       error: t.error,
-      onError: AppColors.contrastOn(t.error),
-      errorContainer: t.error.withValues(alpha: 0.16),
+      onError: t.onError,
+      errorContainer: t.errorWash,
       onErrorContainer: t.text,
       surface: t.card,
       onSurface: t.text,
@@ -118,7 +118,7 @@ class AppThemeData {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: t.surface,
-        hintStyle: AppType.secondary(t).copyWith(color: t.textTertiary),
+        hintStyle: AppType.secondary(t).copyWith(color: t.textHint),
         labelStyle: AppType.secondary(t),
         floatingLabelStyle: TextStyle(color: t.primary),
         contentPadding: const EdgeInsets.symmetric(
@@ -194,19 +194,23 @@ class AppThemeData {
         ),
       ),
 
+      // Off reads as clearly *off*, not as missing: a neutral track with a
+      // visible rim and a mid-grey knob (the Material 3 recipe), instead of a
+      // grey knob dissolving into a dark track.
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return t.onPrimary;
-          return t.isDark ? t.textSecondary : Colors.white;
+          return t.textSecondary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return t.primary;
-          return t.surface;
+          return t.neutralWash;
         }),
         trackOutlineColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.transparent;
-          return t.outline;
+          return t.textTertiary;
         }),
+        trackOutlineWidth: const WidgetStatePropertyAll(1.5),
       ),
 
       sliderTheme: SliderThemeData(

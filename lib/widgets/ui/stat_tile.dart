@@ -68,10 +68,14 @@ class StatTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
+    // On the gradient everything is onPrimary: the gradient's light end is
+    // already the weakest backdrop in the app, so labels stay fully opaque
+    // and only the unit steps back a little.
     final tone = highlight ? t.onPrimary : (accent ?? t.primary);
     final textColor = highlight ? t.onPrimary : t.text;
-    final subColor =
-        highlight ? t.onPrimary.withValues(alpha: 0.78) : t.textSecondary;
+    final subColor = highlight ? t.onPrimary : t.textSecondary;
+    final unitColor =
+        highlight ? t.onPrimary.withValues(alpha: 0.86) : t.textSecondary;
 
     return AppCard(
       onTap: onTap,
@@ -126,7 +130,7 @@ class StatTile extends ConsumerWidget {
                 const SizedBox(width: 4),
                 Text(
                   unit!,
-                  style: AppType.caption(t).copyWith(color: subColor),
+                  style: AppType.caption(t).copyWith(color: unitColor),
                 ),
               ],
             ],
@@ -139,6 +143,7 @@ class StatTile extends ConsumerWidget {
               higherIsWorse: deltaHigherIsWorse,
               compact: true,
               fontSize: 11.5,
+              onGradient: highlight,
             ),
           ],
           if (sparkline != null && sparkline!.length > 1) ...[
@@ -176,6 +181,10 @@ class StatGrid extends StatelessWidget {
     return GridView.count(
       crossAxisCount: columns,
       shrinkWrap: true,
+      // A null padding makes a ScrollView pad itself with the MediaQuery
+      // insets — inside a page that is ~47pt of dead space above the grid and
+      // ~34pt below it. The grid is laid out inline, so it gets none.
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: AppSpacing.md,
       mainAxisSpacing: AppSpacing.md,

@@ -42,11 +42,15 @@ final workoutSessionsProvider =
 });
 
 /// Exercise name → muscle group, from the user's master exercise library.
+///
+/// A live stream rather than a one-off fetch: a newly created exercise or a
+/// changed category lands in the statistics straight away instead of after
+/// the next app restart.
 final exerciseMuscleMapProvider =
-    FutureProvider<Map<String, String>>((ref) async {
+    StreamProvider<Map<String, String>>((ref) {
   final db = ref.watch(databaseServiceProvider);
-  if (db == null) return const {};
-  return db.getExerciseToMuscleGroupMap();
+  if (db == null) return Stream.value(const {});
+  return db.watchExerciseToMuscleGroupMap();
 });
 
 /// Everything the statistics screens need, resolved together.
@@ -57,7 +61,14 @@ final exerciseMuscleMapProvider =
 final trainingDataProvider = FutureProvider<TrainingData>((ref) async {
   final goals = ref.watch(trainingGoalsProvider);
   final sessions = await ref.watch(workoutSessionsProvider.future);
-  final muscleMap = await ref.watch(exerciseMuscleMapProvider.future);
+  // The muscle map only labels exercises; a failed listener (it stays failed —
+  // a Firestore stream ends on error) should not blank every stats screen.
+  Map<String, String> muscleMap;
+  try {
+    muscleMap = await ref.watch(exerciseMuscleMapProvider.future);
+  } catch (_) {
+    muscleMap = const {};
+  }
   return TrainingData(
     sessions: sessions,
     exerciseToMuscle: muscleMap,
@@ -74,6 +85,11 @@ final statsPeriodProvider = StateProvider<StatsPeriod>((ref) {
 /// A snapshot of the user's training history plus the exercise→muscle mapping,
 /// with the common derivations memoised so a rebuild does not recompute them.
 class TrainingData {
+  /// Every session with at least one working set, newest first.
+  ///
+  /// Sessions saved with nothing filled in are dropped here, once, so no
+  /// screen can count them: not as a workout, not toward a streak, not in an
+  /// average.
   final List<WorkoutSession> sessions;
   final Map<String, String> exerciseToMuscle;
 
@@ -83,10 +99,10 @@ class TrainingData {
   final TrainingGoals goals;
 
   TrainingData({
-    required this.sessions,
+    required List<WorkoutSession> sessions,
     required this.exerciseToMuscle,
     this.goals = const TrainingGoals(),
-  });
+  }) : sessions = AnalyticsService.loggedSessions(sessions);
 
   bool get isEmpty => sessions.isEmpty;
 
@@ -110,8 +126,7 @@ class TrainingData {
   late final List<MuscleBalance> muscleBalance =
       AnalyticsService.muscleBalance(sessions, exerciseToMuscle, goals: goals);
 
-  late final List<Insight> insights =
-      AnalyticsService.insights(sessions, exerciseToMuscle, goals: goals);
+  late final List<Insight> insights = AnalyticsService.insights(sessions);
 
   late final List<TimeBucket> weeklyVolume =
       AnalyticsService.weeklyVolume(sessions, weeks: 12);
@@ -121,6 +136,30 @@ class TrainingData {
 
   PeriodSummary summaryFor(StatsPeriod period) =>
       AnalyticsService.summarize(sessions, period.range());
+
+  /// The sessions inside [period].
+  List<WorkoutSession> sessionsFor(StatsPeriod period) =>
+      period == StatsPeriod.all
+          ? sessions
+          : AnalyticsService.sessionsIn(sessions, period.range());
+
+  /// Weekly sets per muscle group averaged over [period].
+  List<MuscleBalance> muscleBalanceFor(StatsPeriod period) =>
+      AnalyticsService.muscleBalance(
+        sessions,
+        exerciseToMuscle,
+        range: period.range(),
+        goals: goals,
+      );
+
+  /// Working sets per muscle group inside [period] — the counts behind
+  /// [muscleBalanceFor], including the "Other" bucket for unmapped exercises.
+  Map<String, int> muscleSetsFor(StatsPeriod period) =>
+      AnalyticsService.muscleGroupSets(
+        sessions,
+        exerciseToMuscle,
+        range: period.range(),
+      );
 
   ExerciseProgress progressFor(String exercise) =>
       exerciseProgress[exercise] ??

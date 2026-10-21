@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/admin_config.dart';
+import '../models/standard_workout_template.dart';
 import '../providers/theme_provider.dart';
+import '../services/database_service.dart';
 import '../utils/add_sample_templates.dart';
 import '../widgets/ui/ui.dart';
 
@@ -19,10 +21,12 @@ class AdminScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
+  late final Stream<List<StandardWorkoutTemplate>> _templates =
+      StandardWorkoutService.getStandardWorkouts();
+
   bool _isLoading = false;
   String _status = '';
-
-  bool get _statusIsError => _status.contains('Error');
+  bool _statusIsError = false;
 
   @override
   Widget build(BuildContext context) {
@@ -31,72 +35,66 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     // Security check - only allow admin users
     if (!_isAdminUser()) {
       return const AppScaffold(
-        title: 'Access Denied',
+        title: 'Access denied',
         ambient: false,
         body: _AccessDenied(),
       );
     }
 
     return AppScaffold(
-      title: 'Admin Panel',
-      subtitle: 'Internal tools',
+      title: 'Admin',
       bottomPadding: AppSpacing.huge,
       children: [
         const FadeSlideIn(
           index: 0,
           child: SectionHeader(
-            title: 'Template Management',
-            subtitle: 'Add standard workout templates for all users',
+            title: 'Templates',
             padding: EdgeInsets.only(
               top: AppSpacing.sm,
               bottom: AppSpacing.md,
             ),
           ),
         ),
-
         FadeSlideIn(
           index: 1,
-          child: AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+          child: StreamBuilder<List<StandardWorkoutTemplate>>(
+            stream: _templates,
+            builder: (context, snapshot) {
+              final live = snapshot.data?.length;
+
+              return AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const IconBadge(icon: Icons.playlist_add_rounded),
-                    const SizedBox(width: AppSpacing.lg),
-                    Expanded(
-                      child: Text(
-                        'Add Sample Templates',
-                        style: AppType.heading(t),
-                      ),
+                    Text('Sample templates', style: AppType.heading(t)),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Upper Body, Legs Focus, Push Day and Pull Day — '
+                      'visible to every user.',
+                      style: AppType.secondary(t),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    MetricRow(
+                      label: 'Templates live now',
+                      value: live == null ? '–' : '$live',
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppButton(
+                      label: 'Add sample templates',
+                      onPressed: _isLoading
+                          ? null
+                          : () => _addSampleTemplates(alreadyLive: live ?? 0),
+                      loading: _isLoading,
+                      expand: true,
+                      icon: Icons.add_rounded,
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'This will add 4 awesome workout templates:\n'
-                  '• Upper Body Workout (60 min)\n'
-                  '• Legs Focus Workout (70 min)\n'
-                  '• Push Day Workout (65 min)\n'
-                  '• Pull Day Workout (65 min)',
-                  style: AppType.secondary(t).copyWith(height: 1.5),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                AppButton(
-                  label: _isLoading
-                      ? 'Adding templates…'
-                      : 'Add Sample Templates',
-                  onPressed: _isLoading ? null : _addSampleTemplates,
-                  loading: _isLoading,
-                  expand: true,
-                  icon: Icons.add_circle_outline_rounded,
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
-
         if (_status.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),
           FadeSlideIn(
@@ -104,40 +102,25 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             child: _StatusBanner(message: _status, isError: _statusIsError),
           ),
         ],
-
-        const SizedBox(height: AppSpacing.xxl),
-
-        FadeSlideIn(
-          index: 3,
-          child: AppCard(
-            color: t.warning.withValues(alpha: t.isDark ? 0.12 : 0.08),
-            border: Border.all(color: t.warning.withValues(alpha: 0.30)),
-            shadow: const [],
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, size: 20, color: t.warning),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Text(
-                    'Warning: Only add templates once! Duplicate templates '
-                    'will create multiple entries in the database.',
-                    style: AppType.caption(t).copyWith(
-                      color: t.warning,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
 
-  Future<void> _addSampleTemplates() async {
+  Future<void> _addSampleTemplates({required int alreadyLive}) async {
+    // Adding twice writes every template twice — make that a choice.
+    if (alreadyLive > 0) {
+      final proceed = await AppDialog.confirm(
+        context: context,
+        ref: ref,
+        title: 'Add them again?',
+        message: '$alreadyLive templates are already live. Adding the samples '
+            'again creates duplicates for every user.',
+        confirmLabel: 'Add anyway',
+        destructive: true,
+      );
+      if (!proceed || !mounted) return;
+    }
+
     setState(() {
       _isLoading = true;
       _status = '';
@@ -147,17 +130,17 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       await addSampleTemplates();
       if (!mounted) return;
       setState(() {
-        _status = 'Successfully added 4 awesome workout templates!';
+        _status = 'Added the 4 sample templates.';
+        _statusIsError = false;
         _isLoading = false;
       });
-      AppSnack.show(context, ref, 'Templates added');
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _status = 'Error adding templates: $e';
+        _status = 'Could not add templates: $e';
+        _statusIsError = true;
         _isLoading = false;
       });
-      AppSnack.show(context, ref, 'Could not add templates', isError: true);
     }
   }
 
@@ -171,8 +154,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 }
 
-/// The result of the last run, kept on screen so the outcome does not vanish
-/// with the snack bar.
+/// The result of the last run, kept on screen so the outcome does not vanish.
 class _StatusBanner extends ConsumerWidget {
   final String message;
   final bool isError;
@@ -227,31 +209,12 @@ class _AccessDenied extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      t.error.withValues(alpha: t.isDark ? 0.22 : 0.14),
-                      t.error.withValues(alpha: 0.02),
-                    ],
-                  ),
-                ),
-                child: Icon(Icons.lock_rounded, size: 34, color: t.error),
-              ),
-              const SizedBox(height: AppSpacing.xl),
+              Icon(Icons.lock_rounded, size: 34, color: t.textTertiary),
+              const SizedBox(height: AppSpacing.lg),
               Text(
-                'Admin Access Required',
+                'Admins only',
                 textAlign: TextAlign.center,
                 style: AppType.title(t),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'You do not have permission to access this page.',
-                textAlign: TextAlign.center,
-                style: AppType.secondary(t).copyWith(fontSize: 14.5),
               ),
               const SizedBox(height: AppSpacing.xxl),
               AppButton.outline(

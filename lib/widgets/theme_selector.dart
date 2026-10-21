@@ -64,8 +64,9 @@ class ThemeSelector extends ConsumerWidget {
 }
 
 /// One palette, rendered as a preview card: the miniature on top, the palette
-/// name and its light/dark nature underneath. Selection animates the scale and
-/// swaps the hairline border for the palette's own accent.
+/// name underneath. Selection swaps the hairline border for the palette's own
+/// accent and pops a check beside the name — the miniature already shows
+/// light or dark.
 class _ThemePreviewTile extends ConsumerWidget {
   final AppColors palette;
   final String label;
@@ -87,40 +88,28 @@ class _ThemePreviewTile extends ConsumerWidget {
       onTap: onTap,
       haptic: HapticStrength.selection,
       scale: 0.96,
-      child: AnimatedScale(
-        duration: AppMotion.normal,
-        curve: AppMotion.spring,
-        scale: selected ? 1.0 : 0.975,
-        child: AnimatedContainer(
-          duration: AppMotion.fast,
-          curve: AppMotion.standard,
-          padding: const EdgeInsets.all(AppSpacing.sm + 2),
-          decoration: BoxDecoration(
-            color: t.card,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(
-              color: selected ? palette.primary : t.outline,
-              width: selected ? 2 : 1,
-            ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: palette.primary
-                          .withValues(alpha: t.isDark ? 0.30 : 0.20),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                      spreadRadius: -6,
-                    ),
-                  ]
-                : t.shadowSoft,
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        curve: AppMotion.standard,
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: t.card,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            color: selected ? palette.primary : t.outline,
+            width: selected ? 2 : 1,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _PaletteMiniature(palette: palette, selected: selected),
-              const SizedBox(height: AppSpacing.sm + 2),
-              Row(
+          boxShadow: t.shadowSoft,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PaletteMiniature(palette: palette),
+            const SizedBox(height: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
+              child: Row(
                 children: [
                   Expanded(
                     child: AnimatedDefaultTextStyle(
@@ -138,23 +127,34 @@ class _ThemePreviewTile extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Icon(
-                    palette.isDark
-                        ? Icons.dark_mode_rounded
-                        : Icons.light_mode_rounded,
-                    size: 13,
-                    color: t.textTertiary,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    palette.isDark ? 'Dark' : 'Light',
-                    style: AppType.caption(t).copyWith(fontSize: 10.5),
+                  // Selected mark, in the palette's own accent — beside the
+                  // name rather than over the miniature it is describing.
+                  AnimatedOpacity(
+                    duration: AppMotion.fast,
+                    opacity: selected ? 1 : 0,
+                    child: AnimatedScale(
+                      duration: AppMotion.normal,
+                      curve: AppMotion.spring,
+                      scale: selected ? 1 : 0.6,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: palette.primaryGradientDiagonal,
+                        ),
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 13,
+                          color: palette.onPrimary,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -165,22 +165,26 @@ class _ThemePreviewTile extends ConsumerWidget {
 /// gradient as the hero element, and a card carrying two lines of text.
 class _PaletteMiniature extends StatelessWidget {
   final AppColors palette;
-  final bool selected;
+  const _PaletteMiniature({required this.palette});
 
-  const _PaletteMiniature({required this.palette, required this.selected});
+  static const double _height = 68;
 
-  static const double _height = 88;
+  /// The tile is [AppRadius.lg] with [AppSpacing.sm] of padding, so the
+  /// miniature nests at the difference — and the card inside it at the
+  /// difference again.
+  static const double _radius = AppRadius.lg - AppSpacing.sm;
+  static const double _innerRadius = _radius - AppSpacing.sm;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderRadius: BorderRadius.circular(_radius),
       child: Container(
         height: _height,
         width: double.infinity,
         decoration: BoxDecoration(
           color: palette.background,
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(_radius),
           border: Border.all(color: palette.outline),
         ),
         child: Stack(
@@ -211,28 +215,32 @@ class _PaletteMiniature extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Page title.
-                  _Line(color: palette.text.withValues(alpha: 0.92), width: 34, height: 6),
-                  const SizedBox(height: AppSpacing.sm),
+                  _Line(color: palette.text.withValues(alpha: 0.92), width: 34, height: 5),
+                  const SizedBox(height: AppSpacing.xs),
 
                   // The hero gradient.
                   Container(
-                    height: 18,
+                    height: 14,
                     width: double.infinity,
                     decoration: BoxDecoration(
                       gradient: palette.primaryGradient,
-                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                      borderRadius: BorderRadius.circular(_innerRadius),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm - 2),
+                  const SizedBox(height: AppSpacing.xs),
 
-                  // A card sitting on the page.
+                  // A card sitting on the page. Budget at [_height]: 50px
+                  // inside the padding, 23 of them for this card.
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: palette.card,
-                        borderRadius: BorderRadius.circular(AppRadius.xs),
+                        borderRadius: BorderRadius.circular(_innerRadius),
                         border: Border.all(color: palette.outline),
                       ),
                       child: Column(
@@ -244,7 +252,7 @@ class _PaletteMiniature extends StatelessWidget {
                             width: 44,
                             height: 5,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           _Line(
                             color: palette.textSecondary.withValues(alpha: 0.75),
                             width: 26,
@@ -258,40 +266,6 @@ class _PaletteMiniature extends StatelessWidget {
               ),
             ),
 
-            // Selected mark, drawn in the palette's own accent.
-            Positioned(
-              top: 6,
-              right: 6,
-              child: AnimatedOpacity(
-                duration: AppMotion.fast,
-                opacity: selected ? 1 : 0,
-                child: AnimatedScale(
-                  duration: AppMotion.normal,
-                  curve: AppMotion.spring,
-                  scale: selected ? 1 : 0.6,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: palette.primaryGradientDiagonal,
-                      boxShadow: [
-                        BoxShadow(
-                          color: palette.primary.withValues(alpha: 0.45),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: 15,
-                      color: palette.onPrimary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

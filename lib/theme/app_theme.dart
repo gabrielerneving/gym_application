@@ -36,6 +36,18 @@ class AppColors {
   final Color text;
   final Color textSecondary;
 
+  /// Third-level text: table headers, timestamps, units, hints, footnotes.
+  /// Opaque and tuned per palette to ≥ 4.5:1 on [card] (≥ 4:1 on [surface]
+  /// and [elevated]), so it stays readable at arm's length. Palettes that do
+  /// not set it fall back to a blend of [textSecondary] toward [card].
+  final Color? _textTertiary;
+
+  /// Placeholder / hint text in input wells (last time's weight in an empty
+  /// field, "Note", "Search…"). Opaque and tuned per palette to ≈ 3.6:1 on
+  /// [surface] (≥ 3.4:1 on [elevated] and on a [successBand] row), one quiet
+  /// step under [textTertiary], so a hint never reads as an entered value.
+  final Color? _textHint;
+
   /// Colour for text/icons drawn *on top of* [primary].
   final Color onPrimary;
 
@@ -57,11 +69,14 @@ class AppColors {
     required this.outline,
     required this.text,
     required this.textSecondary,
+    Color? textTertiary,
+    Color? textHint,
     required this.onPrimary,
     required this.success,
     required this.warning,
     required this.error,
-  });
+  })  : _textTertiary = textTertiary,
+        _textHint = textHint;
 
   // ---------------------------------------------------------------------------
   // Derived tokens
@@ -69,8 +84,13 @@ class AppColors {
 
   bool get isLight => !isDark;
 
-  /// Third-level text: timestamps, units, footnotes.
-  Color get textTertiary => textSecondary.withValues(alpha: 0.62);
+  /// Third-level text: table headers, timestamps, units, hints, footnotes.
+  /// ≥ 4.5:1 on [card] in every shipped palette.
+  Color get textTertiary =>
+      _textTertiary ?? Color.lerp(textSecondary, card, 0.3)!;
+
+  /// Placeholder / hint text: ≥ 3:1 on [surface] in every shipped palette.
+  Color get textHint => _textHint ?? Color.lerp(textTertiary, surface, 0.2)!;
 
   /// Hairline that separates two surfaces of the same elevation.
   Color get divider => outline.withValues(alpha: isDark ? 0.55 : 0.7);
@@ -87,6 +107,38 @@ class AppColors {
 
   /// Border for elements that sit on [primaryWash].
   Color get primaryWashOutline => primary.withValues(alpha: isDark ? 0.28 : 0.20);
+
+  /// A neutral, translucent fill that reads as one step up from *whatever*
+  /// surface it sits on — lighter on dark palettes, darker on light ones.
+  /// Used for idle icon tiles, so a list of rows is calm grey instead of a
+  /// column of accent squares.
+  Color get neutralWash =>
+      text.withValues(alpha: isDark ? 0.08 : 0.055);
+
+  /// An opaque neutral that reads as *raised* above [surface]: the thumb of a
+  /// segmented control, a selected pill on a track. On dark palettes it is
+  /// lighter than every other surface (raised = lighter); on light palettes it
+  /// is the white card.
+  Color get raised => isDark ? Color.lerp(elevated, text, 0.10)! : card;
+
+  /// Soft fill for a *done* element (a check tile, a done chip) — the
+  /// success twin of [primaryWash].
+  Color get successWash => success.withValues(alpha: isDark ? 0.16 : 0.12);
+
+  /// Border for elements that sit on [successWash].
+  Color get successWashOutline =>
+      success.withValues(alpha: isDark ? 0.30 : 0.24);
+
+  /// The faint full-width band behind a finished row — just enough to scan
+  /// what is done while the row's numbers stay the loudest thing on it.
+  Color get successBand => success.withValues(alpha: isDark ? 0.08 : 0.07);
+
+  /// Soft fill for destructive tiles and chips.
+  Color get errorWash => error.withValues(alpha: isDark ? 0.14 : 0.09);
+
+  /// Text/icons drawn on a solid [success] or [error] fill.
+  Color get onSuccess => contrastOn(success);
+  Color get onError => contrastOn(error);
 
   /// The signature gradient. Horizontal, primary → primaryLight.
   LinearGradient get primaryGradient => LinearGradient(
@@ -147,29 +199,48 @@ class AppColors {
         ),
       ];
 
-  /// Shadow for elements that float over content (nav bar, FAB, sheets).
-  List<BoxShadow> get shadowFloating => [
+  /// Small, crisp shadow for a control raised a millimetre off its track —
+  /// the segmented-control thumb. Dark palettes get a hairline rim instead
+  /// (see [raisedRim]); shadows barely register on near-black.
+  List<BoxShadow> get shadowRaised => [
         BoxShadow(
-          color: _shadowColor.withValues(alpha: isDark ? 0.55 : 0.12),
-          blurRadius: 32,
-          offset: const Offset(0, 14),
-          spreadRadius: -6,
-        ),
-        BoxShadow(
-          color: _shadowColor.withValues(alpha: isDark ? 0.30 : 0.06),
-          blurRadius: 8,
-          offset: const Offset(0, 3),
-          spreadRadius: -2,
+          color: _shadowColor.withValues(alpha: isDark ? 0.40 : 0.10),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
         ),
       ];
 
-  /// Coloured glow used sparingly on the primary CTA.
+  /// Hairline that catches the light on the top of a [raised] element.
+  Color get raisedRim => isDark
+      ? text.withValues(alpha: 0.07)
+      : _shadowColor.withValues(alpha: 0.04);
+
+  /// Shadow for elements that float over content (nav bar, FAB, sheets).
+  /// Light palettes get a stronger, crisper pair: white-on-near-white chrome
+  /// has nothing but its shadow to separate it from the page.
+  List<BoxShadow> get shadowFloating => [
+        BoxShadow(
+          color: _shadowColor.withValues(alpha: isDark ? 0.55 : 0.14),
+          blurRadius: isDark ? 32 : 28,
+          offset: const Offset(0, 12),
+          spreadRadius: -6,
+        ),
+        BoxShadow(
+          color: _shadowColor.withValues(alpha: isDark ? 0.30 : 0.09),
+          blurRadius: isDark ? 8 : 5,
+          offset: const Offset(0, 2),
+          spreadRadius: isDark ? -2 : -1,
+        ),
+      ];
+
+  /// Coloured glow for the one hero CTA on a screen. Kept tight — it lifts
+  /// the button without spilling a halo over its neighbours.
   List<BoxShadow> get shadowPrimaryGlow => [
         BoxShadow(
-          color: primary.withValues(alpha: isDark ? 0.38 : 0.28),
-          blurRadius: 24,
-          offset: const Offset(0, 10),
-          spreadRadius: -6,
+          color: primary.withValues(alpha: isDark ? 0.30 : 0.24),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+          spreadRadius: -7,
         ),
       ];
 
@@ -208,9 +279,10 @@ class AppColors {
   /// Mixes [a] and [b]. `t == 0` → a, `t == 1` → b.
   static Color blend(Color a, Color b, double t) => Color.lerp(a, b, t)!;
 
-  /// Picks black or white depending on what reads best on [background].
+  /// Picks near-black or white, whichever has the higher contrast on
+  /// [background] (the WCAG crossover sits at a luminance of ~0.18).
   static Color contrastOn(Color background) =>
-      background.computeLuminance() > 0.55 ? const Color(0xFF0B0B0F) : Colors.white;
+      background.computeLuminance() > 0.18 ? const Color(0xFF0B0B0F) : Colors.white;
 
   /// A Material swatch built from [primary].
   ///
@@ -241,13 +313,21 @@ class AppColors {
 /// the same character.
 /// ---------------------------------------------------------------------------
 class AppTheme {
-  // 0 — Ember. Deep neutral charcoal with a hot crimson accent.
+  // Colour roles every palette honours (checked with WCAG contrast and
+  // CIEDE2000 ΔE — see docs/DESIGN_SYSTEM.md):
+  //   * primary ≠ error: ΔE00 ≥ 25 and a different hue family, so a negative
+  //     delta never reads as the brand colour;
+  //   * primary ≠ success, for the same reason in green/teal palettes;
+  //   * textSecondary ≈ 6.8:1 and textTertiary ≈ 4.6:1 on card.
+
+  // 0 — Ember. Deep neutral charcoal with a glowing ember-orange accent.
+  // (Orange-red, not crimson: the error rose has to stay its own colour.)
   static const emberTheme = AppColors(
     name: 'Ember',
     isDark: true,
-    primary: Color(0xFFF43F3F),
-    primaryLight: Color(0xFFFF7849),
-    accent: Color(0xFFFF9A62),
+    primary: Color(0xFFF4511E),
+    primaryLight: Color(0xFFFF7A35),
+    accent: Color(0xFFFF9A5C),
     background: Color(0xFF0B0B0E),
     backgroundDark: Color(0xFF060608),
     card: Color(0xFF16161B),
@@ -255,20 +335,23 @@ class AppTheme {
     elevated: Color(0xFF212129),
     outline: Color(0xFF2E2E38),
     text: Color(0xFFF7F7F8),
-    textSecondary: Color(0xFF9C9CA8),
+    textSecondary: Color(0xFF9E9EAA),
+    textTertiary: Color(0xFF7F7F8A),
+    textHint: Color(0xFF767680),
     onPrimary: Color(0xFFFFFFFF),
     success: Color(0xFF34D399),
     warning: Color(0xFFFBBF24),
-    error: Color(0xFFFB7185),
+    error: Color(0xFFF87196),
   );
 
   // 1 — Blossom. Bright, airy light theme with the signature pink gradient.
+  // Error is a true red so it never blends into the pink.
   static const blossomTheme = AppColors(
     name: 'Blossom',
     isDark: false,
-    primary: Color(0xFFEC4899),
-    primaryLight: Color(0xFFF43F5E),
-    accent: Color(0xFFFB7185),
+    primary: Color(0xFFD9338A),
+    primaryLight: Color(0xFFE84FB0),
+    accent: Color(0xFFF472B6),
     background: Color(0xFFF7F7FB),
     backgroundDark: Color(0xFFEDEDF3),
     card: Color(0xFFFFFFFF),
@@ -276,19 +359,22 @@ class AppTheme {
     elevated: Color(0xFFFFFFFF),
     outline: Color(0xFFE4E4EC),
     text: Color(0xFF14141A),
-    textSecondary: Color(0xFF6B6B7B),
+    textSecondary: Color(0xFF595967),
+    textTertiary: Color(0xFF757580),
+    textHint: Color(0xFF7D7D88),
     onPrimary: Color(0xFFFFFFFF),
-    success: Color(0xFF059669),
-    warning: Color(0xFFD97706),
-    error: Color(0xFFE11D48),
+    success: Color(0xFF0B8457),
+    warning: Color(0xFFC26A07),
+    error: Color(0xFFDC2626),
   );
 
-  // 2 — Aqua. Clean light theme with a cool teal accent.
+  // 2 — Aqua. Clean light theme with a cool cyan accent. The gradient stays
+  // on the blue side of teal so it never meets the success green.
   static const aquaTheme = AppColors(
     name: 'Aqua',
     isDark: false,
-    primary: Color(0xFF0891B2),
-    primaryLight: Color(0xFF14B8A6),
+    primary: Color(0xFF0A80A0),
+    primaryLight: Color(0xFF0AA5C8),
     accent: Color(0xFF22D3EE),
     background: Color(0xFFF4F9FA),
     backgroundDark: Color(0xFFE7F1F3),
@@ -297,10 +383,12 @@ class AppTheme {
     elevated: Color(0xFFFFFFFF),
     outline: Color(0xFFDDE9EB),
     text: Color(0xFF0C1A1F),
-    textSecondary: Color(0xFF5B717A),
+    textSecondary: Color(0xFF4A5E67),
+    textTertiary: Color(0xFF67787F),
+    textHint: Color(0xFF728289),
     onPrimary: Color(0xFFFFFFFF),
-    success: Color(0xFF059669),
-    warning: Color(0xFFD97706),
+    success: Color(0xFF0B8457),
+    warning: Color(0xFFC26A07),
     error: Color(0xFFE11D48),
   );
 
@@ -309,7 +397,7 @@ class AppTheme {
     name: 'Deep Ocean',
     isDark: true,
     primary: Color(0xFF3B82F6),
-    primaryLight: Color(0xFF22D3EE),
+    primaryLight: Color(0xFF29ABEB),
     accent: Color(0xFF60A5FA),
     background: Color(0xFF080D18),
     backgroundDark: Color(0xFF04070F),
@@ -318,20 +406,23 @@ class AppTheme {
     elevated: Color(0xFF172033),
     outline: Color(0xFF26314A),
     text: Color(0xFFEEF3FB),
-    textSecondary: Color(0xFF8C9BB5),
+    textSecondary: Color(0xFF95A3BB),
+    textTertiary: Color(0xFF77849A),
+    textHint: Color(0xFF6E7B90),
     onPrimary: Color(0xFFFFFFFF),
     success: Color(0xFF34D399),
     warning: Color(0xFFFBBF24),
     error: Color(0xFFFB7185),
   );
 
-  // 4 — Evergreen. Dark theme with a calm emerald accent.
+  // 4 — Evergreen. Dark theme with a calm emerald accent. Success is lime,
+  // not green, so "done" and "positive" stay distinct from the brand colour.
   static const evergreenTheme = AppColors(
     name: 'Evergreen',
     isDark: true,
     primary: Color(0xFF10B981),
-    primaryLight: Color(0xFF6EE7B7),
-    accent: Color(0xFF34D399),
+    primaryLight: Color(0xFF5EEAD4),
+    accent: Color(0xFF2DD4BF),
     background: Color(0xFF07120D),
     backgroundDark: Color(0xFF040B07),
     card: Color(0xFF11201A),
@@ -339,9 +430,11 @@ class AppTheme {
     elevated: Color(0xFF16261F),
     outline: Color(0xFF23392F),
     text: Color(0xFFECFDF5),
-    textSecondary: Color(0xFF87A498),
+    textSecondary: Color(0xFF8EAB9F),
+    textTertiary: Color(0xFF728B81),
+    textHint: Color(0xFF6A8278),
     onPrimary: Color(0xFF04140D),
-    success: Color(0xFF34D399),
+    success: Color(0xFFA3E635),
     warning: Color(0xFFFBBF24),
     error: Color(0xFFFB7185),
   );
@@ -350,7 +443,7 @@ class AppTheme {
   static const lilacTheme = AppColors(
     name: 'Lilac',
     isDark: false,
-    primary: Color(0xFF8B5CF6),
+    primary: Color(0xFF8152F0),
     primaryLight: Color(0xFFD946EF),
     accent: Color(0xFFA78BFA),
     background: Color(0xFFF9F7FD),
@@ -360,10 +453,12 @@ class AppTheme {
     elevated: Color(0xFFFFFFFF),
     outline: Color(0xFFE6DFF6),
     text: Color(0xFF1B1330),
-    textSecondary: Color(0xFF6E6486),
+    textSecondary: Color(0xFF5F5677),
+    textTertiary: Color(0xFF79728D),
+    textHint: Color(0xFF817A95),
     onPrimary: Color(0xFFFFFFFF),
-    success: Color(0xFF059669),
-    warning: Color(0xFFD97706),
+    success: Color(0xFF0B8457),
+    warning: Color(0xFFC26A07),
     error: Color(0xFFE11D48),
   );
 
@@ -381,7 +476,9 @@ class AppTheme {
     elevated: Color(0xFF1E1E29),
     outline: Color(0xFF2E2E3D),
     text: Color(0xFFF6F5FA),
-    textSecondary: Color(0xFF9C99AE),
+    textSecondary: Color(0xFFA09EB2),
+    textTertiary: Color(0xFF817F91),
+    textHint: Color(0xFF777687),
     onPrimary: Color(0xFFFFFFFF),
     success: Color(0xFF34D399),
     warning: Color(0xFFFBBF24),
@@ -402,7 +499,9 @@ class AppTheme {
     elevated: Color(0xFF1C1C1F),
     outline: Color(0xFF2C2C31),
     text: Color(0xFFFAFAFA),
-    textSecondary: Color(0xFF8E8E96),
+    textSecondary: Color(0xFF9E9EA4),
+    textTertiary: Color(0xFF7F7F85),
+    textHint: Color(0xFF75757A),
     onPrimary: Color(0xFF0A0A0B),
     success: Color(0xFF34D399),
     warning: Color(0xFFFBBF24),

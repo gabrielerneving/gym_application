@@ -7,9 +7,9 @@ import 'ui/ui.dart';
 
 /// One exercise row inside the workout builder.
 ///
-/// Shows the movement name and a breakdown of its sets as badges. The trailing
-/// slot is either a drag affordance (while the list is in reorder mode) or an
-/// overflow action that opens the per-exercise sheet.
+/// The movement name over a one-line set breakdown. The trailing slot is a
+/// drag handle while the list is in reorder mode, and an options glyph
+/// otherwise — the whole row opens the per-exercise sheet.
 ///
 /// The constructor is part of the app's public surface — do not change it.
 class ExerciseListItem extends ConsumerWidget {
@@ -29,27 +29,33 @@ class ExerciseListItem extends ConsumerWidget {
     this.isReordering = false,
   });
 
+  /// "3 sets", or "3 sets · 1 warm-up" — working sets lead, as they are the
+  /// ones that count.
+  String get _setsLabel {
+    final working = exercise.workingSets;
+    final base = '$working ${working == 1 ? 'set' : 'sets'}';
+    return exercise.warmUpSets > 0
+        ? '$base · ${exercise.warmUpSets} warm-up'
+        : base;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
 
     return AppCard(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.lg,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
       ),
       // In reorder mode the whole row belongs to the drag gesture, so taps are
       // disabled to avoid opening the sheet mid-drag.
       onTap: isReordering ? null : onMenuPressed,
       child: Row(
         children: [
-          const IconBadge(
-            icon: Icons.fitness_center_rounded,
-            size: 42,
-            iconSize: 20,
-          ),
-          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,65 +67,24 @@ class ExerciseListItem extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppType.heading(t),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    AppBadge(
-                      label: '${exercise.workingSets} working',
-                      color: t.primary,
-                      icon: Icons.bolt_rounded,
-                    ),
-                    if (exercise.warmUpSets > 0)
-                      AppBadge(
-                        label: '${exercise.warmUpSets} warm-up',
-                        color: t.warning,
-                        icon: Icons.local_fire_department_rounded,
-                      ),
-                  ],
-                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(_setsLabel, style: AppType.secondary(t)),
               ],
             ),
           ),
           const SizedBox(width: AppSpacing.md),
-          if (isReordering)
-            _DragAffordance(theme: t)
-          else
-            AppIconButton(
-              icon: Icons.more_horiz_rounded,
-              onPressed: onMenuPressed,
-              filled: false,
-              size: 38,
-              iconSize: 22,
-              color: t.textSecondary,
+          SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(
+              isReordering
+                  ? Icons.drag_handle_rounded
+                  : Icons.more_horiz_rounded,
+              size: 22,
+              color: isReordering ? t.primary : t.textTertiary,
             ),
+          ),
         ],
-      ),
-    );
-  }
-}
-
-/// The grab handle shown while the list is in reorder mode.
-class _DragAffordance extends StatelessWidget {
-  final AppColors theme;
-
-  const _DragAffordance({required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        color: theme.primaryWash,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: theme.primaryWashOutline),
-      ),
-      child: Icon(
-        Icons.drag_handle_rounded,
-        size: 21,
-        color: theme.primary,
       ),
     );
   }

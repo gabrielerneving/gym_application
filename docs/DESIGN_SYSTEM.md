@@ -11,7 +11,9 @@ number or a `Duration(milliseconds: 250)`, stop and use a token.
 **One UI 9 / modern Android premium.** Concretely:
 
 - **Floating, detached chrome.** The nav bar is a narrow frosted pill that hovers
-  over the content. Nothing is docked to a screen edge.
+  over the content. Nothing is docked to a screen edge. On light palettes the
+  pill (and the live-workout capsule) is near-opaque white with a real rim and
+  a stronger floating shadow, so it separates from a near-white page.
 - **Generous rounding.** Cards are 24px, sheets 32px, anything interactive and
   small is a full pill.
 - **Deep, calm surfaces.** Backgrounds are near-black (dark palettes) or
@@ -19,7 +21,11 @@ number or a `Duration(milliseconds: 250)`, stop and use a token.
   slightly lighter surface + a hairline border + a very soft shadow — not with
   heavy drop shadows.
 - **One accent, used sparingly.** The primary gradient appears on *one* hero
-  element per screen. Everything else is neutral with coloured text/icons.
+  element per screen (the CTA: Finish / Resume / Save, or one hero tile).
+  Everything else is flat. The nav bar's active tab is a quiet primary wash,
+  never the gradient, so it does not compete with the screen's CTA.
+- **Neutral surfaces carry the layout; colour carries meaning** (colour roles
+  in section 3). Idle, untouched things are neutral, never accent-tinted.
 - **Big confident numbers.** Metrics are large, tight-tracked and tabular.
   Labels are small, quiet and sentence case.
 - **Everything moves — briefly.** Content fades and lifts in, taps dip, numbers
@@ -61,16 +67,50 @@ Surface hierarchy, lowest → highest:
 |---|---|
 | `primary`, `primaryLight`, `accent` | the brand accent + gradient stops |
 | `onPrimary` | text/icons on top of `primary`. **Never hardcode `Colors.white`** — half the palettes are light. |
-| `text`, `textSecondary`, `textTertiary` | three levels of text |
+| `text`, `textSecondary`, `textTertiary` | three levels of text (contrast targets below) |
+| `textHint` | placeholders / hints in input wells (last time's value, "Note", "Search…") — one quiet step under tertiary |
 | `outline`, `divider` | hairlines |
-| `success`, `warning`, `error` | semantic states |
+| `success`, `warning`, `error` | semantic states (roles below) |
+| `onSuccess`, `onError` | text/icons on a solid `success` / `error` fill |
+| `successWash`, `successWashOutline` | done tile / chip fill and its border — the success twin of `primaryWash` |
+| `successBand` | the faint full-width band behind a finished row |
+| `errorWash` | soft fill for destructive tiles / chips |
 | `primaryWash`, `primaryWashOutline` | soft tinted fills for selected states |
+| `neutralWash` | translucent neutral fill that reads one step up from *any* surface — idle icon tiles, off switch tracks |
+| `raised`, `raisedRim`, `shadowRaised` | a control raised off its track (segmented thumb). On dark, raised = **lighter** |
 | `isDark` | branch on this instead of checking a theme *index* |
 
 Helpers: `primaryGradient`, `primaryGradientDiagonal`, `chartFillGradient`,
 `shadowSoft`, `shadowMedium`, `shadowFloating`, `shadowPrimaryGlow`,
 `dataPalette` / `dataColor(i)` (categorical chart colours), `deltaColor(n)`,
-`glass`, `scrim`.
+`glass`, `scrim`, `AppColors.contrastOn(c)` (near-black or white, whichever
+has more contrast on `c`).
+
+**Colour roles.** Every palette is built so these never collide:
+
+| Role | Colour | Never for |
+|---|---|---|
+| Actions, CTAs, the current selection | `primary` (gradient only on the one hero) | idle / untouched things |
+| Done, positive change | `success` | decoration |
+| Negative change, destructive actions | `error` | anything merely "important" |
+| Warm-up marker | `warning`, sparingly | general emphasis |
+| Everything else | neutrals (`text*`, `surface`, `neutralWash`) | — |
+
+Per-palette guarantees (checked with WCAG contrast and CIEDE2000 ΔE):
+`primary` vs `error` ΔE00 ≥ 25 and a different hue family — Ember's primary
+is an ember orange-red and its error a rose; Blossom's primary is pink and its
+error a true red. `primary` vs `success` likewise — Evergreen's success is
+lime, not green; Aqua's gradient stays on the blue side of teal.
+
+**Contrast targets.** `text` ≥ 15:1. `textSecondary` ≈ 6.8:1 on `card`.
+`textTertiary` is an opaque per-palette colour at ≈ 4.6:1 on `card` (≥ 4:1 on
+`surface`/`elevated`): readable for table headers, hints, exercise lists and
+descriptions at arm's length, still a clear step below secondary.
+Placeholders/hints use `textHint`: ≈ 3.6:1 on `surface` (≥ 3.4:1 on
+`elevated` and on a `successBand` row) in every palette — legible at arm's
+length, never mistaken for an entered value. Input decoration hints use it. Light palettes' `success` is `#0B8457`
+(4.7:1 on white). On the primary gradient, labels and deltas are `onPrimary`,
+never semantic green/red (≈ 1.5:1 there).
 
 > The old code branched on `themeIndex == 1` to decide whether to show a
 > gradient. That is gone — every palette now has a real gradient and a real
@@ -117,37 +157,65 @@ AppScaffold(
   body: LoadingState(),                // replaces the scroll body entirely
 )
 ```
-Gives you the collapsing large title, the frosted toolbar, ambient glow,
-status-bar styling and nav-bar clearance. The back chevron appears
-automatically when the route can pop.
+Gives you the collapsing large title, ambient glow, status-bar styling and
+nav-bar clearance. The back chevron appears automatically when the route can
+pop.
+
+Header behaviour:
+- **Root pages** (no back chevron: the tabs) put the large title directly
+  under the status bar, on the same row as `actions` — no empty toolbar row
+  above it. **Pushed pages** keep a toolbar row (back + actions) with the
+  large title under it.
+- The large title moves 1:1 with the content and fades; a compact inline
+  title fades in once it has gone.
+- Collapsed, the header paints the page itself (background plus the same
+  ambient glow at the same screen position) and dissolves into the content
+  over a 20pt eased fade below its edge. No frosted band, no blur, no hard
+  bottom line.
 
 `AppPage(child: ...)` — bare shell (no header) for full-bleed screens.
 
 ### Surfaces
 - `AppCard(child:, onTap:, gradient:, inset:, padding:, radius:)`
 - `GlassSurface(child:)` — frosted; only where content scrolls underneath.
-- `IconBadge(icon:, filled:, color:)` — the rounded icon square in a row.
-- `AppTile(icon:, title:, subtitle:, onTap:, trailing:, bare:)` — nav row.
+- `IconBadge(icon:, filled:, color:, neutral:)` — the rounded icon square in
+  a row. `neutral: true` = `neutralWash` tile with a `text` icon (idle rows);
+  `color:` tints it (rows whose icon *means* something); `filled:` = gradient.
+- `AppTile(icon:, title:, subtitle:, onTap:, trailing:, bare:, destructive:)` —
+  nav row. Its icon tile is **neutral by default**; `iconColor:` tints it;
+  `destructive: true` (or `iconColor: t.error`) makes tile *and* title
+  error-toned.
 - `AppTileGroup(children: [AppTile(bare: true), ...])` — settings-style group.
 
 ### Controls
 - `AppButton(label:, onPressed:, icon:, expand:, loading:, size:)` plus
-  `.secondary` `.outline` `.ghost` `.danger` named constructors.
+  `.secondary` `.outline` `.ghost` `.danger` named constructors. The primary
+  variant glows (tightly) at medium/large size only; a `small` primary in a
+  toolbar or row has no glow. `radius:` overrides the 16pt corners — pass
+  `AppRadius.pill` for a button inside a pill/capsule so the corners nest.
 - `AppIconButton(icon:, onPressed:, tooltip:, active:)`
 - `AppFab(icon:, label:, onPressed:)`
-- `AppSegmented<T>(value:, segments: [AppSegment(value:, label:)], onChanged:)`
+- `AppSegmented<T>(value:, segments: [AppSegment(value:, label:)], onChanged:)` —
+  the selected thumb is `raised` (lighter than the track on dark, white on
+  light), so it reads as selected, never as a hole.
 - `AppChip(label:, selected:, onTap:)`
 - `AppBadge(label:, color:, icon:)`
-- `DeltaBadge(delta:, percent:, unit:, compact:, higherIsWorse:)`
+- `DeltaBadge(delta:, percent:, unit:, compact:, higherIsWorse:, color:, onGradient:)` —
+  `success` up / `error` down. `onGradient: true` on the primary gradient
+  (renders `onPrimary`); `color:` forces one colour.
 
 ### Data display
-- `StatTile(label:, value:, unit:, icon:, delta:, sparkline:, highlight:)`
+- `StatTile(label:, value:, unit:, icon:, delta:, sparkline:, highlight:)` —
+  `highlight` paints the gradient; everything on it (label, icon, delta)
+  turns `onPrimary`.
 - `StatGrid(children: [...])` — 2-up responsive grid, staggers its children.
+  Adds no padding of its own (it used to inherit the safe-area insets).
 - `MetricRow(label:, value:)` — label/value line inside a card.
 - `StatBar(label:, value:, max:, valueLabel:, targetMin:, targetMax:)`
 - `Sparkline(values:, color:)` — tiny trend line, no axes.
 - `ProgressRing(progress:, label:, sublabel:)`
-- `WeekStrip(days: [bool], labels: [...])`
+- `WeekStrip(days: [bool], labels: [...])` — a trained day is *done*: flat
+  `success` dot with an `onSuccess` check.
 
 ### Motion
 - `FadeSlideIn(index: i, child: ...)` — entrance; wrap list items with their index.
@@ -158,7 +226,11 @@ automatically when the route can pop.
 ### Feedback
 - `EmptyState(icon:, title:, message:, actionLabel:, onAction:)` — always offer an action.
 - `LoadingState(message:)`, `ErrorState(message:, onRetry:)`
-- `SkeletonBox`, `SkeletonCard` — shimmer placeholders, preferred over a lone spinner.
+- `SkeletonBox`, `SkeletonCard` — shimmer placeholders, preferred over a lone
+  spinner. `SkeletonCard` fits its placeholder lines to its height.
+- `BalancedText(text, style:, textAlign:)` — short centred copy that wraps into
+  even lines instead of leaving an orphan word (CSS `text-wrap: balance`).
+  `AppDialog`, `EmptyState` and `ErrorState` use it for title and message.
 - `AppSnack.show(context, ref, 'Saved', isError: false)`
 
 ### Modals
@@ -169,6 +241,14 @@ final ok = await AppDialog.confirm(context: context, ref: ref,
     title: 'Delete workout?', message: '…', confirmLabel: 'Delete', destructive: true);
 AppDialog.info(context: context, ref: ref, title: '…', message: '…');
 ```
+Sheet titles are 19pt bold (`sheetTitleStyle(t)` if you draw your own
+header). `AppSheet.actions` takes `subtitle:` too ("Set 3" / "Bench Press"). `SheetAction` rows use neutral icon tiles; `destructive: true` rows
+get an error tile and an error label.
+
+The Material `Switch` is themed: on = `primary` track; off = `neutralWash`
+track with a `textTertiary` rim and a `textSecondary` knob, legible in every
+palette.
+
 **No raw `AlertDialog` / `showModalBottomSheet` / `SnackBar` anywhere.**
 
 ---
@@ -209,10 +289,24 @@ Refresh after a workout is saved: `ref.invalidate(workoutSessionsProvider)`.
 collection per exercise — that N+1 pattern is what the analytics layer replaces.
 
 Definitions used consistently everywhere:
-- *working set* = `!isWarmUp && weight > 0 && reps > 0`
-- *volume / tonnage* = Σ `weight × reps` over working sets
+- *logged / done set* = `reps > 0` — weight 0 is a bodyweight set
+  (`isSetLogged` in `lib/utils/placeholder_history.dart`)
+- *working set* = `!isWarmUp && reps > 0` (`AnalyticsService.isWorkingSet`)
+- *weighted set* = working set with `weight > 0` (`isWeightedSet`) — the only
+  input to top weight, estimated 1RM and weight PRs
+- *volume / tonnage* = Σ `weight × reps` over working sets (bodyweight adds 0)
 - *estimated 1RM* = Epley, only from sets of ≤ 12 reps
 - *week* starts Monday
+- Step dates with calendar arithmetic (`AnalyticsService.addDays`), never
+  `Duration(days: …)` — across a DST change that lands on 23:00 the day before.
+- Empty sets and skipped exercises are not saved by new sessions, but old
+  sessions may contain them; `TrainingData.sessions` already excludes
+  sessions with nothing logged.
+
+**Active workout hints.** Empty fields show last time's value as a grey hint,
+built by `buildPlaceholders` from the most recent session where that set was
+logged (same program first, then any program). Typing only one of weight/reps
+adopts the hint for the other.
 
 ---
 
@@ -243,5 +337,9 @@ Definitions used consistently everywhere:
 10. **Every screen handles all four states**: loading (skeleton), empty
     (`EmptyState` with an action), error (`ErrorState` with retry), content.
 11. Scroll views inside the four main tabs must end with
-    `AppSpacing.navBarClearance` of bottom padding (`AppScaffold` does it).
+    `AppSpacing.navBarClearance` + `MediaQuery.padding.bottom` of bottom
+    padding (`AppScaffold` does it). Read the inset — never hardcode it: while
+    a workout is live the shell inflates `padding.bottom` by
+    `NavBarMetrics.accessoryClearance` so content clears the floating
+    workout pill (`FloatingCapsule`) above the nav bar.
 12. Prefer `Icons.*_rounded` variants — they match the soft geometry.

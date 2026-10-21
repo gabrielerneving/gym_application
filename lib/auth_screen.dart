@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,9 +20,13 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
+  /// Snack duration for messages people need to actually read.
+  static const Duration _longMessage = Duration(seconds: 4);
+
   // Enkel state för att växla mellan Login och Register
   bool _isLogin = true;
   bool _isLoading = false;
+  bool _isSendingReset = false;
   bool _obscurePassword = true;
 
   final _formKey = GlobalKey<FormState>();
@@ -46,6 +49,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
+  /// Tangentbordets autokorrigering lägger gärna till ett mellanslag sist.
+  String get _email => _emailController.text.trim();
+
+  static bool _looksLikeEmail(String value) {
+    final at = value.indexOf('@');
+    return at > 0 && at < value.length - 1 && !value.contains(' ');
+  }
+
   void _toggleMode() {
     FocusManager.instance.primaryFocus?.unfocus();
     HapticFeedback.selectionClick();
@@ -57,53 +68,98 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     setState(() => _obscurePassword = !_obscurePassword);
   }
 
-  void _submitAuthForm() async {
+  Future<void> _submitAuthForm() async {
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) {
+    if (!isValid) return;
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _isLoading = true);
+
+    final password = _passwordController.text;
+
+    try {
+      final user =
+          _isLogin
+              ? await _authService.signInWithEmailAndPassword(_email, password)
+              : await _authService.registerWithEmailAndPassword(
+                _email,
+                password,
+              );
+
+      // Lyckas det navigerar AuthGate automatiskt vidare till appen.
+      if (user == null && mounted) {
+        AppSnack.show(
+          context,
+          ref,
+          AuthService.messageFor('unknown'),
+          isError: true,
+        );
+      }
+    } on AuthFailure catch (e) {
+      if (mounted) {
+        AppSnack.show(
+          context,
+          ref,
+          e.message,
+          isError: true,
+          duration: _longMessage,
+        );
+      }
+    } catch (e) {
+      debugPrint('Auth failed: $e');
+      if (mounted) {
+        AppSnack.show(
+          context,
+          ref,
+          AuthService.messageFor('unknown'),
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _email;
+    if (!_looksLikeEmail(email)) {
+      AppSnack.show(
+        context,
+        ref,
+        'Enter your email above first.',
+        isError: true,
+      );
+      _emailFocus.requestFocus();
       return;
     }
 
     FocusManager.instance.primaryFocus?.unfocus();
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Hämta e-post och lösenord från controllers
-    final email = _emailController.text;
-    final password = _passwordController.text;
-
-    User? user;
+    setState(() => _isSendingReset = true);
 
     try {
-      if (_isLogin) {
-        user = await _authService.signInWithEmailAndPassword(email, password);
-      } else {
-        user = await _authService.registerWithEmailAndPassword(email, password);
-      }
-
-      // Om vi får tillbaka en användare (dvs. inloggning/registrering lyckades)
-      // navigerar AuthGate automatiskt vidare till appen.
-      if (user == null && mounted) {
-        // Visa ett felmeddelande om något gick fel
+      await _authService.sendPasswordResetEmail(email);
+      if (mounted) {
+        // Firebase säger inte om kontot finns, så det gör inte vi heller.
         AppSnack.show(
           context,
           ref,
-          'Could not sign you in. Please check your credentials.',
-          isError: true,
+          'If $email has an account, a reset link is on its way.',
+          icon: Icons.mark_email_read_rounded,
+          duration: _longMessage,
         );
       }
-    } catch (e) {
-      // Visa generiskt felmeddelande
+    } on AuthFailure catch (e) {
       if (mounted) {
-        AppSnack.show(context, ref, 'An error occurred: $e', isError: true);
+        AppSnack.show(
+          context,
+          ref,
+          e.message,
+          isError: true,
+          duration: _longMessage,
+        );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isSendingReset = false);
     }
   }
 
@@ -140,150 +196,143 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   Widget _buildFormCard(AppColors t) {
+    final busy = _isLoading || _isSendingReset;
+
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.xxl),
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: AnimatedSize(
-          duration: AppMotion.normal,
-          curve: AppMotion.standard,
-          alignment: Alignment.topCenter,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwapTransitionBox(
-                value: _isLogin,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _isLogin ? 'Welcome back' : 'Create your account',
-                      style: AppType.title(t),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      _isLogin
-                          ? 'Sign in to pick up where you left off.'
-                          : 'Start logging every set in under a minute.',
-                      style: AppType.secondary(t),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-
-              // E-post fält
-              TextFormField(
-                controller: _emailController,
-                focusNode: _emailFocus,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autocorrect: false,
-                enableSuggestions: false,
-                enabled: !_isLoading,
-                style: AppType.body(t),
-                cursorColor: t.primary,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'you@example.com',
-                  prefixIcon: Icon(
-                    Icons.alternate_email_rounded,
-                    size: 19,
-                    color: t.textSecondary,
+        // Lets password managers fill the pair, and offer to save it.
+        child: AutofillGroup(
+          child: AnimatedSize(
+            duration: AppMotion.normal,
+            curve: AppMotion.standard,
+            alignment: Alignment.topCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SwapTransitionBox(
+                  value: _isLogin,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _isLogin ? 'Welcome back' : 'Create your account',
+                    style: AppType.title(t),
                   ),
                 ),
-                onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-                validator: (value) {
-                  if (value == null || !value.contains('@')) {
-                    return 'Please enter a valid email address.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.xl),
 
-              // Lösenord fält
-              TextFormField(
-                controller: _passwordController,
-                focusNode: _passwordFocus,
-                obscureText: _obscurePassword,
-                textInputAction: TextInputAction.done,
-                autocorrect: false,
-                enableSuggestions: false,
-                enabled: !_isLoading,
-                style: AppType.body(t),
-                cursorColor: t.primary,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(
-                    Icons.lock_outline_rounded,
-                    size: 19,
-                    color: t.textSecondary,
-                  ),
-                  suffixIcon: IconButton(
-                    onPressed: _togglePasswordVisibility,
-                    tooltip:
-                        _obscurePassword ? 'Show password' : 'Hide password',
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded,
+                // E-post fält
+                TextFormField(
+                  controller: _emailController,
+                  focusNode: _emailFocus,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: const [AutofillHints.email],
+                  enabled: !busy,
+                  style: AppType.body(t),
+                  cursorColor: t.primary,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(
+                      Icons.alternate_email_rounded,
                       size: 19,
                       color: t.textSecondary,
                     ),
                   ),
+                  onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                  validator:
+                      (value) =>
+                          _looksLikeEmail((value ?? '').trim())
+                              ? null
+                              : 'Enter a valid email address.',
                 ),
-                onFieldSubmitted: (_) {
-                  if (!_isLoading) _submitAuthForm();
-                },
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return 'Password must be at least 6 characters long.';
-                  }
-                  return null;
-                },
-              ),
+                const SizedBox(height: AppSpacing.lg),
 
-              // Only sign-up needs the rule spelled out up front.
-              if (!_isLogin) ...[
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 15,
-                      color: t.textTertiary,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Use at least 6 characters. You cannot change your '
-                        'email later.',
-                        style: AppType.caption(t),
-                      ),
-                    ),
+                // Lösenord fält
+                TextFormField(
+                  controller: _passwordController,
+                  focusNode: _passwordFocus,
+                  obscureText: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: [
+                    _isLogin
+                        ? AutofillHints.password
+                        : AutofillHints.newPassword,
                   ],
+                  enabled: !busy,
+                  style: AppType.body(t),
+                  cursorColor: t.primary,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    // Only sign-up needs the rule spelled out up front.
+                    helperText: _isLogin ? null : 'At least 6 characters',
+                    prefixIcon: Icon(
+                      Icons.lock_outline_rounded,
+                      size: 19,
+                      color: t.textSecondary,
+                    ),
+                    suffixIcon: AppIconButton(
+                      icon:
+                          _obscurePassword
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                      tooltip:
+                          _obscurePassword ? 'Show password' : 'Hide password',
+                      onPressed: _togglePasswordVisibility,
+                      filled: false,
+                      size: 36,
+                      iconSize: 19,
+                      color: t.textSecondary,
+                    ),
+                  ),
+                  onFieldSubmitted: (_) {
+                    if (!busy) _submitAuthForm();
+                  },
+                  validator:
+                      (value) =>
+                          (value == null || value.length < 6)
+                              ? 'Password must be at least 6 characters.'
+                              : null,
+                ),
+
+                if (_isLogin)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    // A Row, not an Align: given a bounded width the button
+                    // stretches to fill it and its label ends up centred.
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AppButton.ghost(
+                          label: 'Forgot password?',
+                          size: AppButtonSize.small,
+                          loading: _isSendingReset,
+                          onPressed: busy ? null : _resetPassword,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  const SizedBox(height: AppSpacing.xl),
+
+                const SizedBox(height: AppSpacing.md),
+
+                // Submit-knapp
+                AppButton(
+                  label: _isLogin ? 'Sign in' : 'Create account',
+                  onPressed: busy ? null : _submitAuthForm,
+                  loading: _isLoading,
+                  expand: true,
+                  size: AppButtonSize.large,
                 ),
               ],
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              // Submit-knapp
-              AppButton(
-                label: _isLogin ? 'Sign in' : 'Create account',
-                onPressed: _isLoading ? null : _submitAuthForm,
-                loading: _isLoading,
-                expand: true,
-                size: AppButtonSize.large,
-                icon: _isLogin
-                    ? Icons.login_rounded
-                    : Icons.person_add_rounded,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -300,16 +349,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         children: [
           Flexible(
             child: Text(
-              _isLogin
-                  ? "Don't have an account?"
-                  : 'Already have an account?',
+              _isLogin ? 'New here?' : 'Already have an account?',
               style: AppType.secondary(t),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           AppButton.ghost(
-            label: _isLogin ? 'Register' : 'Login',
+            label: _isLogin ? 'Create account' : 'Sign in',
             onPressed: _isLoading ? null : _toggleMode,
             size: AppButtonSize.small,
           ),
@@ -331,15 +378,22 @@ class _Wordmark extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // The mark on a plain raised tile, the accent only in the glyph — the
+        // Sign in button below is the one gradient on the screen.
         Container(
-          width: 62,
-          height: 62,
+          width: 64,
+          height: 64,
           decoration: BoxDecoration(
-            gradient: t.primaryGradientDiagonal,
+            color: t.card,
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            boxShadow: t.shadowPrimaryGlow,
+            border: Border.all(color: t.outline),
+            boxShadow: t.shadowMedium,
           ),
-          child: Icon(Icons.bolt_rounded, size: 32, color: t.onPrimary),
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: t.primaryGradientDiagonal.createShader,
+            child: const Icon(Icons.bolt_rounded, size: 34),
+          ),
         ),
         const SizedBox(height: AppSpacing.xl),
         Text(

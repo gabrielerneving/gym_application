@@ -40,11 +40,16 @@ class AppSegmented<T> extends ConsumerWidget {
     final selectedIndex = segments.indexWhere((s) => s.value == value);
     final index = selectedIndex < 0 ? 0 : selectedIndex;
 
+    // The thumb must read as *raised* in both modes: on dark palettes that
+    // means lighter than the track (a darker thumb reads as a hole), on light
+    // palettes the white card on a grey track.
+    final track = t.isDark ? t.card : t.surface;
+
     return Container(
       height: height,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: t.surface,
+        color: track,
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: t.outline),
       ),
@@ -67,9 +72,10 @@ class AppSegmented<T> extends ConsumerWidget {
                 width: segmentWidth,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: t.card,
+                    color: t.raised,
                     borderRadius: BorderRadius.circular(AppRadius.pill),
-                    boxShadow: t.shadowSoft,
+                    border: Border.all(color: t.raisedRim),
+                    boxShadow: t.shadowRaised,
                   ),
                 ),
               ),
@@ -272,6 +278,14 @@ class DeltaBadge extends ConsumerWidget {
   final double fontSize;
   final bool compact;
 
+  /// Forces one colour regardless of sign (the arrow and the sign still say
+  /// which way it went).
+  final Color? color;
+
+  /// Drawn on the primary gradient (a hero tile): renders in onPrimary.
+  /// Semantic green/red on the gradient is ~1.5:1 — unreadable.
+  final bool onGradient;
+
   const DeltaBadge({
     super.key,
     required this.delta,
@@ -280,6 +294,8 @@ class DeltaBadge extends ConsumerWidget {
     this.higherIsWorse = false,
     this.fontSize = 12,
     this.compact = false,
+    this.color,
+    this.onGradient = false,
   });
 
   @override
@@ -289,7 +305,9 @@ class DeltaBadge extends ConsumerWidget {
     final positive = delta > 0;
     final neutral = delta == 0;
     final good = higherIsWorse ? !positive : positive;
-    final tone = neutral ? t.textSecondary : (good ? t.success : t.error);
+    final tone = onGradient
+        ? t.onPrimary
+        : color ?? (neutral ? t.textSecondary : (good ? t.success : t.error));
 
     final magnitude = percent
         ? '${delta.abs().toStringAsFixed(delta.abs() < 10 ? 1 : 0)}%'
@@ -305,8 +323,11 @@ class DeltaBadge extends ConsumerWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: fontSize + 3, color: tone),
-          const SizedBox(width: 3),
+          // No change is just the dash — an icon in front read as "— —".
+          if (!neutral || percent) ...[
+            Icon(icon, size: fontSize + 3, color: tone),
+            const SizedBox(width: 3),
+          ],
           Text(
             text,
             style: TextStyle(
@@ -322,14 +343,17 @@ class DeltaBadge extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: t.isDark ? 0.15 : 0.10),
+        color: tone.withValues(alpha: onGradient ? 0.20 : (t.isDark ? 0.15 : 0.10)),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: fontSize + 3, color: tone),
-          const SizedBox(width: 3),
+          // No change is just the dash — an icon in front read as "— —".
+          if (!neutral || percent) ...[
+            Icon(icon, size: fontSize + 3, color: tone),
+            const SizedBox(width: 3),
+          ],
           Text(
             text,
             style: TextStyle(

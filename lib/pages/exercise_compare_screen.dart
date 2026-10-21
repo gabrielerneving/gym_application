@@ -124,7 +124,7 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
         title: _title,
         subtitle: period.longLabel,
         body: ErrorState(
-          message: 'Could not load your training history.\n$error',
+          message: 'Could not load your training history.',
           onRetry: () => ref.invalidate(workoutSessionsProvider),
         ),
       ),
@@ -149,10 +149,11 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
         ? data.exerciseProgress
         : AnalyticsService.allExerciseProgress(scoped);
 
-    // Keep the recency ordering from the analytics layer.
-    final names = data.exerciseNames
-        .where((name) => (progressByName[name]?.points.length ?? 0) > 0)
-        .toList();
+    // Lifts with an estimated 1RM in the window, in the analytics layer's
+    // recency order. Bodyweight-only and high-rep-only lifts have nothing to
+    // put on a 1RM axis.
+    int rated(String name) => progressByName[name]?.ratedPoints.length ?? 0;
+    final names = data.exerciseNames.where((name) => rated(name) > 0).toList();
 
     if (names.length < 2) {
       return AppScaffold(
@@ -164,11 +165,12 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
           icon: Icons.compare_arrows_rounded,
           title: isAllTime ? 'Nothing to compare yet' : 'Not enough in view',
           message: isAllTime
-              ? 'Log working sets for at least two different exercises and you '
-                  'can put them head to head here.'
-              : 'Fewer than two exercises have working sets in the '
-                  '${period.longLabel.toLowerCase()} window. Widen the period '
-                  'to compare.',
+              ? 'Log loaded sets of ${AnalyticsService.maxOneRmReps} reps or '
+                  'fewer for two different exercises and you can put them '
+                  'head to head here.'
+              : 'Fewer than two exercises have a 1RM estimate in the '
+                  '${period.longLabel.toLowerCase()}. Widen the period to '
+                  'compare.',
           actionLabel: isAllTime ? 'Go back' : 'Show all time',
           onAction: () {
             if (isAllTime) {
@@ -191,9 +193,7 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
     final progressB = progressByName[nameB] ??
         ExerciseProgress(name: nameB, points: const []);
 
-    final counts = <String, int>{
-      for (final name in names) name: progressByName[name]?.points.length ?? 0,
-    };
+    final counts = <String, int>{for (final name in names) name: rated(name)};
 
     final colorA = t.dataColor(0);
     final colorB = t.dataColor(1);
@@ -213,7 +213,7 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
                 child: _PickCard(
                   slot: 'A',
                   exercise: nameA,
-                  sessionCount: progressA.points.length,
+                  sessionCount: progressA.ratedPoints.length,
                   color: colorA,
                   onTap: () => _pick(
                     names: names,
@@ -230,7 +230,7 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
                 child: _PickCard(
                   slot: 'B',
                   exercise: nameB,
-                  sessionCount: progressB.points.length,
+                  sessionCount: progressB.ratedPoints.length,
                   color: colorB,
                   onTap: () => _pick(
                     names: names,
@@ -280,10 +280,10 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
           colorB: colorB,
         ),
         const SizedBox(height: AppSpacing.md),
-        _FootNote(
-          text: 'Estimated 1RM uses the Epley formula on your heaviest set of '
-              '12 reps or fewer. Trend is a least-squares fit across the '
-              'sessions in view.',
+        const _FootNote(
+          text: 'Estimated 1RM uses Epley on the best set of '
+              '${AnalyticsService.maxOneRmReps} reps or fewer. The verdict '
+              'compares weekly 1RM growth, scaled to each lift\'s size.',
         ),
       ],
     );
@@ -306,7 +306,7 @@ class _ExerciseCompareScreenState extends ConsumerState<ExerciseCompareScreen> {
         ? 'across your whole history'
         : 'over the ${period.longLabel.toLowerCase()}';
 
-    if (a.points.length < 2 || b.points.length < 2) {
+    if (a.ratedPoints.length < 2 || b.ratedPoints.length < 2) {
       return 'Log at least two sessions of both lifts $window and the trend '
           'comparison lands here.';
     }
@@ -424,18 +424,11 @@ class _CompareChartCard extends ConsumerWidget {
   });
 
   /// Absolute kilos, or percentage change from each lift's own starting point.
+  /// Both line up with [ExerciseProgress.ratedPoints].
   static List<double> _values(ExerciseProgress progress, _CompareMode mode) {
     final raw = progress.oneRmSeries;
-    if (mode == _CompareMode.absolute) return raw;
-
-    var base = 0.0;
-    for (final value in raw) {
-      if (value > 0) {
-        base = value;
-        break;
-      }
-    }
-    if (base <= 0) return List<double>.filled(raw.length, 0.0);
+    if (mode == _CompareMode.absolute || raw.isEmpty) return raw;
+    final base = raw.first;
     return [for (final value in raw) ((value - base) / base) * 100];
   }
 
@@ -446,7 +439,7 @@ class _CompareChartCard extends ConsumerWidget {
   ) {
     return ProgressionSeries(
       label: progress.name,
-      dates: [for (final point in progress.points) point.date],
+      dates: [for (final point in progress.ratedPoints) point.date],
       values: _values(progress, mode),
       color: color,
       unit: mode == _CompareMode.absolute ? 'kg' : '%',
@@ -478,11 +471,9 @@ class _CompareChartCard extends ConsumerWidget {
                 const SizedBox(height: 3),
                 Text(
                   isRelative
-                      ? 'Percentage change from each lift\'s first session in '
-                          'view'
-                      : 'Raw kilos — useful only when the two lifts are '
-                          'similar in size',
-                  style: AppType.caption(t),
+                      ? 'Change since each lift\'s first session'
+                      : 'Raw kilos. Fairest for lifts of a similar size',
+                  style: AppType.secondary(t),
                 ),
               ],
             ),
@@ -520,15 +511,10 @@ class _VerdictCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded, size: 17, color: t.onPrimary),
-              const SizedBox(width: 6),
-              Text(
-                'VERDICT',
-                style: AppType.overline(t).copyWith(color: t.onPrimary),
-              ),
-            ],
+          Text(
+            'VERDICT',
+            style: AppType.overline(t)
+                .copyWith(color: t.onPrimary.withValues(alpha: 0.9)),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
@@ -538,12 +524,6 @@ class _VerdictCard extends ConsumerWidget {
               fontSize: 19,
               height: 1.3,
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Based on weekly 1RM growth, scaled to each lift\'s own size.',
-            style: AppType.secondary(t)
-                .copyWith(color: t.onPrimary.withValues(alpha: 0.82)),
           ),
         ],
       ),
@@ -746,11 +726,37 @@ class _ComparisonRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
 
-    TextStyle styleFor(bool wins, Color color) => AppType.mono(
+    // The better number is the bold one, marked with its lift's dot. The
+    // series colours stay off the digits: series A is the primary colour, and
+    // a red "+12.6%" reads as a loss.
+    TextStyle styleFor(bool wins) => AppType.mono(
           t,
           size: 13.5,
           weight: wins ? FontWeight.w800 : FontWeight.w600,
-        ).copyWith(color: wins ? color : t.textSecondary);
+        ).copyWith(color: wins ? t.text : t.textSecondary);
+
+    Widget cell(String value, bool wins, Color color) => Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (wins) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
+                style: styleFor(wins),
+              ),
+            ),
+          ],
+        );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.md - 2),
@@ -767,24 +773,12 @@ class _ComparisonRow extends ConsumerWidget {
           ),
           Expanded(
             flex: 4,
-            child: Text(
-              row.valueA,
-              maxLines: 1,
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: styleFor(row.winner == 0, colorA),
-            ),
+            child: cell(row.valueA, row.winner == 0, colorA),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             flex: 4,
-            child: Text(
-              row.valueB,
-              maxLines: 1,
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: styleFor(row.winner == 1, colorB),
-            ),
+            child: cell(row.valueB, row.winner == 1, colorB),
           ),
         ],
       ),

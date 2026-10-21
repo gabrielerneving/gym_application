@@ -5,11 +5,19 @@ import '../theme/app_theme.dart';
 
 /// StateNotifier that manages the app theme
 class ThemeNotifier extends StateNotifier<AppColors> {
-  ThemeNotifier() : super(AppTheme.darkRedTheme) {
-    _loadTheme();
+  /// [initialIndex] is read in `main()` before the first frame, so the app
+  /// opens straight into the saved palette instead of flashing the default.
+  ThemeNotifier({int? initialIndex})
+    : super(
+        initialIndex == null
+            ? AppTheme.darkRedTheme
+            : AppTheme.getThemeByIndex(initialIndex),
+      ) {
+    if (initialIndex == null) _loadTheme();
   }
 
-  static const String _themeKey = 'app_theme_index';
+  static const String themeKey = 'app_theme_index';
+  static const String _themeKey = themeKey;
 
   /// Load saved theme from SharedPreferences
   Future<void> _loadTheme() async {

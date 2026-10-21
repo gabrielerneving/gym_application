@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
@@ -22,11 +23,32 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  final results = await Future.wait<Object?>([
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    _savedThemeIndex(),
+  ]);
+  final savedTheme = results[1] as int?;
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Saved palette from the first frame — no flash of the default theme.
+        themeProvider.overrideWith(
+          (ref) => ThemeNotifier(initialIndex: savedTheme ?? 0),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
+}
+
+Future<int?> _savedThemeIndex() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(ThemeNotifier.themeKey);
+  } catch (_) {
+    return null;
+  }
 }
 
 class MyApp extends ConsumerWidget {

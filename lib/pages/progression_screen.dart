@@ -8,64 +8,45 @@ import '../widgets/progression_chart_widget.dart';
 import '../widgets/ui/ui.dart';
 import 'exercise_compare_screen.dart';
 
-/// The three ways of looking at one lift over time.
+/// The ways of looking at one lift over time. Loaded lifts get the first
+/// three; a lift only ever done at bodyweight has no kilos to chart and gets
+/// the two rep metrics instead.
 enum _ProgressionMetric {
-  oneRm(
-    'Est. 1RM',
-    'Estimated 1RM',
-    'Epley estimate from your heaviest set of 12 reps or fewer',
-    'kg',
-  ),
-  weight(
-    'Top weight',
-    'Top weight',
-    'The heaviest working set in each session',
-    'kg',
-  ),
-  volume(
-    'Volume',
-    'Session volume',
-    'Weight × reps across every working set',
-    'kg',
-  );
+  oneRm('Est. 1RM', 'kg'),
+  weight('Top weight', 'kg'),
+  volume('Volume', 'kg'),
+  bestReps('Best set', 'reps'),
+  totalReps('Total reps', 'reps');
 
-  const _ProgressionMetric(this.label, this.title, this.description, this.unit);
+  const _ProgressionMetric(this.label, this.unit);
 
   /// Segment label — kept short so three fit on one row.
   final String label;
-
-  /// Heading above the chart.
-  final String title;
-
-  final String description;
   final String unit;
+
+  static const List<_ProgressionMetric> loaded = [oneRm, weight, volume];
+  static const List<_ProgressionMetric> bodyweight = [bestReps, totalReps];
 
   double valueOf(ExercisePoint point) => switch (this) {
         _ProgressionMetric.oneRm => point.estimatedOneRm,
         _ProgressionMetric.weight => point.topWeight,
         _ProgressionMetric.volume => point.volume,
+        _ProgressionMetric.bestReps => point.bestReps.toDouble(),
+        _ProgressionMetric.totalReps => point.reps.toDouble(),
       };
 
-  double bestOf(ExerciseProgress progress) => switch (this) {
-        _ProgressionMetric.oneRm => progress.bestOneRm,
-        _ProgressionMetric.weight => progress.bestWeight,
-        _ProgressionMetric.volume => progress.bestVolume,
+  /// The sessions this metric can honestly plot. A bodyweight session has no
+  /// top weight and no tonnage, and a session of only high-rep sets has no
+  /// 1RM estimate — drawn anyway, each would be a dive to zero.
+  List<ExercisePoint> pointsOf(ExerciseProgress progress) => switch (this) {
+        _ProgressionMetric.oneRm => progress.ratedPoints,
+        _ProgressionMetric.weight ||
+        _ProgressionMetric.volume =>
+          progress.weightedPoints,
+        _ProgressionMetric.bestReps ||
+        _ProgressionMetric.totalReps =>
+          progress.points,
       };
-
-  List<double> seriesOf(ExerciseProgress progress) => switch (this) {
-        _ProgressionMetric.oneRm => progress.oneRmSeries,
-        _ProgressionMetric.weight => progress.weightSeries,
-        _ProgressionMetric.volume => progress.volumeSeries,
-      };
-
-  /// Change from the first session in view to the latest, as a percentage.
-  double gainOf(ExerciseProgress progress) {
-    if (this == _ProgressionMetric.oneRm) return progress.totalGainPercent;
-    if (progress.points.length < 2) return 0.0;
-    final first = valueOf(progress.points.first);
-    if (first <= 0) return 0.0;
-    return ((valueOf(progress.points.last) - first) / first) * 100;
-  }
 
   /// Tonnage gets compacted ("12.5k"); weights keep one decimal.
   String format(double value) => this == _ProgressionMetric.volume
@@ -73,13 +54,12 @@ enum _ProgressionMetric {
       : AppFormat.weight(value);
 
   /// Session-to-session change reads better as a percentage for volume, which
-  /// swings by hundreds of kilos, and as absolute kilos for the two strength
-  /// metrics.
+  /// swings by hundreds of kilos, and as absolute numbers for the rest.
   bool get deltaAsPercent => this == _ProgressionMetric.volume;
 }
 
 /// ---------------------------------------------------------------------------
-/// Progression — one exercise, three metrics, every session behind it.
+/// Progression — one exercise, its metrics, every session behind it.
 ///
 /// Reads the cached [trainingDataProvider] snapshot; nothing here touches
 /// Firestore directly.
@@ -94,8 +74,8 @@ class ProgressionScreen extends ConsumerStatefulWidget {
 class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
   static const String _title = 'Progression';
 
-  /// Maximum number of session rows rendered — the list is not lazy.
-  static const int _maxRows = 40;
+  /// Session rows shown before "Show all".
+  static const int _collapsedRows = 15;
 
   String? _exercise;
 
@@ -103,18 +83,11 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
   String? _program;
 
   _ProgressionMetric _metric = _ProgressionMetric.oneRm;
+  bool _showAllSessions = false;
 
   Future<void> _refresh() async {
     ref.invalidate(workoutSessionsProvider);
     await ref.read(trainingDataProvider.future);
-  }
-
-  /// Exercises that actually have working sets behind them, newest first.
-  List<String> _plottableNames(TrainingData data) {
-    final names = data.exerciseNames
-        .where((name) => (data.exerciseProgress[name]?.points.length ?? 0) > 0)
-        .toList();
-    return names;
   }
 
   Future<void> _pickExercise(
@@ -135,6 +108,7 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
       _exercise = picked;
       // The old program filter rarely applies to a different lift.
       _program = null;
+      _showAllSessions = false;
     });
   }
 
@@ -154,19 +128,20 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
       loading: () => const AppScaffold(
         title: _title,
         children: [
-          SkeletonCard(height: 84),
+          SizedBox(height: AppSpacing.sm),
+          // A plain box: the selector card is shorter than a SkeletonCard's
+          // three placeholder lines.
+          SkeletonBox(height: 74, radius: AppRadius.card),
           SizedBox(height: AppSpacing.lg),
           SkeletonBox(height: 42, radius: AppRadius.pill),
           SizedBox(height: AppSpacing.lg),
-          SkeletonCard(height: 148),
-          SizedBox(height: AppSpacing.md),
-          SkeletonCard(height: 300),
+          SkeletonCard(height: 380),
         ],
       ),
       error: (error, _) => AppScaffold(
         title: _title,
         body: ErrorState(
-          message: 'Could not load your training history.\n$error',
+          message: 'Could not load your training history.',
           onRetry: () => ref.invalidate(workoutSessionsProvider),
         ),
       ),
@@ -175,7 +150,8 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
   }
 
   Widget _buildContent(BuildContext context, TrainingData data) {
-    final names = _plottableNames(data);
+    // Every exercise with at least one working set, newest first.
+    final names = data.exerciseNames;
 
     if (names.isEmpty) {
       return AppScaffold(
@@ -209,6 +185,11 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
                 .toList(),
           );
 
+    final metrics = all.isBodyweight
+        ? _ProgressionMetric.bodyweight
+        : _ProgressionMetric.loaded;
+    final metric = metrics.contains(_metric) ? _metric : metrics.first;
+
     final counts = <String, int>{
       for (final name in names)
         name: data.exerciseProgress[name]?.points.length ?? 0,
@@ -216,7 +197,6 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
 
     return AppScaffold(
       title: _title,
-      subtitle: exercise,
       onRefresh: _refresh,
       actions: [
         AppIconButton(
@@ -242,20 +222,9 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
         ],
         const SizedBox(height: AppSpacing.lg),
         AppSegmented<_ProgressionMetric>(
-          value: _metric,
-          segments: const [
-            AppSegment(
-              value: _ProgressionMetric.oneRm,
-              label: 'Est. 1RM',
-            ),
-            AppSegment(
-              value: _ProgressionMetric.weight,
-              label: 'Top weight',
-            ),
-            AppSegment(
-              value: _ProgressionMetric.volume,
-              label: 'Volume',
-            ),
+          value: metric,
+          segments: [
+            for (final m in metrics) AppSegment(value: m, label: m.label),
           ],
           onChanged: (value) => setState(() => _metric = value),
         ),
@@ -267,30 +236,29 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
             onClear: () => setState(() => _program = null),
           )
         else ...[
-          _SummaryCard(progress: progress, metric: _metric),
-          const SizedBox(height: AppSpacing.md),
-          _ChartCard(progress: progress, metric: _metric),
+          FadeSlideIn(child: _ProgressCard(progress: progress, metric: metric)),
           if (progress.isStalled) ...[
             const SizedBox(height: AppSpacing.md),
-            _PlateauCard(progress: progress),
+            FadeSlideIn(index: 1, child: _PlateauCard(progress: progress)),
           ],
-          const SizedBox(height: AppSpacing.md),
-          _CompareCta(onTap: () => _openCompare(context, exercise)),
           SectionHeader(
             title: 'Sessions',
-            subtitle: _sessionsSubtitle(progress.points.length, program),
+            subtitle: program == null
+                ? null
+                : '${progress.points.length} in $program',
           ),
-          ..._sessionRows(progress),
+          FadeSlideIn(
+            index: 2,
+            child: _SessionList(
+              progress: progress,
+              metric: metric,
+              limit: _showAllSessions ? null : _collapsedRows,
+              onShowAll: () => setState(() => _showAllSessions = true),
+            ),
+          ),
         ],
       ],
     );
-  }
-
-  String _sessionsSubtitle(int count, String? program) {
-    final noun = count == 1 ? 'session' : 'sessions';
-    return program == null
-        ? '$count $noun logged'
-        : '$count $noun in $program';
   }
 
   /// Programs this exercise has actually been performed in.
@@ -302,46 +270,6 @@ class _ProgressionScreenState extends ConsumerState<ProgressionScreen> {
     final list = titles.toList();
     list.sort();
     return list;
-  }
-
-  List<Widget> _sessionRows(ExerciseProgress progress) {
-    final points = progress.points;
-    final total = points.length;
-    final limit = total > _maxRows ? _maxRows : total;
-
-    final rows = <Widget>[];
-    for (var i = 0; i < limit; i++) {
-      // Newest first.
-      final index = total - 1 - i;
-      rows.add(
-        FadeSlideIn(
-          index: i,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _SessionRow(
-              point: points[index],
-              previous: index > 0 ? points[index - 1] : null,
-              metric: _metric,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (total > limit) {
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(top: AppSpacing.sm),
-          child: Text(
-            'Showing the $limit most recent of $total sessions.',
-            textAlign: TextAlign.center,
-            style: AppType.caption(ref.watch(themeProvider)),
-          ),
-        ),
-      );
-    }
-
-    return rows;
   }
 }
 
@@ -379,8 +307,6 @@ class ExercisePickerSheet extends ConsumerStatefulWidget {
       context: context,
       ref: ref,
       title: title,
-      subtitle: '${names.length} '
-          '${names.length == 1 ? 'exercise' : 'exercises'} in your history',
       builder: (context) => ExercisePickerSheet(
         names: names,
         sessionCounts: sessionCounts,
@@ -488,12 +414,7 @@ class _ExercisePickerSheetState extends ConsumerState<ExercisePickerSheet> {
                           Text(
                             '$count',
                             style: AppType.mono(t, size: 13)
-                                .copyWith(color: t.textSecondary),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            count == 1 ? 'session' : 'sessions',
-                            style: AppType.caption(t),
+                                .copyWith(color: t.textTertiary),
                           ),
                         ],
                       ),
@@ -544,9 +465,15 @@ class _SearchField extends ConsumerWidget {
               cursorColor: t.primary,
               textInputAction: TextInputAction.search,
               style: AppType.body(t),
+              // The pill is the field: switch off the theme's own outline
+              // and fill, which otherwise draw a second box inside it.
               decoration: InputDecoration(
                 isCollapsed: true,
+                filled: false,
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
                 hintText: 'Search exercises',
                 hintStyle: AppType.secondary(t),
               ),
@@ -575,6 +502,10 @@ class _SearchField extends ConsumerWidget {
 /// Pieces of the page
 /// ---------------------------------------------------------------------------
 
+/// One decimal place, so a 0.04 kg wobble reads as no change rather than
+/// "+0.0".
+double _round1(double value) => (value * 10).round() / 10;
+
 class _ExerciseSelectorCard extends ConsumerWidget {
   final String exercise;
   final int sessionCount;
@@ -592,33 +523,29 @@ class _ExerciseSelectorCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
     final date = lastPerformed;
+    final sessions = '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'}';
 
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          const IconBadge(icon: Icons.fitness_center_rounded, filled: true),
-          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('EXERCISE', style: AppType.overline(t)),
-                const SizedBox(height: 4),
                 Text(
                   exercise,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.heading(t).copyWith(fontSize: 18),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: AppSpacing.xxs),
                 Text(
                   date == null
-                      ? '$sessionCount sessions'
-                      : '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'} · '
-                          '${AppFormat.relativeDate(date)}',
+                      ? sessions
+                      : '$sessions · ${AppFormat.relativeDate(date)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.caption(t),
@@ -634,7 +561,7 @@ class _ExerciseSelectorCard extends ConsumerWidget {
   }
 }
 
-class _ProgramFilterRow extends ConsumerWidget {
+class _ProgramFilterRow extends StatelessWidget {
   final List<String> programs;
   final String? selected;
   final ValueChanged<String?> onChanged;
@@ -646,7 +573,7 @@ class _ProgramFilterRow extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return SizedBox(
       height: 42,
       child: ListView(
@@ -655,7 +582,6 @@ class _ProgramFilterRow extends ConsumerWidget {
         children: [
           AppChip(
             label: 'All workouts',
-            icon: Icons.all_inclusive_rounded,
             selected: selected == null,
             onTap: () => onChanged(null),
           ),
@@ -673,35 +599,59 @@ class _ProgramFilterRow extends ConsumerWidget {
   }
 }
 
-class _SummaryCard extends ConsumerWidget {
+/// The latest number, its change since the first session, the chart, and the
+/// best and trend under it — one card for one metric.
+class _ProgressCard extends ConsumerWidget {
   final ExerciseProgress progress;
   final _ProgressionMetric metric;
 
-  const _SummaryCard({required this.progress, required this.metric});
+  const _ProgressCard({required this.progress, required this.metric});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
+    final points = metric.pointsOf(progress);
 
-    final current = metric.valueOf(progress.points.last);
-    final best = metric.bestOf(progress);
-    final gain = metric.gainOf(progress);
-    final trend = progress.oneRmPerWeek;
+    final chart = ProgressionChartWidget(
+      key: ValueKey<String>('${progress.name}|${metric.name}'),
+      series: [
+        ProgressionSeries(
+          label: progress.name,
+          dates: [for (final point in points) point.date],
+          values: [for (final point in points) metric.valueOf(point)],
+          color: t.primary,
+          unit: metric.unit,
+        ),
+      ],
+      height: 210,
+      emptyMessage: metric == _ProgressionMetric.oneRm
+          ? 'No sets of ${AnalyticsService.maxOneRmReps} reps or fewer to '
+              'estimate from'
+          : 'No loaded sets to plot',
+    );
+
+    if (points.isEmpty) return AppCard(child: chart);
+
+    final current = metric.valueOf(points.last);
+    final first = metric.valueOf(points.first);
+    final best = points.map(metric.valueOf).reduce((a, b) => a > b ? a : b);
+    final gain = points.length < 2 || first <= 0
+        ? null
+        : ((current - first) / first) * 100;
+    final trend = AnalyticsService.weeklyTrend(points, metric.valueOf);
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('LATEST SESSION', style: AppType.overline(t)),
-                    const SizedBox(height: AppSpacing.sm),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
@@ -713,49 +663,47 @@ class _SummaryCard extends ConsumerWidget {
                             style: AppType.metric(t, size: 34),
                           ),
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: AppSpacing.xs),
                         Text(metric.unit, style: AppType.caption(t)),
                       ],
                     ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text('Latest session', style: AppType.caption(t)),
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DeltaBadge(delta: gain, percent: true),
-                  const SizedBox(height: 5),
-                  Text('since first session', style: AppType.caption(t)),
-                ],
-              ),
+              if (gain != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DeltaBadge(delta: gain, percent: true),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text('since first session', style: AppType.caption(t)),
+                  ],
+                ),
             ],
           ),
+          const SizedBox(height: AppSpacing.xl),
+          chart,
           const SizedBox(height: AppSpacing.lg),
           Divider(height: 1, thickness: 1, color: t.divider),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
                 child: _MiniStat(
-                  icon: Icons.emoji_events_rounded,
                   label: 'All-time best',
                   value: '${metric.format(best)} ${metric.unit}',
                 ),
               ),
-              Container(width: 1, height: 34, color: t.divider),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: AppSpacing.lg),
-                  child: _MiniStat(
-                    icon: trend < 0
-                        ? Icons.trending_down_rounded
-                        : Icons.trending_up_rounded,
-                    label: '1RM trend',
-                    value: AppFormat.delta(trend, unit: 'kg/week'),
-                    color: t.deltaColor(trend),
-                  ),
+                child: _MiniStat(
+                  label: 'Trend',
+                  value: points.length < 2
+                      ? '—'
+                      : '${AppFormat.delta(_round1(trend))} ${metric.unit}/wk',
+                  color: points.length < 2 ? null : t.deltaColor(trend),
                 ),
               ),
             ],
@@ -767,102 +715,29 @@ class _SummaryCard extends ConsumerWidget {
 }
 
 class _MiniStat extends ConsumerWidget {
-  final IconData icon;
   final String label;
   final String value;
   final Color? color;
 
-  const _MiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.color,
-  });
+  const _MiniStat({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
-    final tone = color ?? t.text;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 14, color: color ?? t.textTertiary),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.caption(t),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
+        Text(label, style: AppType.caption(t)),
+        const SizedBox(height: AppSpacing.xs),
         Text(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppType.mono(t, size: 16).copyWith(color: tone),
+          style: AppType.mono(t, size: 16).copyWith(color: color ?? t.text),
         ),
       ],
-    );
-  }
-}
-
-class _ChartCard extends ConsumerWidget {
-  final ExerciseProgress progress;
-  final _ProgressionMetric metric;
-
-  const _ChartCard({required this.progress, required this.metric});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-
-    final series = ProgressionSeries(
-      label: progress.name,
-      dates: [for (final point in progress.points) point.date],
-      values: metric.seriesOf(progress),
-      color: t.primary,
-      unit: metric.unit,
-    );
-
-    return AppCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: AppSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(metric.title, style: AppType.heading(t)),
-                const SizedBox(height: 3),
-                Text(metric.description, style: AppType.caption(t)),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          ProgressionChartWidget(
-            key: ValueKey<String>('${progress.name}|${metric.name}'),
-            series: [series],
-            height: 226,
-            emptyMessage: 'No sessions to plot yet',
-          ),
-        ],
-      ),
     );
   }
 }
@@ -881,89 +756,33 @@ class _PlateauCard extends ConsumerWidget {
     final target = ((best * 0.9) / 2.5).round() * 2.5;
 
     return AppCard(
-      color: t.warning.withValues(alpha: t.isDark ? 0.10 : 0.07),
-      border: Border.all(color: t.warning.withValues(alpha: 0.28)),
-      shadow: const [],
+      border: Border.all(color: t.warning.withValues(alpha: 0.32)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconBadge(
-            icon: Icons.trending_flat_rounded,
-            color: t.warning,
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xxs),
+            child: Icon(Icons.trending_flat_rounded, size: 20, color: t.warning),
           ),
-          const SizedBox(width: AppSpacing.lg),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Progress has stalled', style: AppType.heading(t)),
-                const SizedBox(height: 4),
                 Text(
-                  '${ExerciseProgress.stallWindow} sessions without beating '
-                  '${AppFormat.weight(best)} kg estimated. Next time drop to '
-                  '${AppFormat.weight(target)} kg for 4×5, then add 2.5 kg a '
-                  'week — or swap in a close variation for a month and come '
-                  'back to it.',
+                  'Stalled for ${ExerciseProgress.stallWindow} sessions',
+                  style: AppType.heading(t).copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  'Try a lighter block around ${AppFormat.weight(target)} kg '
+                  'and build back up.',
                   style: AppType.secondary(t),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompareCta extends ConsumerWidget {
-  final VoidCallback onTap;
-
-  const _CompareCta({required this.onTap});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(themeProvider);
-
-    return AppCard(
-      gradient: true,
-      onTap: onTap,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: t.onPrimary.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: Icon(
-              Icons.compare_arrows_rounded,
-              size: 22,
-              color: t.onPrimary,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Compare two lifts',
-                  style: AppType.heading(t).copyWith(color: t.onPrimary),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'See which one is actually moving faster',
-                  style: AppType.secondary(t)
-                      .copyWith(color: t.onPrimary.withValues(alpha: 0.82)),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: t.onPrimary, size: 22),
         ],
       ),
     );
@@ -988,14 +807,6 @@ class _FilteredEmptyCard extends ConsumerWidget {
     return AppCard(
       child: Column(
         children: [
-          Icon(Icons.filter_alt_rounded, size: 28, color: t.textTertiary),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            'Nothing to plot',
-            textAlign: TextAlign.center,
-            style: AppType.heading(t),
-          ),
-          const SizedBox(height: AppSpacing.xs),
           Text(
             program == null
                 ? '$exercise has no working sets logged yet.'
@@ -1007,7 +818,6 @@ class _FilteredEmptyCard extends ConsumerWidget {
           AppButton.secondary(
             label: 'Show all workouts',
             onPressed: onClear,
-            icon: Icons.all_inclusive_rounded,
             size: AppButtonSize.small,
           ),
         ],
@@ -1016,9 +826,78 @@ class _FilteredEmptyCard extends ConsumerWidget {
   }
 }
 
+/// Every session, newest first, as rows in one card.
+class _SessionList extends ConsumerWidget {
+  final ExerciseProgress progress;
+  final _ProgressionMetric metric;
+
+  /// Rows to show; null shows everything.
+  final int? limit;
+  final VoidCallback onShowAll;
+
+  const _SessionList({
+    required this.progress,
+    required this.metric,
+    required this.limit,
+    required this.onShowAll,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(themeProvider);
+    final points = progress.points;
+
+    // The change in each row is against the previous session the metric could
+    // measure — a bodyweight day in between is skipped, not read as zero.
+    final previousValue = <int, double>{};
+    double? last;
+    for (var i = 0; i < points.length; i++) {
+      if (last != null) previousValue[i] = last;
+      final value = metric.valueOf(points[i]);
+      if (value > 0) last = value;
+    }
+
+    final total = points.length;
+    final shown = limit == null || total <= limit! ? total : limit!;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < shown; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: t.divider),
+            _SessionRow(
+              point: points[total - 1 - i],
+              previous: previousValue[total - 1 - i],
+              metric: metric,
+            ),
+          ],
+          if (shown < total) ...[
+            Divider(height: 1, thickness: 1, color: t.divider),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: AppButton.ghost(
+                label: 'Show all $total sessions',
+                onPressed: onShowAll,
+                size: AppButtonSize.small,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _SessionRow extends ConsumerWidget {
   final ExercisePoint point;
-  final ExercisePoint? previous;
+
+  /// The metric's value in the previous measurable session, if any.
+  final double? previous;
   final _ProgressionMetric metric;
 
   const _SessionRow({
@@ -1031,23 +910,26 @@ class _SessionRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(themeProvider);
 
-    double? delta;
+    final now = metric.valueOf(point);
     final before = previous;
-    if (before != null) {
-      final past = metric.valueOf(before);
-      final now = metric.valueOf(point);
-      if (metric.deltaAsPercent) {
-        delta = past > 0 ? ((now - past) / past) * 100 : 0.0;
-      } else {
-        delta = now - past;
-      }
+    double? delta;
+    if (before != null && now > 0) {
+      delta = metric.deltaAsPercent
+          ? ((now - before) / before) * 100
+          : now - before;
     }
 
-    return AppCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md + 2,
-      ),
+    final topSet = point.isBodyweight
+        ? '${point.bestReps} reps'
+        : '${AppFormat.weight(point.topWeight)} kg × ${point.topWeightReps}';
+    final detail = point.isBodyweight
+        ? '${point.sets} ${point.sets == 1 ? 'set' : 'sets'} · '
+            '${point.reps} reps'
+        : '${point.sets} ${point.sets == 1 ? 'set' : 'sets'} · '
+            '${AppFormat.compact(point.volume)} kg';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Row(
         children: [
           Expanded(
@@ -1058,36 +940,33 @@ class _SessionRow extends ConsumerWidget {
               children: [
                 Text(
                   AppFormat.dayMonth(point.date),
-                  style: AppType.heading(t).copyWith(fontSize: 15),
+                  style: AppType.body(t).copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  AppFormat.relativeDate(point.date),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.caption(t),
-                ),
+                if (point.programTitle.isNotEmpty)
+                  Text(
+                    point.programTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption(t),
+                  ),
               ],
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            flex: 4,
+            flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${AppFormat.weight(point.topWeight)} kg × '
-                  '${point.topWeightReps}',
+                  topSet,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.mono(t, size: 14.5),
                 ),
-                const SizedBox(height: 2),
                 Text(
-                  '${AppFormat.compact(point.volume)} kg · ${point.sets} '
-                  '${point.sets == 1 ? 'set' : 'sets'}',
+                  detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.caption(t),
@@ -1095,16 +974,21 @@ class _SessionRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (delta != null) ...[
-            const SizedBox(width: AppSpacing.sm),
-            DeltaBadge(
-              delta: delta,
-              unit: 'kg',
-              percent: metric.deltaAsPercent,
-              compact: true,
-              fontSize: 11.5,
+          SizedBox(
+            width: 76,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: delta == null
+                  ? const SizedBox.shrink()
+                  : DeltaBadge(
+                      delta: _round1(delta),
+                      unit: metric.deltaAsPercent ? '' : metric.unit,
+                      percent: metric.deltaAsPercent,
+                      compact: true,
+                      fontSize: 11.5,
+                    ),
             ),
-          ],
+          ),
         ],
       ),
     );
